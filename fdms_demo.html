@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vectair FDMS Lite – Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      /* Vectair-style palette (approximate) */
+      --va-header-bg: #5f858e;
+      --va-header-text: #ffffff;
+      --va-accent-brown: #7a4f2b;
+      --va-page-bg: #dfe4e6;
+      --va-panel-bg: #f3f4f5;
+      --va-border: #c0c5c8;
+      --va-border-dark: #9ea4a8;
+      --va-text-main: #222222;
+      --va-text-soft: #555555;
+      --va-link: #2a5f7a;
+
+      --va-row-even: #edf1f3;
+      --va-row-odd: #f8fafb;
+
+      --va-status-planned: #ffe9a0;
+      --va-status-active: #bfe6ff;
+      --va-status-completed: #c7f0c2;
+      --va-status-cancelled: #f8c1c1;
+
+      --va-badge-bg: #e0e6ea;
+      --va-badge-text: #444444;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: var(--va-page-bg);
+      color: var(--va-text-main);
+    }
+
+    .app-shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: #ffffff;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.18);
+    }
+
+    /* Header */
+
+    .header {
+      background: var(--va-header-bg);
+      color: var(--va-header-text);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .va-logo-box {
+      width: 40px;
+      height: 32px;
+      background: #6d4b2e;
+      color: #fdf9f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+
+    .va-title-main {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .va-title-sub {
+      font-size: 12px;
+      color: #e5eff1;
+    }
+
+    .header-right {
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .header-right div + div {
+      margin-top: 2px;
+    }
+
+    /* Nav */
+
+    .nav-bar {
+      background: #f0f3f4;
+      border-bottom: 1px solid var(--va-border);
+      padding: 0 18px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+      overflow-x: auto;
+    }
+
+    .nav-tab {
+      border: none;
+      background: transparent;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--va-text-soft);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+
+    .nav-tab.active {
+      color: var(--va-accent-brown);
+      border-color: var(--va-accent-brown);
+      font-weight: 600;
+    }
+
+    /* Page body */
+
+    .page-body {
+      padding: 14px 18px 18px;
+    }
+
+    .page-title {
+      color: var(--va-accent-brown);
+      font-size: 20px;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--va-text-soft);
+      margin-bottom: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .field,
+    .btn {
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 3px;
+      border: 1px solid var(--va-border-dark);
+      background: #ffffff;
+      color: var(--va-text-main);
+      outline: none;
+    }
+
+    .field:focus {
+      border-color: var(--va-link);
+    }
+
+    .field-select {
+      min-width: 150px;
+    }
+
+    .field-search-global {
+      min-width: 220px;
+    }
+
+    .btn {
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      background: var(--va-link);
+      color: #ffffff;
+      border-color: #204457;
+    }
+
+    .btn-secondary {
+      background: #f5f6f7;
+    }
+
+    .btn:hover {
+      filter: brightness(1.03);
+    }
+
+    /* Panels */
+
+    .panel {
+      border: 1px solid var(--va-border);
+      background: var(--va-panel-bg);
+      border-radius: 4px;
+      padding: 10px;
+    }
+
+    .placeholder {
+      font-size: 13px;
+      color: var(--va-text-soft);
+    }
+
+    /* Table */
+
+    .table-container {
+      max-height: 520px;
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid var(--va-border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead {
+      background: #e1e7ea;
+    }
+
+    th,
+    td {
+      padding: 6px 6px;
+      border-bottom: 1px solid var(--va-border);
+      text-align: left;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--va-text-soft);
+    }
+
+    tbody tr:nth-child(even) {
+      background: var(--va-row-even);
+    }
+
+    tbody tr:nth-child(odd) {
+      background: var(--va-row-odd);
+    }
+
+    tbody tr.strip-row {
+      cursor: pointer;
+    }
+
+    tbody tr.strip-row:hover {
+      background: #dde7ec;
+    }
+
+    .filter-row input {
+      width: 100%;
+      padding: 3px 4px;
+      border-radius: 3px;
+      border: 1px solid var(--va-border);
+      font-size: 11px;
+    }
+
+    .status-strip {
+      width: 6px;
+      border-radius: 3px;
+      height: 34px;
+    }
+
+    .status-planned {
+      background: var(--va-status-planned);
+    }
+
+    .status-active {
+      background: var(--va-status-active);
+    }
+
+    .status-completed {
+      background: var(--va-status-completed);
+    }
+
+    .status-cancelled {
+      background: var(--va-status-cancelled);
+    }
+
+    .call-main {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    .call-sub {
+      font-size: 11px;
+      color: var(--va-text-soft);
+    }
+
+    .cell-muted {
+      font-size: 11px;
+      color: var(--va-text-soft);
+    }
+
+    .cell-strong {
+      font-weight: 500;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .badge {
+      background: var(--va-badge-bg);
+      color: var(--va-badge-text);
+      border-radius: 999px;
+      padding: 2px 6px;
+      font-size: 10px;
+      border: 1px solid #c6ced3;
+      white-space: nowrap;
+    }
+
+    .badge-local {
+      border-color: #5c8c5f;
+    }
+
+    .badge-formation {
+      border-color: #7a4f2b;
+    }
+
+    .badge-tng {
+      border-color: #2a5f7a;
+    }
+
+    .badge-fis {
+      border-color: #39763a;
+    }
+
+    .badge-os {
+      border-color: #b5533d;
+    }
+
+    .actions-cell {
+      text-align: right;
+    }
+
+    .small-btn {
+      font-size: 11px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      border: 1px solid var(--va-border-dark);
+      background: #f5f6f7;
+      cursor: pointer;
+    }
+
+    .small-btn:hover {
+      background: #e4eaee;
+    }
+
+    /* Expanded row */
+
+    .expand-row td {
+      background: #f4f5f7;
+    }
+
+    .expand-inner {
+      padding: 8px 4px 8px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .expand-section {
+      min-width: 220px;
+      flex: 1;
+    }
+
+    .expand-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--va-accent-brown);
+      margin-bottom: 4px;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      row-gap: 2px;
+      column-gap: 8px;
+      font-size: 11.5px;
+    }
+
+    .kv-label {
+      color: var(--va-text-soft);
+    }
+
+    .kv-value {
+      font-weight: 500;
+    }
+
+    .formation-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .formation-table th,
+    .formation-table td {
+      border: 1px solid var(--va-border);
+      padding: 3px 4px;
+    }
+
+    .formation-table th {
+      background: #e1e7ea;
+      font-weight: 600;
+    }
+
+    /* Modal */
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+
+    .modal {
+      width: min(540px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: #ffffff;
+      border-radius: 4px;
+      border: 1px solid var(--va-border-dark);
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.3);
+      padding: 10px 14px 12px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--va-accent-brown);
+    }
+
+    .modal-subtitle {
+      font-size: 11px;
+      color: var(--va-text-soft);
+    }
+
+    .modal-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 640px) {
+      .modal-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .modal-label {
+      font-size: 11px;
+      color: var(--va-text-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .modal-input,
+    .modal-select,
+    .modal-textarea {
+      border-radius: 3px;
+      border: 1px solid var(--va-border-dark);
+      background: #ffffff;
+      color: var(--va-text-main);
+      padding: 4px 6px;
+      font-size: 12px;
+      outline: none;
+    }
+
+    .modal-input:focus,
+    .modal-select:focus,
+    .modal-textarea:focus {
+      border-color: var(--va-link);
+    }
+
+    .modal-textarea {
+      resize: vertical;
+      min-height: 60px;
+      grid-column: 1 / -1;
+    }
+
+    .modal-footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .btn-ghost {
+      background: #ffffff;
+    }
+
+    .btn-ghost,
+    .btn-secondary-modal {
+      border: 1px solid var(--va-border-dark);
+    }
+
+    .btn-secondary-modal {
+      background: #f5f6f7;
+    }
+
+    /* Hide non-live toolbars by default */
+    #other-toolbar {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="header">
+      <div class="header-left">
+        <div class="va-logo-box">VA</div>
+        <div>
+          <div class="va-title-main">Vectair FDMS Lite</div>
+          <div class="va-title-sub">Flight Data Management – Local VFR / Admin</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div>Facility: EGOW · RAF Woodvale (Demo)</div>
+        <div>UTC: 12:00 · 2025-01-01</div>
+      </div>
+    </header>
+
+    <nav class="nav-bar">
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="live">Live Board</button>
+        <button class="nav-tab" data-tab="history">History</button>
+        <button class="nav-tab" data-tab="reports">Reports</button>
+        <button class="nav-tab" data-tab="lookup">VKB Lookup</button>
+        <button class="nav-tab" data-tab="admin">Admin</button>
+      </div>
+    </nav>
+
+    <main class="page-body">
+      <!-- Live toolbar -->
+      <div class="toolbar" id="live-toolbar">
+        <div class="toolbar-left">
+          <select class="field field-select" id="dateRange">
+            <option value="today">Today</option>
+            <option value="3days">Today + 3 days</option>
+            <option value="all">All demo flights</option>
+          </select>
+          <select class="field field-select" id="statusFilter">
+            <option value="planned_active">Status: Planned & Active</option>
+            <option value="active">Status: Active only</option>
+            <option value="all">Status: All</option>
+          </select>
+          <input class="field field-search-global" id="searchGlobal" placeholder="Global search (callsign, reg, aerodrome…)" />
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-secondary" id="btnNewLocal">New Local</button>
+          <button class="btn btn-primary" id="btnNewFlight">New Flight</button>
+        </div>
+      </div>
+
+      <!-- Placeholder toolbar for other tabs -->
+      <div class="toolbar" id="other-toolbar">
+        <div class="toolbar-left">
+          <span class="page-subtitle" style="margin:0;">Demo view – no filters implemented on this tab yet.</span>
+        </div>
+      </div>
+
+      <!-- Live Board panel -->
+      <section class="panel" id="live-panel">
+        <div class="page-title">Live Board</div>
+        <div class="page-subtitle">
+          Planned and active movements for EGOW · click a row to view full details. Demo data only.
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+            <tr>
+              <th style="width:8px;"></th>
+              <th>Callsign</th>
+              <th>Reg / Type / WTC</th>
+              <th>Route</th>
+              <th>Times (Planned / Actual)</th>
+              <th>Activity</th>
+              <th style="width:70px; text-align:right;">Actions</th>
+            </tr>
+            <tr class="filter-row">
+              <th></th>
+              <th><input type="text" id="filterCallsign" placeholder="Search…" /></th>
+              <th><input type="text" id="filterReg" placeholder="Search…" /></th>
+              <th><input type="text" id="filterRoute" placeholder="DEP/ARR…" /></th>
+              <th></th>
+              <th></th>
+              <th></th>
+            </tr>
+            </thead>
+            <tbody id="liveBody">
+            <!-- Rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- History panel -->
+      <section class="panel" id="history-panel" style="display:none;">
+        <div class="page-title">History</div>
+        <div class="page-subtitle">
+          Completed and cancelled movements. In the full application this will be filterable by date range,
+          EGOW code, unit, and event tags.
+        </div>
+        <div class="placeholder">
+          This demo focuses on the Live Board. History will reuse the same table layout with additional filters.
+        </div>
+      </section>
+
+      <!-- Reports panel -->
+      <section class="panel" id="reports-panel" style="display:none;">
+        <div class="page-title">Reports</div>
+        <div class="page-subtitle">
+          EGOW-style movement summaries, monthly statistics, and export tools.
+        </div>
+        <div class="placeholder">
+          In the full system this tab will generate reports similar to your existing annual Excel sheets,
+          including movement counts by EGOW code, unit, flight type, and T&amp;G/O/S totals.
+        </div>
+      </section>
+
+      <!-- VKB Lookup panel -->
+      <section class="panel" id="lookup-panel" style="display:none;">
+        <div class="page-title">VKB Lookup</div>
+        <div class="page-subtitle">
+          Embedded view onto the Vectair Knowledge Base (airline codes, military callsigns, locations, types, squawks).
+        </div>
+        <div class="placeholder">
+          In the full application this area will mirror the vectair.org tables, with per-column search and the ability
+          to send a selected row directly into a strip (e.g. “Use as callsign”, “Use as DEP/ARR”).
+        </div>
+      </section>
+
+      <!-- Admin panel -->
+      <section class="panel" id="admin-panel" style="display:none;">
+        <div class="page-title">Admin</div>
+        <div class="page-subtitle">
+          Facility configuration, VKB packs, users &amp; roles, and business rules.
+        </div>
+        <div class="placeholder">
+          This demo does not implement Admin logic yet. In the full version this tab will control facility settings,
+          WTC scheme selection, VKB pack recommendations, and user permissions.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal root -->
+  <div id="modalRoot"></div>
+
+  <script>
+    // --- Demo data -----------------------------------------------------------
+
+    const demoMovements = [
+      {
+        id: 1,
+        status: 'ACTIVE',
+        callsignCode: 'SYS22',
+        callsignLabel: 'SHAWBURY 22',
+        callsignVoice: 'Shawbury two-two',
+        registration: 'ZM300',
+        type: 'JUNO',
+        wtc: 'M (ICAO)',
+        depAd: 'EGOS',
+        depName: 'RAF Shawbury',
+        arrAd: 'EGOW',
+        arrName: 'RAF Woodvale',
+        depPlanned: '11:35',
+        depActual: '11:39',
+        arrPlanned: '12:10',
+        arrActual: '',
+        flightType: 'ARR',
+        isLocal: false,
+        tngCount: 0,
+        osCount: 0,
+        fisCount: 0,
+        egowCode: 'VM',
+        egowDesc: 'Visiting Military Fixed-Wing',
+        unitCode: 'M',
+        unitDesc: 'MASUAS',
+        captain: 'Flt Lt Example',
+        pob: 3,
+        remarks: 'Inbound Shawbury detail from Valley',
+        formation: null
+      },
+      {
+        id: 2,
+        status: 'PLANNED',
+        callsignCode: 'UAM11',
+        callsignLabel: 'WOODVALE 11',
+        callsignVoice: 'Woodvale one-one',
+        registration: 'G-VAIR',
+        type: 'G115',
+        wtc: 'L (ICAO)',
+        depAd: 'EGOW',
+        depName: 'RAF Woodvale',
+        arrAd: 'EGOW',
+        arrName: 'RAF Woodvale',
+        depPlanned: '12:30',
+        depActual: '',
+        arrPlanned: '13:30',
+        arrActual: '',
+        flightType: 'LOC',
+        isLocal: true,
+        tngCount: 6,
+        osCount: 0,
+        fisCount: 0,
+        egowCode: 'BC',
+        egowDesc: 'Based Civil Fixed-Wing',
+        unitCode: 'L',
+        unitDesc: 'LUAS',
+        captain: 'Flt Lt Student',
+        pob: 2,
+        remarks: 'UAS basic circuits RWY 21',
+        formation: null
+      },
+      {
+        id: 3,
+        status: 'ACTIVE',
+        callsignCode: 'CNNCT',
+        callsignLabel: 'CONNECT FLIGHT',
+        callsignVoice: 'Connect',
+        registration: '',
+        type: 'Mixed (EH10 / LYNX)',
+        wtc: 'M (current)',
+        depAd: 'EGOW',
+        depName: 'RAF Woodvale',
+        arrAd: 'EGOS',
+        arrName: 'RAF Shawbury',
+        depPlanned: '13:10',
+        depActual: '13:15',
+        arrPlanned: '13:50',
+        arrActual: '',
+        flightType: 'DEP',
+        isLocal: false,
+        tngCount: 0,
+        osCount: 1,
+        fisCount: 0,
+        egowCode: 'VMH',
+        egowDesc: 'Visiting Military Helicopter',
+        unitCode: 'ARMY',
+        unitDesc: 'Army detachment',
+        captain: 'Det Comd Example',
+        pob: 7,
+        remarks: 'Formation departure to Shawbury, one a/c to remain O/S',
+        formation: {
+          label: 'CNNCT flight of 3',
+          wtcCurrent: 'M',
+          wtcMax: 'M',
+          elements: [
+            {
+              callsign: 'CNNCT 1',
+              reg: 'ZZ400',
+              type: 'EH10',
+              wtc: 'M',
+              status: 'ACTIVE',
+              depActual: '13:15',
+              arrActual: ''
+            },
+            {
+              callsign: 'CNNCT 2',
+              reg: 'ZZ401',
+              type: 'LYNX',
+              wtc: 'L',
+              status: 'ACTIVE',
+              depActual: '13:15',
+              arrActual: ''
+            },
+            {
+              callsign: 'CNNCT 3',
+              reg: 'ZZ402',
+              type: 'LYNX',
+              wtc: 'L',
+              status: 'PLANNED',
+              depActual: '',
+              arrActual: ''
+            }
+          ]
+        }
+      },
+      {
+        id: 4,
+        status: 'COMPLETED',
+        callsignCode: 'BA133',
+        callsignLabel: 'SPEEDBIRD 133',
+        callsignVoice: 'Speedbird one-three-three',
+        registration: 'G-ABCD',
+        type: 'A320',
+        wtc: 'M (ICAO)',
+        depAd: 'EGLL',
+        depName: 'London Heathrow',
+        arrAd: 'FAOR',
+        arrName: 'Johannesburg',
+        depPlanned: '09:20',
+        depActual: '09:26',
+        arrPlanned: '19:40',
+        arrActual: '',
+        flightType: 'OVR',
+        isLocal: false,
+        tngCount: 0,
+        osCount: 0,
+        fisCount: 1,
+        egowCode: 'VC',
+        egowDesc: 'Visiting Civil Fixed-Wing',
+        unitCode: '',
+        unitDesc: '',
+        captain: 'Capt Example',
+        pob: 168,
+        remarks: 'En-route FIS provided FL300-320 (5 min)',
+        formation: null
+      },
+      {
+        id: 5,
+        status: 'ACTIVE',
+        callsignCode: 'MEMORIAL',
+        callsignLabel: 'MEMORIAL FLIGHT',
+        callsignVoice: 'Memorial',
+        registration: '',
+        type: 'Mixed (SPIT / HURI / LANC)',
+        wtc: 'M (current, max M)',
+        depAd: 'EGOW',
+        depName: 'RAF Woodvale',
+        arrAd: 'EGOW',
+        arrName: 'RAF Woodvale',
+        depPlanned: '15:00',
+        depActual: '15:05',
+        arrPlanned: '15:40',
+        arrActual: '',
+        flightType: 'LOC',
+        isLocal: true,
+        tngCount: 0,
+        osCount: 0,
+        fisCount: 0,
+        egowCode: 'VM',
+        egowDesc: 'Visiting Military Fixed-Wing',
+        unitCode: 'BBMF',
+        unitDesc: 'Battle of Britain Memorial Flight',
+        captain: '',
+        pob: 6,
+        remarks: 'Three-ship display detail',
+        formation: {
+          label: 'MEMORIAL flight of 3',
+          wtcCurrent: 'M',
+          wtcMax: 'M',
+          elements: [
+            {
+              callsign: 'MEMORIAL 1',
+              reg: 'AB910',
+              type: 'SPIT',
+              wtc: 'L',
+              status: 'ACTIVE',
+              depActual: '15:05',
+              arrActual: ''
+            },
+            {
+              callsign: 'MEMORIAL 2',
+              reg: 'LF363',
+              type: 'HURI',
+              wtc: 'L',
+              status: 'ACTIVE',
+              depActual: '15:05',
+              arrActual: ''
+            },
+            {
+              callsign: 'MEMORIAL 3',
+              reg: 'PA474',
+              type: 'LANC',
+              wtc: 'M',
+              status: 'ACTIVE',
+              depActual: '15:05',
+              arrActual: ''
+            }
+          ]
+        }
+      }
+    ];
+
+    let expandedId = null;
+
+    const columnFilters = {
+      callsign: '',
+      reg: '',
+      route: ''
+    };
+    let globalFilter = '';
+
+    // --- Helpers -------------------------------------------------------------
+
+    function statusClass(status) {
+      switch (status) {
+        case 'PLANNED': return 'status-planned';
+        case 'ACTIVE': return 'status-active';
+        case 'COMPLETED': return 'status-completed';
+        case 'CANCELLED': return 'status-cancelled';
+        default: return 'status-planned';
+      }
+    }
+
+    function statusLabel(status) {
+      switch (status) {
+        case 'PLANNED': return 'Planned';
+        case 'ACTIVE': return 'Active';
+        case 'COMPLETED': return 'Completed';
+        case 'CANCELLED': return 'Cancelled';
+        default: return status;
+      }
+    }
+
+    function matchesFilters(m) {
+      // Status filter
+      const statusFilter = document.getElementById('statusFilter').value;
+      if (statusFilter === 'active' && m.status !== 'ACTIVE') return false;
+      if (statusFilter === 'planned_active' && !(m.status === 'PLANNED' || m.status === 'ACTIVE')) return false;
+
+      const gq = globalFilter.trim().toLowerCase();
+      if (gq) {
+        const haystack = [
+          m.callsignCode,
+          m.callsignLabel,
+          m.registration,
+          m.type,
+          m.depAd,
+          m.depName,
+          m.arrAd,
+          m.arrName,
+          m.egowCode,
+          m.egowDesc
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(gq)) return false;
+      }
+
+      // Column-specific filters
+      if (columnFilters.callsign) {
+        const q = columnFilters.callsign.toLowerCase();
+        if (!(m.callsignCode.toLowerCase().includes(q) || (m.callsignLabel || '').toLowerCase().includes(q))) {
+          return false;
+        }
+      }
+      if (columnFilters.reg) {
+        const q = columnFilters.reg.toLowerCase();
+        if (!(m.registration || '').toLowerCase().includes(q)) return false;
+      }
+      if (columnFilters.route) {
+        const q = columnFilters.route.toLowerCase();
+        const r = `${m.depAd} ${m.depName} ${m.arrAd} ${m.arrName}`.toLowerCase();
+        if (!r.includes(q)) return false;
+      }
+
+      return true;
+    }
+
+    // --- Rendering -----------------------------------------------------------
+
+    function renderLiveBoard() {
+      const tbody = document.getElementById('liveBody');
+      tbody.innerHTML = '';
+
+      const filtered = demoMovements.filter(matchesFilters);
+
+      filtered.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.className = 'strip-row';
+        tr.dataset.id = String(m.id);
+
+        const depDisplay = m.depActual || m.depPlanned || '-';
+        const arrDisplay = m.arrActual || m.arrPlanned || '-';
+
+        tr.innerHTML = `
+          <td><div class="status-strip ${statusClass(m.status)}" title="${statusLabel(m.status)}"></div></td>
+          <td>
+            <div class="call-main">${m.callsignCode}</div>
+            <div class="call-sub">${m.callsignLabel || '&nbsp;'}</div>
+          </td>
+          <td>
+            <div class="cell-strong">${m.registration || '—'}${m.type ? ' · ' + m.type : ''}</div>
+            <div class="cell-muted">WTC: ${m.wtc || '—'}</div>
+          </td>
+          <td>
+            <div class="cell-strong">${m.depAd} → ${m.arrAd}</div>
+            <div class="cell-muted">${m.depName} → ${m.arrName}</div>
+          </td>
+          <td>
+            <div class="cell-strong">${depDisplay} / ${arrDisplay}</div>
+            <div class="cell-muted">${m.flightType} · ${statusLabel(m.status)}</div>
+          </td>
+          <td>
+            <div class="badge-row">
+              <span class="badge">${m.flightType}</span>
+              ${m.isLocal ? '<span class="badge badge-local">Local</span>' : ''}
+              ${m.tngCount ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>` : ''}
+              ${m.osCount ? `<span class="badge badge-os">O/S × ${m.osCount}</span>` : ''}
+              ${m.fisCount ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>` : ''}
+              ${m.formation ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ''}
+            </div>
+          </td>
+          <td class="actions-cell">
+            <button class="small-btn" data-action="expand">Details ▾</button>
+          </td>
+        `;
+
+        tr.addEventListener('click', (e) => {
+          const btn = e.target.closest('button');
+          if (btn && btn.dataset.action === 'expand') {
+            e.stopPropagation();
+          }
+          expandedId = expandedId === m.id ? null : m.id;
+          renderLiveBoard();
+        });
+
+        tbody.appendChild(tr);
+
+        if (expandedId === m.id) {
+          const expTr = document.createElement('tr');
+          expTr.className = 'expand-row';
+          const expTd = document.createElement('td');
+          expTd.colSpan = 7;
+
+          const formationHtml = m.formation ? `
+            <div class="expand-section">
+              <div class="expand-title">Formation</div>
+              <div class="kv">
+                <div class="kv-label">Label</div><div class="kv-value">${m.formation.label}</div>
+                <div class="kv-label">Current WTC</div><div class="kv-value">${m.formation.wtcCurrent}</div>
+                <div class="kv-label">Max WTC</div><div class="kv-value">${m.formation.wtcMax}</div>
+              </div>
+              <table class="formation-table">
+                <thead>
+                  <tr>
+                    <th>Element</th>
+                    <th>Reg</th>
+                    <th>Type</th>
+                    <th>WTC</th>
+                    <th>Status</th>
+                    <th>Dep</th>
+                    <th>Arr</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${m.formation.elements.map(el => `
+                    <tr>
+                      <td>${el.callsign}</td>
+                      <td>${el.reg || '—'}</td>
+                      <td>${el.type || '—'}</td>
+                      <td>${el.wtc || '—'}</td>
+                      <td>${statusLabel(el.status)}</td>
+                      <td>${el.depActual || '—'}</td>
+                      <td>${el.arrActual || '—'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '';
+
+          expTd.innerHTML = `
+            <div class="expand-inner">
+              <div class="expand-section">
+                <div class="expand-title">Movement Summary</div>
+                <div class="kv">
+                  <div class="kv-label">Status</div><div class="kv-value">${statusLabel(m.status)}</div>
+                  <div class="kv-label">Flight Type</div><div class="kv-value">${m.flightType}</div>
+                  <div class="kv-label">Departure</div><div class="kv-value">${m.depAd} – ${m.depName}</div>
+                  <div class="kv-label">Arrival</div><div class="kv-value">${m.arrAd} – ${m.arrName}</div>
+                  <div class="kv-label">Planned times</div><div class="kv-value">${m.depPlanned || '—'} → ${m.arrPlanned || '—'}</div>
+                  <div class="kv-label">Actual times</div><div class="kv-value">${m.depActual || '—'} → ${m.arrActual || '—'}</div>
+                  <div class="kv-label">T&amp;Gs</div><div class="kv-value">${m.tngCount}</div>
+                  <div class="kv-label">O/S count</div><div class="kv-value">${m.osCount}</div>
+                  <div class="kv-label">FIS count</div><div class="kv-value">${m.fisCount}</div>
+                  <div class="kv-label">POB</div><div class="kv-value">${m.pob || 0}</div>
+                </div>
+              </div>
+              <div class="expand-section">
+                <div class="expand-title">Coding &amp; Classification</div>
+                <div class="kv">
+                  <div class="kv-label">EGOW code</div><div class="kv-value">${m.egowCode || '—'} – ${m.egowDesc || ''}</div>
+                  <div class="kv-label">Unit</div><div class="kv-value">${m.unitCode || '—'} ${m.unitDesc ? '· ' + m.unitDesc : ''}</div>
+                  <div class="kv-label">Callsign (voice)</div><div class="kv-value">${m.callsignVoice || '—'}</div>
+                  <div class="kv-label">Captain</div><div class="kv-value">${m.captain || '—'}</div>
+                  <div class="kv-label">Remarks</div><div class="kv-value">${m.remarks || '—'}</div>
+                </div>
+              </div>
+              ${formationHtml}
+            </div>
+          `;
+
+          expTr.appendChild(expTd);
+          tbody.appendChild(expTr);
+        }
+      });
+
+      if (!filtered.length) {
+        const empty = document.createElement('tr');
+        empty.innerHTML = `
+          <td colspan="7" style="padding:8px; font-size:12px; color:#777;">
+            No demo movements match the current filters.
+          </td>`;
+        tbody.appendChild(empty);
+      }
+    }
+
+    // --- Tabs ----------------------------------------------------------------
+
+    const tabButtons = document.querySelectorAll('.nav-tab');
+    const livePanel = document.getElementById('live-panel');
+    const historyPanel = document.getElementById('history-panel');
+    const reportsPanel = document.getElementById('reports-panel');
+    const lookupPanel = document.getElementById('lookup-panel');
+    const adminPanel = document.getElementById('admin-panel');
+    const liveToolbar = document.getElementById('live-toolbar');
+    const otherToolbar = document.getElementById('other-toolbar');
+
+    function setTab(name) {
+      tabButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === name);
+      });
+
+      livePanel.style.display = name === 'live' ? 'block' : 'none';
+      historyPanel.style.display = name === 'history' ? 'block' : 'none';
+      reportsPanel.style.display = name === 'reports' ? 'block' : 'none';
+      lookupPanel.style.display = name === 'lookup' ? 'block' : 'none';
+      adminPanel.style.display = name === 'admin' ? 'block' : 'none';
+
+      liveToolbar.style.display = name === 'live' ? 'flex' : 'none';
+      otherToolbar.style.display = name === 'live' ? 'none' : 'flex';
+    }
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => setTab(btn.dataset.tab));
+    });
+
+    // --- Filters -------------------------------------------------------------
+
+    document.getElementById('searchGlobal').addEventListener('input', (e) => {
+      globalFilter = e.target.value;
+      renderLiveBoard();
+    });
+
+    document.getElementById('filterCallsign').addEventListener('input', (e) => {
+      columnFilters.callsign = e.target.value;
+      renderLiveBoard();
+    });
+
+    document.getElementById('filterReg').addEventListener('input', (e) => {
+      columnFilters.reg = e.target.value;
+      renderLiveBoard();
+    });
+
+    document.getElementById('filterRoute').addEventListener('input', (e) => {
+      columnFilters.route = e.target.value;
+      renderLiveBoard();
+    });
+
+    document.getElementById('statusFilter').addEventListener('change', renderLiveBoard);
+    document.getElementById('dateRange').addEventListener('change', renderLiveBoard);
+
+    // --- Modal helpers -------------------------------------------------------
+
+    const modalRoot = document.getElementById('modalRoot');
+
+    function closeModal() {
+      modalRoot.innerHTML = '';
+      document.removeEventListener('keydown', escHandler);
+    }
+
+    function escHandler(e) {
+      if (e.key === 'Escape') closeModal();
+    }
+
+    function openModal(contentHtml) {
+      modalRoot.innerHTML = `
+        <div class="modal-backdrop">
+          <div class="modal">
+            ${contentHtml}
+          </div>
+        </div>
+      `;
+      modalRoot.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-backdrop')) {
+          closeModal();
+        }
+      }, { once: true });
+      document.addEventListener('keydown', escHandler);
+    }
+
+    // --- New Flight / New Local dialogs -------------------------------------
+
+    document.getElementById('btnNewFlight').addEventListener('click', () => {
+      openModal(`
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">New Flight (Demo)</div>
+            <div class="modal-subtitle">Visual mock only – values are not stored.</div>
+          </div>
+          <button class="btn btn-ghost" onclick="(${closeModal.toString()})();">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Callsign</label>
+            <input class="modal-input" placeholder="e.g. CONNECT or CNNCT22" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input class="modal-input" placeholder="e.g. ZM300" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Type</label>
+            <select class="modal-select">
+              <option>ARR</option>
+              <option>DEP</option>
+              <option>LOC</option>
+              <option>OVR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Rules</label>
+            <select class="modal-select">
+              <option>VFR</option>
+              <option>IFR</option>
+              <option>SVFR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input class="modal-input" placeholder="EGOS or Shawbury" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Arrival AD</label>
+            <input class="modal-input" placeholder="EGOW or Woodvale" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Planned Off-Block</label>
+            <input class="modal-input" placeholder="12:30" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Planned ETA</label>
+            <input class="modal-input" placeholder="13:05" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Number of aircraft</label>
+            <input class="modal-input" placeholder="1" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input class="modal-input" placeholder="2" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Touch &amp; Go count</label>
+            <input class="modal-input" placeholder="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Outstation?</label>
+            <select class="modal-select">
+              <option>No</option>
+              <option>Yes</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Remarks</label>
+            <textarea class="modal-textarea" placeholder="Any extra notes…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="(${closeModal.toString()})();">Cancel</button>
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-secondary-modal" onclick="alert('In the full app this would save and keep the form for another similar entry.');">
+              Save &amp; Duplicate
+            </button>
+            <button class="btn btn-primary" onclick="alert('In the full app this would create a new movement and refresh the Live Board.'); (${closeModal.toString()})();">
+              Save
+            </button>
+          </div>
+        </div>
+      `);
+    });
+
+    document.getElementById('btnNewLocal').addEventListener('click', () => {
+      openModal(`
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">New Local Flight (Demo)</div>
+            <div class="modal-subtitle">Pre-configured for EGOW → EGOW VFR circuits.</div>
+          </div>
+          <button class="btn btn-ghost" onclick="(${closeModal.toString()})();">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Callsign</label>
+            <input class="modal-input" placeholder="e.g. UAM11 or WOODVALE 11" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input class="modal-input" placeholder="e.g. G-VAIR" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Type</label>
+            <input class="modal-input" value="LOC (Local)" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure / Arrival AD</label>
+            <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Planned Start</label>
+            <input class="modal-input" placeholder="12:30" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Planned End</label>
+            <input class="modal-input" placeholder="13:30" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Number of aircraft</label>
+            <input class="modal-input" placeholder="1" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Touch &amp; Go count</label>
+            <input class="modal-input" placeholder="6" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input class="modal-input" placeholder="2" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Remarks</label>
+            <textarea class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="(${closeModal.toString()})();">Cancel</button>
+          <button class="btn btn-primary" onclick="alert('In the full app this would create a coded local LOC movement.'); (${closeModal.toString()})();">
+            Save
+          </button>
+        </div>
+      `);
+    });
+
+    // --- Initial render ------------------------------------------------------
+
+    setTab('live');
+    renderLiveBoard();
+  </script>
+</body>
+</html>
