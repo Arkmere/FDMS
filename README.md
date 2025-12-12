@@ -31,6 +31,16 @@ fdms-lite/
       └─ ui_liveboard.js      # Live Board rendering + modals
 Only the /src content is required to run the current demo.
 
+## GitHub Pages preview
+
+The `docs/` folder is the deployment target for GitHub Pages. Configure Pages to use the `main` branch with `/docs` as the source, and the live preview will be available at [https://arkmere.github.io/FDMS/](https://arkmere.github.io/FDMS/) after Pages is enabled.
+
+For a quick Unix-friendly helper to refresh the `docs/` snapshot from `src/`, run:
+
+```
+./deploy-docs.sh
+```
+
 How to Run
 No build step is required.
 
