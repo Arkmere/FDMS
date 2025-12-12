@@ -186,6 +186,7 @@ export function renderLiveBoard() {
         updateMovement(m.id, { status: "ACTIVE" });
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
       });
     }
 
@@ -196,6 +197,7 @@ export function renderLiveBoard() {
         updateMovement(m.id, { status: "COMPLETED" });
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
       });
     }
 
@@ -206,6 +208,7 @@ export function renderLiveBoard() {
         updateMovement(m.id, { status: "CANCELLED" });
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
       });
     }
 
@@ -426,6 +429,58 @@ export function renderHistoryBoard() {
 
     tbody.appendChild(tr);
   });
+}
+
+export function renderReportsSummary() {
+  const container = document.getElementById("reportsSummary");
+  if (!container) return;
+
+  const movements = getMovements();
+
+  const total = movements.length;
+  const planned = movements.filter((m) => m.status === "PLANNED").length;
+  const active = movements.filter((m) => m.status === "ACTIVE").length;
+  const completed = movements.filter((m) => m.status === "COMPLETED").length;
+  const cancelled = movements.filter((m) => m.status === "CANCELLED").length;
+
+  const local = movements.filter((m) => m.isLocal).length;
+  const nonLocal = total - local;
+
+  const totalTng = movements.reduce((sum, m) => sum + (m.tngCount || 0), 0);
+  const totalOs = movements.reduce((sum, m) => sum + (m.osCount || 0), 0);
+  const totalFis = movements.reduce((sum, m) => sum + (m.fisCount || 0), 0);
+
+  container.innerHTML = `
+    <div class="report-card">
+      <div class="report-card-title">Movements (session)</div>
+      <div class="report-card-main">${total}</div>
+      <div class="report-card-breakdown">
+        <span>Planned: ${planned}</span>
+        <span>Active: ${active}</span>
+        <span>Completed: ${completed}</span>
+        <span>Cancelled: ${cancelled}</span>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-card-title">Local vs Visiting</div>
+      <div class="report-card-main">${local}</div>
+      <div class="report-card-breakdown">
+        <span>Local: ${local}</span>
+        <span>Visiting/Other: ${nonLocal}</span>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-card-title">Activity Counts</div>
+      <div class="report-card-main">${totalTng}</div>
+      <div class="report-card-breakdown">
+        <span>T&amp;Gs: ${totalTng}</span>
+        <span>Outstations: ${totalOs}</span>
+        <span>FIS: ${totalFis}</span>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -671,6 +726,7 @@ function openNewFlightModal() {
         createMovement(movement);
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
         if (closeAfter) {
           closeModal();
         }
@@ -833,6 +889,7 @@ function openNewLocalModal() {
         createMovement(movement);
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
         closeModal();
       }
 
@@ -952,6 +1009,7 @@ function openEditMovementModal(m) {
         updateMovement(m.id, patch);
         renderLiveBoard();
         renderHistoryBoard();
+        renderReportsSummary();
         closeModal();
       });
     }
