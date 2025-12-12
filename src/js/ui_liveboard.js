@@ -148,6 +148,7 @@ export function renderLiveBoard() {
       </td>
       <td class="actions-cell">
         <button class="small-btn js-toggle-details">Details ▾</button>
+        <button class="small-btn js-edit-movement">Edit</button>
         ${
           m.status === "PLANNED"
             ? `
@@ -202,6 +203,14 @@ export function renderLiveBoard() {
         e.stopPropagation();
         updateMovement(m.id, { status: "CANCELLED" });
         renderLiveBoard();
+      });
+    }
+
+    const editBtn = tr.querySelector(".js-edit-movement");
+    if (editBtn) {
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditMovementModal(m);
       });
     }
 
@@ -749,6 +758,118 @@ function openNewLocalModal() {
       }
 
       callsignInput?.focus();
+    }
+  );
+}
+
+function openEditMovementModal(m) {
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Edit Movement</div>
+            <div class="modal-subtitle">
+              Update administrative fields for this movement.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+          <div class="modal-field">
+            <label class="modal-label">Callsign</label>
+            <input id="em-callsign" class="modal-input" value="${m.callsignLabel}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input id="em-registration" class="modal-input" value="${m.registration || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input id="em-depAd" class="modal-input" value="${m.depAd}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Arrival AD</label>
+            <input id="em-arrAd" class="modal-input" value="${m.arrAd}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Planned Off-Block</label>
+            <input id="em-depPlanned" class="modal-input" value="${m.depPlanned || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Planned ETA</label>
+            <input id="em-arrPlanned" class="modal-input" value="${m.arrPlanned || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="em-pob" class="modal-input" type="number" min="0" value="${m.pob || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Touch &amp; Go Count</label>
+            <input id="em-tngCount" class="modal-input" type="number" min="0" value="${m.tngCount || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Outstation Count</label>
+            <input id="em-osCount" class="modal-input" type="number" min="0" value="${m.osCount || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">FIS Count</label>
+            <input id="em-fisCount" class="modal-input" type="number" min="0" value="${m.fisCount || 0}" />
+          </div>
+
+          <div class="modal-field" style="grid-column: 1 / -1;">
+            <label class="modal-label">Remarks</label>
+            <textarea id="em-remarks" class="modal-textarea">${m.remarks || ""}</textarea>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost js-close-modal">Cancel</button>
+          <button type="button" class="btn btn-primary js-save-edit">Save</button>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      const saveBtn = backdrop.querySelector(".js-save-edit");
+
+      saveBtn.addEventListener("click", () => {
+        const patch = {
+          callsignLabel: backdrop.querySelector("#em-callsign").value.trim(),
+          callsignCode: backdrop.querySelector("#em-callsign").value.trim().toUpperCase(),
+          registration: backdrop.querySelector("#em-registration").value.trim(),
+          depAd: normaliseAdCode(backdrop.querySelector("#em-depAd").value),
+          arrAd: normaliseAdCode(backdrop.querySelector("#em-arrAd").value),
+          depPlanned: backdrop.querySelector("#em-depPlanned").value.trim(),
+          arrPlanned: backdrop.querySelector("#em-arrPlanned").value.trim(),
+          pob: parseNonNegativeInt(backdrop.querySelector("#em-pob").value),
+          tngCount: parseNonNegativeInt(backdrop.querySelector("#em-tngCount").value),
+          osCount: parseNonNegativeInt(backdrop.querySelector("#em-osCount").value),
+          fisCount: parseNonNegativeInt(backdrop.querySelector("#em-fisCount").value),
+          remarks: backdrop.querySelector("#em-remarks").value.trim(),
+        };
+
+        // Keep names aligned with depAd/arrAd
+        patch.depName = inferAdName(patch.depAd);
+        patch.arrName = inferAdName(patch.arrAd);
+
+        updateMovement(m.id, patch);
+        renderLiveBoard();
+        closeModal();
+      });
     }
   );
 }
