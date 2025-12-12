@@ -108,8 +108,23 @@
         <div class="page-subtitle">
           Completed and cancelled movements. Will reuse the Live Board table with additional filters.
         </div>
-        <div class="placeholder">
-          This demo focuses on the Live Board. History will be implemented in a later stage.
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:8px;"></th>
+                <th>Callsign</th>
+                <th>Reg / Type / WTC</th>
+                <th>Route</th>
+                <th>Times (Planned / Actual)</th>
+                <th>Activity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody">
+              <!-- Rows injected by ui_liveboard.js -->
+            </tbody>
+          </table>
         </div>
       </section>
 

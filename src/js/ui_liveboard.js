@@ -185,6 +185,7 @@ export function renderLiveBoard() {
         e.stopPropagation();
         updateMovement(m.id, { status: "ACTIVE" });
         renderLiveBoard();
+        renderHistoryBoard();
       });
     }
 
@@ -194,6 +195,7 @@ export function renderLiveBoard() {
         e.stopPropagation();
         updateMovement(m.id, { status: "COMPLETED" });
         renderLiveBoard();
+        renderHistoryBoard();
       });
     }
 
@@ -203,6 +205,7 @@ export function renderLiveBoard() {
         e.stopPropagation();
         updateMovement(m.id, { status: "CANCELLED" });
         renderLiveBoard();
+        renderHistoryBoard();
       });
     }
 
@@ -345,6 +348,84 @@ export function renderLiveBoard() {
       </td>`;
     tbody.appendChild(empty);
   }
+}
+
+export function renderHistoryBoard() {
+  const tbody = document.getElementById("historyBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const movements = getMovements().filter(
+    (m) => m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  if (!movements.length) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="7" class="cell-muted">
+        No completed or cancelled movements in this session.
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  movements.forEach((m) => {
+    const tr = document.createElement("tr");
+    tr.className = "strip-row";
+    tr.dataset.id = String(m.id);
+
+    const depDisplay = m.depActual || m.depPlanned || "-";
+    const arrDisplay = m.arrActual || m.arrPlanned || "-";
+
+    tr.innerHTML = `
+      <td>
+        <div class="status-strip ${statusClass(m.status)}"></div>
+      </td>
+      <td>
+        <div class="call-main">${m.callsignCode}</div>
+        <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${m.registration || "—"}${m.type ? " · " + m.type : ""}
+        </div>
+        <div class="cell-muted">WTC: ${m.wtc || "—"}</div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${m.depAd} → ${m.arrAd}
+        </div>
+        <div class="cell-muted">
+          ${m.depName} → ${m.arrName}
+        </div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${depDisplay} / ${arrDisplay}
+        </div>
+        <div class="cell-muted">
+          ${m.flightType}
+        </div>
+      </td>
+      <td>
+        <div class="badge-row">
+          ${m.isLocal ? '<span class="badge badge-local">Local</span>' : ""}
+          ${m.tngCount ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>` : ""}
+          ${m.osCount ? `<span class="badge badge-os">O/S × ${m.osCount}</span>` : ""}
+          ${m.fisCount ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>` : ""}
+          ${m.formation ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ""}
+        </div>
+      </td>
+      <td>
+        <div class="cell-strong">${statusLabel(m.status)}</div>
+        <div class="cell-muted">${m.egowCode || ""}</div>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
 }
 
 /**
@@ -589,6 +670,7 @@ function openNewFlightModal() {
         if (!movement) return;
         createMovement(movement);
         renderLiveBoard();
+        renderHistoryBoard();
         if (closeAfter) {
           closeModal();
         }
@@ -750,6 +832,7 @@ function openNewLocalModal() {
         if (!movement) return;
         createMovement(movement);
         renderLiveBoard();
+        renderHistoryBoard();
         closeModal();
       }
 
@@ -868,6 +951,7 @@ function openEditMovementModal(m) {
 
         updateMovement(m.id, patch);
         renderLiveBoard();
+        renderHistoryBoard();
         closeModal();
       });
     }
