@@ -1,7 +1,7 @@
 // ui_liveboard.js
 // Handles rendering and interactions for the Live Board view.
 
-import { getMovements, statusClass, statusLabel, createMovement } from "./datamodel.js";
+import { getMovements, statusClass, statusLabel, createMovement, updateMovement } from "./datamodel.js";
 
 let expandedId = null;
 
@@ -108,67 +108,102 @@ export function renderLiveBoard() {
     const arrDisplay = m.arrActual || m.arrPlanned || "-";
 
     tr.innerHTML = `
-      <td><div class="status-strip ${statusClass(
-        m.status
-      )}" title="${statusLabel(m.status)}"></div></td>
+      <td>
+        <div class="status-strip ${statusClass(m.status)}"></div>
+      </td>
       <td>
         <div class="call-main">${m.callsignCode}</div>
         <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${m.registration || "—"}${
-      m.type ? " · " + m.type : ""
-    }</div>
+        <div class="cell-strong">
+          ${m.registration || "—"}${m.type ? " · " + m.type : ""}
+        </div>
         <div class="cell-muted">WTC: ${m.wtc || "—"}</div>
       </td>
       <td>
-        <div class="cell-strong">${m.depAd} → ${m.arrAd}</div>
-        <div class="cell-muted">${m.depName} → ${m.arrName}</div>
+        <div class="cell-strong">
+          ${m.depAd} → ${m.arrAd}
+        </div>
+        <div class="cell-muted">
+          ${m.depName} → ${m.arrName}
+        </div>
       </td>
       <td>
-        <div class="cell-strong">${depDisplay} / ${arrDisplay}</div>
-        <div class="cell-muted">${m.flightType} · ${statusLabel(
-      m.status
-    )}</div>
+        <div class="cell-strong">
+          ${depDisplay} / ${arrDisplay}
+        </div>
+        <div class="cell-muted">
+          ${m.flightType} · ${statusLabel(m.status)}
+        </div>
       </td>
       <td>
         <div class="badge-row">
-          <span class="badge">${m.flightType}</span>
           ${m.isLocal ? '<span class="badge badge-local">Local</span>' : ""}
-          ${
-            m.tngCount
-              ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>`
-              : ""
-          }
-          ${
-            m.osCount
-              ? `<span class="badge badge-os">O/S × ${m.osCount}</span>`
-              : ""
-          }
-          ${
-            m.fisCount
-              ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>`
-              : ""
-          }
-          ${
-            m.formation
-              ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>`
-              : ""
-          }
+          ${m.tngCount ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>` : ""}
+          ${m.osCount ? `<span class="badge badge-os">O/S × ${m.osCount}</span>` : ""}
+          ${m.fisCount ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>` : ""}
+          ${m.formation ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ""}
         </div>
       </td>
       <td class="actions-cell">
         <button class="small-btn js-toggle-details">Details ▾</button>
+        ${
+          m.status === "PLANNED"
+            ? `
+          <button class="small-btn js-mark-active">Mark Active</button>
+          <button class="small-btn js-mark-cancelled">Cancel</button>
+        `
+            : ""
+        }
+        ${
+          m.status === "ACTIVE"
+            ? `
+          <button class="small-btn js-mark-completed">Mark Completed</button>
+          <button class="small-btn js-mark-cancelled">Cancel</button>
+        `
+            : ""
+        }
       </td>
     `;
 
-    tr
-      .querySelector(".js-toggle-details")
-      .addEventListener("click", (e) => {
+    // Details toggle
+    const detailsBtn = tr.querySelector(".js-toggle-details");
+    if (detailsBtn) {
+      detailsBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         expandedId = expandedId === m.id ? null : m.id;
         renderLiveBoard();
       });
+    }
+
+    // Status transitions (admin, not "clearances")
+    const markActiveBtn = tr.querySelector(".js-mark-active");
+    if (markActiveBtn) {
+      markActiveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "ACTIVE" });
+        renderLiveBoard();
+      });
+    }
+
+    const markCompletedBtn = tr.querySelector(".js-mark-completed");
+    if (markCompletedBtn) {
+      markCompletedBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "COMPLETED" });
+        renderLiveBoard();
+      });
+    }
+
+    const markCancelledBtn = tr.querySelector(".js-mark-cancelled");
+    if (markCancelledBtn) {
+      markCancelledBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "CANCELLED" });
+        renderLiveBoard();
+      });
+    }
 
     tbody.appendChild(tr);
 

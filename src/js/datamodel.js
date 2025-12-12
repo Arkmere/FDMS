@@ -270,3 +270,10 @@ export function createMovement(partial) {
   demoMovements.push(movement);
   return movement;
 }
+
+export function updateMovement(id, patch) {
+  const movement = demoMovements.find((m) => m.id === id);
+  if (!movement) return null;
+  Object.assign(movement, patch);
+  return movement;
+}
