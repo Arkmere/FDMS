@@ -150,9 +150,31 @@
         <div class="page-subtitle">
           Embedded view onto the Vectair Knowledge Base (airline codes, callsigns, locations, types, squawks).
         </div>
-        <div class="placeholder">
-          Future implementation: tables mirroring vectair.org with per-column search and the ability
-          to send selected rows directly into a strip (e.g. “Use as callsign”, “Use as DEP/ARR”).
+        <div class="lookup-toolbar">
+          <input
+            id="vkbSearch"
+            class="field field-search-global"
+            placeholder="Search callsigns, locations, aircraft types…"
+          />
+          <span class="lookup-hint">
+            Demo lookup over a small static VKB dataset. Full VKB integration will follow later.
+          </span>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 120px;">Kind</th>
+                <th>Code</th>
+                <th>Label</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="vkbResultsBody">
+              <!-- VKB lookup rows injected by ui_liveboard.js -->
+            </tbody>
+          </table>
         </div>
       </section>
 

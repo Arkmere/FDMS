@@ -30,6 +30,87 @@ function inferAdName(adCode) {
   return code;
 }
 
+// --- VKB demo dataset -------------------------------------------------------
+
+const vkbDemoEntries = [
+  // Callsigns – civil
+  {
+    kind: "Callsign",
+    category: "Airline",
+    code: "BAW",
+    label: "SPEEDBIRD",
+    details: "British Airways (BA/BAW)",
+  },
+  {
+    kind: "Callsign",
+    category: "Airline",
+    code: "EZY",
+    label: "EASY",
+    details: "easyJet (U2/EZY)",
+  },
+  // Callsigns – military / state
+  {
+    kind: "Callsign",
+    category: "Military",
+    code: "RRR",
+    label: "ASCOT",
+    details: "RAF Air Transport / VIP flights",
+  },
+  {
+    kind: "Callsign",
+    category: "Military",
+    code: "SYS",
+    label: "SHAWBURY",
+    details: "RAF Shawbury training flights",
+  },
+
+  // Locations
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGOW",
+    label: "RAF Woodvale",
+    details: "Local unit – Woodvale (Sefton), 21/03 runway pair",
+  },
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGGP",
+    label: "Liverpool John Lennon",
+    details: "Regional; often used as O/S or practice diversion",
+  },
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGCC",
+    label: "Manchester",
+    details: "Major regional hub; frequent visiting traffic",
+  },
+
+  // Aircraft types
+  {
+    kind: "Aircraft type",
+    category: "Trainer",
+    code: "G115E",
+    label: "Grob Tutor",
+    details: "Light trainer, WTC L, used for UAS / EFT",
+  },
+  {
+    kind: "Aircraft type",
+    category: "Helicopter",
+    code: "EH10",
+    label: "Eurocopter Dauphin (demo)",
+    details: "Helicopter, WTC L/M depending on scheme",
+  },
+  {
+    kind: "Aircraft type",
+    category: "Airliner",
+    code: "A320",
+    label: "Airbus A320",
+    details: "Typical short-haul jet, WTC M",
+  },
+];
+
 function getStatusFilter() {
   const select = document.getElementById("statusFilter");
   return select ? select.value : "planned_active";
@@ -594,6 +675,86 @@ export function initHistoryExport() {
   if (btn) {
     btn.addEventListener("click", exportHistoryCsv);
   }
+}
+
+/**
+ * VKB Lookup – Render and Filter
+ */
+export function renderVkbLookup(filterText = "") {
+  const tbody = document.getElementById("vkbResultsBody");
+  if (!tbody) return;
+
+  const query = (filterText || "").trim().toUpperCase();
+
+  let entries = vkbDemoEntries;
+
+  if (query) {
+    entries = entries.filter((entry) => {
+      const haystack =
+        (entry.kind || "") +
+        " " +
+        (entry.category || "") +
+        " " +
+        (entry.code || "") +
+        " " +
+        (entry.label || "") +
+        " " +
+        (entry.details || "");
+      return haystack.toUpperCase().includes(query);
+    });
+  }
+
+  tbody.innerHTML = "";
+
+  if (!entries.length) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="4" class="cell-muted">
+        No VKB entries match "${query}".
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const tr = document.createElement("tr");
+    tr.className = "strip-row";
+
+    tr.innerHTML = `
+      <td>
+        <div class="cell-strong">${entry.kind}</div>
+        <div class="cell-muted">${entry.category || ""}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${entry.code}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${entry.label}</div>
+      </td>
+      <td>
+        <div class="cell-muted">${entry.details}</div>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+export function initVkbLookup() {
+  const searchInput = document.getElementById("vkbSearch");
+  if (!searchInput) {
+    // Still render the default list if the input isn't found.
+    renderVkbLookup("");
+    return;
+  }
+
+  // Initial render with no filter
+  renderVkbLookup("");
+
+  searchInput.addEventListener("input", () => {
+    renderVkbLookup(searchInput.value);
+  });
 }
 
 /**
