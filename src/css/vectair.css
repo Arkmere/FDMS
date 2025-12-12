@@ -546,3 +546,42 @@ tbody tr.strip-row:hover {
 .btn-secondary-modal {
   background: #f5f6f7;
 }
+
+/* Reports */
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.report-card {
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--va-border);
+  background: #ffffff;
+}
+
+.report-card-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--va-text-soft);
+  margin-bottom: 4px;
+}
+
+.report-card-main {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--va-accent-brown);
+}
+
+.report-card-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--va-text-soft);
+}

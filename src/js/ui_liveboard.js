@@ -1,7 +1,7 @@
 // ui_liveboard.js
 // Handles rendering and interactions for the Live Board view.
 
-import { getMovements, statusClass, statusLabel, createMovement } from "./datamodel.js";
+import { getMovements, statusClass, statusLabel, createMovement, updateMovement } from "./datamodel.js";
 
 let expandedId = null;
 
@@ -108,67 +108,117 @@ export function renderLiveBoard() {
     const arrDisplay = m.arrActual || m.arrPlanned || "-";
 
     tr.innerHTML = `
-      <td><div class="status-strip ${statusClass(
-        m.status
-      )}" title="${statusLabel(m.status)}"></div></td>
+      <td>
+        <div class="status-strip ${statusClass(m.status)}"></div>
+      </td>
       <td>
         <div class="call-main">${m.callsignCode}</div>
         <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${m.registration || "—"}${
-      m.type ? " · " + m.type : ""
-    }</div>
+        <div class="cell-strong">
+          ${m.registration || "—"}${m.type ? " · " + m.type : ""}
+        </div>
         <div class="cell-muted">WTC: ${m.wtc || "—"}</div>
       </td>
       <td>
-        <div class="cell-strong">${m.depAd} → ${m.arrAd}</div>
-        <div class="cell-muted">${m.depName} → ${m.arrName}</div>
+        <div class="cell-strong">
+          ${m.depAd} → ${m.arrAd}
+        </div>
+        <div class="cell-muted">
+          ${m.depName} → ${m.arrName}
+        </div>
       </td>
       <td>
-        <div class="cell-strong">${depDisplay} / ${arrDisplay}</div>
-        <div class="cell-muted">${m.flightType} · ${statusLabel(
-      m.status
-    )}</div>
+        <div class="cell-strong">
+          ${depDisplay} / ${arrDisplay}
+        </div>
+        <div class="cell-muted">
+          ${m.flightType} · ${statusLabel(m.status)}
+        </div>
       </td>
       <td>
         <div class="badge-row">
-          <span class="badge">${m.flightType}</span>
           ${m.isLocal ? '<span class="badge badge-local">Local</span>' : ""}
-          ${
-            m.tngCount
-              ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>`
-              : ""
-          }
-          ${
-            m.osCount
-              ? `<span class="badge badge-os">O/S × ${m.osCount}</span>`
-              : ""
-          }
-          ${
-            m.fisCount
-              ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>`
-              : ""
-          }
-          ${
-            m.formation
-              ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>`
-              : ""
-          }
+          ${m.tngCount ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>` : ""}
+          ${m.osCount ? `<span class="badge badge-os">O/S × ${m.osCount}</span>` : ""}
+          ${m.fisCount ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>` : ""}
+          ${m.formation ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ""}
         </div>
       </td>
       <td class="actions-cell">
         <button class="small-btn js-toggle-details">Details ▾</button>
+        <button class="small-btn js-edit-movement">Edit</button>
+        ${
+          m.status === "PLANNED"
+            ? `
+          <button class="small-btn js-mark-active">Mark Active</button>
+          <button class="small-btn js-mark-cancelled">Cancel</button>
+        `
+            : ""
+        }
+        ${
+          m.status === "ACTIVE"
+            ? `
+          <button class="small-btn js-mark-completed">Mark Completed</button>
+          <button class="small-btn js-mark-cancelled">Cancel</button>
+        `
+            : ""
+        }
       </td>
     `;
 
-    tr
-      .querySelector(".js-toggle-details")
-      .addEventListener("click", (e) => {
+    // Details toggle
+    const detailsBtn = tr.querySelector(".js-toggle-details");
+    if (detailsBtn) {
+      detailsBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         expandedId = expandedId === m.id ? null : m.id;
         renderLiveBoard();
       });
+    }
+
+    // Status transitions (admin, not "clearances")
+    const markActiveBtn = tr.querySelector(".js-mark-active");
+    if (markActiveBtn) {
+      markActiveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "ACTIVE" });
+        renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
+      });
+    }
+
+    const markCompletedBtn = tr.querySelector(".js-mark-completed");
+    if (markCompletedBtn) {
+      markCompletedBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "COMPLETED" });
+        renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
+      });
+    }
+
+    const markCancelledBtn = tr.querySelector(".js-mark-cancelled");
+    if (markCancelledBtn) {
+      markCancelledBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateMovement(m.id, { status: "CANCELLED" });
+        renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
+      });
+    }
+
+    const editBtn = tr.querySelector(".js-edit-movement");
+    if (editBtn) {
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditMovementModal(m);
+      });
+    }
 
     tbody.appendChild(tr);
 
@@ -301,6 +351,136 @@ export function renderLiveBoard() {
       </td>`;
     tbody.appendChild(empty);
   }
+}
+
+export function renderHistoryBoard() {
+  const tbody = document.getElementById("historyBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const movements = getMovements().filter(
+    (m) => m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  if (!movements.length) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="7" class="cell-muted">
+        No completed or cancelled movements in this session.
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  movements.forEach((m) => {
+    const tr = document.createElement("tr");
+    tr.className = "strip-row";
+    tr.dataset.id = String(m.id);
+
+    const depDisplay = m.depActual || m.depPlanned || "-";
+    const arrDisplay = m.arrActual || m.arrPlanned || "-";
+
+    tr.innerHTML = `
+      <td>
+        <div class="status-strip ${statusClass(m.status)}"></div>
+      </td>
+      <td>
+        <div class="call-main">${m.callsignCode}</div>
+        <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${m.registration || "—"}${m.type ? " · " + m.type : ""}
+        </div>
+        <div class="cell-muted">WTC: ${m.wtc || "—"}</div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${m.depAd} → ${m.arrAd}
+        </div>
+        <div class="cell-muted">
+          ${m.depName} → ${m.arrName}
+        </div>
+      </td>
+      <td>
+        <div class="cell-strong">
+          ${depDisplay} / ${arrDisplay}
+        </div>
+        <div class="cell-muted">
+          ${m.flightType}
+        </div>
+      </td>
+      <td>
+        <div class="badge-row">
+          ${m.isLocal ? '<span class="badge badge-local">Local</span>' : ""}
+          ${m.tngCount ? `<span class="badge badge-tng">T&amp;G × ${m.tngCount}</span>` : ""}
+          ${m.osCount ? `<span class="badge badge-os">O/S × ${m.osCount}</span>` : ""}
+          ${m.fisCount ? `<span class="badge badge-fis">FIS × ${m.fisCount}</span>` : ""}
+          ${m.formation ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ""}
+        </div>
+      </td>
+      <td>
+        <div class="cell-strong">${statusLabel(m.status)}</div>
+        <div class="cell-muted">${m.egowCode || ""}</div>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+export function renderReportsSummary() {
+  const container = document.getElementById("reportsSummary");
+  if (!container) return;
+
+  const movements = getMovements();
+
+  const total = movements.length;
+  const planned = movements.filter((m) => m.status === "PLANNED").length;
+  const active = movements.filter((m) => m.status === "ACTIVE").length;
+  const completed = movements.filter((m) => m.status === "COMPLETED").length;
+  const cancelled = movements.filter((m) => m.status === "CANCELLED").length;
+
+  const local = movements.filter((m) => m.isLocal).length;
+  const nonLocal = total - local;
+
+  const totalTng = movements.reduce((sum, m) => sum + (m.tngCount || 0), 0);
+  const totalOs = movements.reduce((sum, m) => sum + (m.osCount || 0), 0);
+  const totalFis = movements.reduce((sum, m) => sum + (m.fisCount || 0), 0);
+
+  container.innerHTML = `
+    <div class="report-card">
+      <div class="report-card-title">Movements (session)</div>
+      <div class="report-card-main">${total}</div>
+      <div class="report-card-breakdown">
+        <span>Planned: ${planned}</span>
+        <span>Active: ${active}</span>
+        <span>Completed: ${completed}</span>
+        <span>Cancelled: ${cancelled}</span>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-card-title">Local vs Visiting</div>
+      <div class="report-card-main">${local}</div>
+      <div class="report-card-breakdown">
+        <span>Local: ${local}</span>
+        <span>Visiting/Other: ${nonLocal}</span>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-card-title">Activity Counts</div>
+      <div class="report-card-main">${totalTng}</div>
+      <div class="report-card-breakdown">
+        <span>T&amp;Gs: ${totalTng}</span>
+        <span>Outstations: ${totalOs}</span>
+        <span>FIS: ${totalFis}</span>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -545,6 +725,8 @@ function openNewFlightModal() {
         if (!movement) return;
         createMovement(movement);
         renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
         if (closeAfter) {
           closeModal();
         }
@@ -706,6 +888,8 @@ function openNewLocalModal() {
         if (!movement) return;
         createMovement(movement);
         renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
         closeModal();
       }
 
@@ -714,6 +898,120 @@ function openNewLocalModal() {
       }
 
       callsignInput?.focus();
+    }
+  );
+}
+
+function openEditMovementModal(m) {
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Edit Movement</div>
+            <div class="modal-subtitle">
+              Update administrative fields for this movement.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+          <div class="modal-field">
+            <label class="modal-label">Callsign</label>
+            <input id="em-callsign" class="modal-input" value="${m.callsignLabel}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input id="em-registration" class="modal-input" value="${m.registration || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input id="em-depAd" class="modal-input" value="${m.depAd}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Arrival AD</label>
+            <input id="em-arrAd" class="modal-input" value="${m.arrAd}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Planned Off-Block</label>
+            <input id="em-depPlanned" class="modal-input" value="${m.depPlanned || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Planned ETA</label>
+            <input id="em-arrPlanned" class="modal-input" value="${m.arrPlanned || ""}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="em-pob" class="modal-input" type="number" min="0" value="${m.pob || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Touch &amp; Go Count</label>
+            <input id="em-tngCount" class="modal-input" type="number" min="0" value="${m.tngCount || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Outstation Count</label>
+            <input id="em-osCount" class="modal-input" type="number" min="0" value="${m.osCount || 0}" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">FIS Count</label>
+            <input id="em-fisCount" class="modal-input" type="number" min="0" value="${m.fisCount || 0}" />
+          </div>
+
+          <div class="modal-field" style="grid-column: 1 / -1;">
+            <label class="modal-label">Remarks</label>
+            <textarea id="em-remarks" class="modal-textarea">${m.remarks || ""}</textarea>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost js-close-modal">Cancel</button>
+          <button type="button" class="btn btn-primary js-save-edit">Save</button>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      const saveBtn = backdrop.querySelector(".js-save-edit");
+
+      saveBtn.addEventListener("click", () => {
+        const patch = {
+          callsignLabel: backdrop.querySelector("#em-callsign").value.trim(),
+          callsignCode: backdrop.querySelector("#em-callsign").value.trim().toUpperCase(),
+          registration: backdrop.querySelector("#em-registration").value.trim(),
+          depAd: normaliseAdCode(backdrop.querySelector("#em-depAd").value),
+          arrAd: normaliseAdCode(backdrop.querySelector("#em-arrAd").value),
+          depPlanned: backdrop.querySelector("#em-depPlanned").value.trim(),
+          arrPlanned: backdrop.querySelector("#em-arrPlanned").value.trim(),
+          pob: parseNonNegativeInt(backdrop.querySelector("#em-pob").value),
+          tngCount: parseNonNegativeInt(backdrop.querySelector("#em-tngCount").value),
+          osCount: parseNonNegativeInt(backdrop.querySelector("#em-osCount").value),
+          fisCount: parseNonNegativeInt(backdrop.querySelector("#em-fisCount").value),
+          remarks: backdrop.querySelector("#em-remarks").value.trim(),
+        };
+
+        // Keep names aligned with depAd/arrAd
+        patch.depName = inferAdName(patch.depAd);
+        patch.arrName = inferAdName(patch.arrAd);
+
+        updateMovement(m.id, patch);
+        renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
+        closeModal();
+      });
     }
   );
 }
