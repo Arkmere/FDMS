@@ -1,7 +1,7 @@
 // app.js
 // App bootstrap: tab switching, clock, and Live / History initialisation.
 
-import { initLiveBoard, renderHistoryBoard, renderReportsSummary } from "./ui_liveboard.js";
+import { initLiveBoard, renderHistoryBoard, renderReportsSummary, initHistoryExport } from "./ui_liveboard.js";
 
 function setTab(name) {
   const tabButtons = document.querySelectorAll(".nav-tab");
@@ -65,4 +65,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initLiveBoard();
   renderHistoryBoard();
   renderReportsSummary();
+  initHistoryExport();
 });

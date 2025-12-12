@@ -484,6 +484,119 @@ export function renderReportsSummary() {
 }
 
 /**
+ * CSV Export Helpers
+ */
+function csvEscape(value) {
+  if (value == null) return "";
+  const str = String(value);
+  // If it contains comma, quote, newline, or leading/trailing space, wrap in quotes and escape internal quotes
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r") || /^\s|\s$/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCsv(filename, csvString) {
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportHistoryCsv() {
+  const movements = getMovements().filter(
+    (m) => m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  if (!movements.length) {
+    alert("No completed or cancelled movements to export.");
+    return;
+  }
+
+  // Define CSV columns (24 total)
+  const headers = [
+    "ID",
+    "Status",
+    "Callsign Code",
+    "Callsign Label",
+    "Registration",
+    "Type",
+    "WTC",
+    "Dep AD",
+    "Dep Name",
+    "Arr AD",
+    "Arr Name",
+    "Dep Planned",
+    "Dep Actual",
+    "Arr Planned",
+    "Arr Actual",
+    "Flight Type",
+    "Is Local",
+    "TNG Count",
+    "OS Count",
+    "FIS Count",
+    "POB",
+    "Remarks",
+    "EGOW Code",
+    "EGOW Desc",
+  ];
+
+  const rows = movements.map((m) => {
+    return [
+      m.id,
+      m.status,
+      m.callsignCode,
+      m.callsignLabel,
+      m.registration,
+      m.type,
+      m.wtc,
+      m.depAd,
+      m.depName,
+      m.arrAd,
+      m.arrName,
+      m.depPlanned,
+      m.depActual,
+      m.arrPlanned,
+      m.arrActual,
+      m.flightType,
+      m.isLocal ? "Yes" : "No",
+      m.tngCount,
+      m.osCount,
+      m.fisCount,
+      m.pob,
+      m.remarks,
+      m.egowCode,
+      m.egowDesc,
+    ].map(csvEscape).join(",");
+  });
+
+  const csvContent = [headers.map(csvEscape).join(","), ...rows].join("\n");
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+  const filename = `FDMS_History_${yyyy}${mm}${dd}_${hh}${min}.csv`;
+
+  downloadCsv(filename, csvContent);
+}
+
+export function initHistoryExport() {
+  const btn = document.getElementById("btnExportHistory");
+  if (btn) {
+    btn.addEventListener("click", exportHistoryCsv);
+  }
+}
+
+/**
  * Creates and shows a modal.
  * `contentHtml` is the inner HTML inserted into #modalRoot.
  * `initFn` (optional) receives { backdrop, closeModal } for per-modal wiring.
