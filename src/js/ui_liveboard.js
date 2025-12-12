@@ -834,6 +834,9 @@ function openVkbUseChooser(entry) {
           <div class="modal-field">
             <button class="btn btn-secondary js-use-new-local">New Local…</button>
           </div>
+          <div class="modal-field">
+            <button class="btn btn-ghost js-use-existing">Apply to Existing…</button>
+          </div>
         </div>
       </div>
     </div>
@@ -850,6 +853,15 @@ function openVkbUseChooser(entry) {
         closeModal();
         prefillAndOpenNewLocal(entry);
       });
+
+      // Apply to Existing
+      const existingBtn = backdrop.querySelector(".js-use-existing");
+      if (existingBtn) {
+        existingBtn.addEventListener("click", () => {
+          closeModal();
+          openVkbApplyToExisting(entry);
+        });
+      }
     }
   );
 }
@@ -882,6 +894,121 @@ function prefillAndOpenNewLocal(entry) {
 
   // For Local, ignore Location entries for now (always EGOW)
   openNewLocalModal(prefill);
+}
+
+function openVkbApplyToExisting(entry) {
+  const movements = getMovements();
+  if (!movements.length) {
+    alert("There are no movements to apply this VKB entry to.");
+    return;
+  }
+
+  const rowsHtml = movements
+    .map(
+      (m) => `
+      <tr class="strip-row" data-id="${m.id}">
+        <td>
+          <div class="status-strip ${statusClass(m.status)}"></div>
+        </td>
+        <td>
+          <div class="call-main">${m.callsignCode}</div>
+          <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
+        </td>
+        <td>
+          <div class="cell-strong">${m.registration || "—"}</div>
+          <div class="cell-muted">${m.depAd || ""} → ${m.arrAd || ""}</div>
+        </td>
+        <td>
+          <div class="cell-muted">${statusLabel(m.status)}</div>
+        </td>
+        <td class="actions-cell">
+          <button class="small-btn js-apply-to-this">Apply</button>
+        </td>
+      </tr>
+    `
+    )
+    .join("");
+
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Apply VKB Entry</div>
+            <div class="modal-subtitle">
+              Select the movement to update with ${entry.code}.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:8px;"></th>
+                  <th>Callsign</th>
+                  <th>Reg / Route</th>
+                  <th>Status</th>
+                  <th style="width:80px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      const rows = backdrop.querySelectorAll("tr.strip-row");
+      rows.forEach((row) => {
+        const id = parseInt(row.dataset.id, 10);
+        const btn = row.querySelector(".js-apply-to-this");
+        if (!btn || !Number.isFinite(id)) return;
+
+        btn.addEventListener("click", () => {
+          applyVkbEntryToMovement(entry, id);
+          closeModal();
+        });
+      });
+    }
+  );
+}
+
+function applyVkbEntryToMovement(entry, id) {
+  const patch = {};
+
+  if (entry.kind === "Callsign") {
+    patch.callsignLabel = entry.label || entry.code || "";
+    patch.callsignCode = (entry.code || patch.callsignLabel || "").toUpperCase();
+  }
+
+  if (entry.kind === "Location") {
+    const ad = normaliseAdCode(entry.code || "");
+    patch.depAd = ad;
+    patch.depName = inferAdName(ad);
+    // In a later stage we might choose DEP vs ARR via a chooser.
+  }
+
+  if (entry.kind === "Aircraft type") {
+    patch.type = entry.code || "";
+    // WTC could be inferred later from VKB; for now leave unchanged.
+  }
+
+  if (Object.keys(patch).length === 0) {
+    alert("This VKB entry type is not yet mapped to movement fields.");
+    return;
+  }
+
+  updateMovement(id, patch);
+  renderLiveBoard();
+  renderHistoryBoard();
+  renderReportsSummary();
 }
 
 function openNewFlightModal(prefill = {}) {
