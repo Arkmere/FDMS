@@ -709,7 +709,7 @@ export function renderVkbLookup(filterText = "") {
   if (!entries.length) {
     const empty = document.createElement("tr");
     empty.innerHTML = `
-      <td colspan="4" class="cell-muted">
+      <td colspan="5" class="cell-muted">
         No VKB entries match "${query}".
       </td>
     `;
@@ -735,7 +735,16 @@ export function renderVkbLookup(filterText = "") {
       <td>
         <div class="cell-muted">${entry.details}</div>
       </td>
+      <td>
+        <button class="small-btn js-vkb-use">Use…</button>
+      </td>
     `;
+
+    const useBtn = tr.querySelector(".js-vkb-use");
+    useBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openVkbUseChooser(entry);
+    });
 
     tbody.appendChild(tr);
   });
@@ -800,7 +809,82 @@ function openModal(contentHtml, initFn) {
   }
 }
 
-function openNewFlightModal() {
+/**
+ * VKB "Use in Strip" Helpers
+ */
+function openVkbUseChooser(entry) {
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Use VKB Entry</div>
+            <div class="modal-subtitle">
+              Select which field to pre-fill using ${entry.code}.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="modal-field">
+            <button class="btn btn-primary js-use-new-flight">New Flight…</button>
+          </div>
+          <div class="modal-field">
+            <button class="btn btn-secondary js-use-new-local">New Local…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      // Use in New Flight
+      backdrop.querySelector(".js-use-new-flight").addEventListener("click", () => {
+        closeModal();
+        prefillAndOpenNewFlight(entry);
+      });
+
+      // Use in New Local
+      backdrop.querySelector(".js-use-new-local").addEventListener("click", () => {
+        closeModal();
+        prefillAndOpenNewLocal(entry);
+      });
+    }
+  );
+}
+
+function prefillAndOpenNewFlight(entry) {
+  const prefill = {};
+
+  if (entry.kind === "Callsign") {
+    prefill.callsign = entry.label;    // SPEEDBIRD etc
+  }
+  if (entry.kind === "Location") {
+    prefill.depAd = entry.code;        // or arrAd; for now default to DEP
+  }
+  if (entry.kind === "Aircraft type") {
+    prefill.type = entry.code;
+  }
+
+  openNewFlightModal(prefill);
+}
+
+function prefillAndOpenNewLocal(entry) {
+  const prefill = {};
+
+  if (entry.kind === "Callsign") {
+    prefill.callsign = entry.label;
+  }
+  if (entry.kind === "Aircraft type") {
+    prefill.type = entry.code;
+  }
+
+  // For Local, ignore Location entries for now (always EGOW)
+  openNewLocalModal(prefill);
+}
+
+function openNewFlightModal(prefill = {}) {
   openModal(
     `
     <div class="modal-backdrop">
@@ -818,7 +902,7 @@ function openNewFlightModal() {
         <div class="modal-body">
           <div class="modal-field">
             <label for="nf-callsign" class="modal-label">Callsign</label>
-            <input id="nf-callsign" class="modal-input" placeholder="e.g. SYS22" />
+            <input id="nf-callsign" class="modal-input" placeholder="e.g. SYS22" value="${prefill.callsign || ""}" />
           </div>
 
           <div class="modal-field">
@@ -847,7 +931,7 @@ function openNewFlightModal() {
 
           <div class="modal-field">
             <label for="nf-depAd" class="modal-label">Departure AD</label>
-            <input id="nf-depAd" class="modal-input" placeholder="e.g. EGOW" />
+            <input id="nf-depAd" class="modal-input" placeholder="e.g. EGOW" value="${prefill.depAd || ""}" />
           </div>
 
           <div class="modal-field">
@@ -1018,7 +1102,7 @@ function openNewFlightModal() {
   );
 }
 
-function openNewLocalModal() {
+function openNewLocalModal(prefill = {}) {
   openModal(
     `
     <div class="modal-backdrop">
@@ -1036,7 +1120,7 @@ function openNewLocalModal() {
         <div class="modal-body">
           <div class="modal-field">
             <label for="nl-callsign" class="modal-label">Callsign</label>
-            <input id="nl-callsign" class="modal-input" placeholder="e.g. UAM11" />
+            <input id="nl-callsign" class="modal-input" placeholder="e.g. UAM11" value="${prefill.callsign || ""}" />
           </div>
 
           <div class="modal-field">
