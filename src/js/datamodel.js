@@ -1,8 +1,11 @@
 // datamodel.js
-// In-memory demo data + small helpers for statuses and basic querying.
-// This will later be replaced by a richer data model and persistence.
+// Storage-backed demo data + helpers for statuses and basic querying.
+// Movements persist in localStorage between page reloads.
 
-export const demoMovements = [
+const STORAGE_KEY = "vectair_fdms_movements_v1";
+
+// The original hard-coded demo data
+const demoMovementsSeed = [
   {
     id: 1,
     status: "ACTIVE",
@@ -226,11 +229,68 @@ export const demoMovements = [
   }
 ];
 
-let nextId = demoMovements.length + 1;
+// Working state (initialised lazily)
+let movements = [];
+let nextId = 1;
+let movementsInitialised = false;
+
+function cloneDemoMovements() {
+  // Shallow clone each object so we don't mutate the seed
+  return demoMovementsSeed.map((m) => ({ ...m }));
+}
+
+function loadFromStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch (e) {
+    console.warn("FDMS: failed to load movements from storage", e);
+    return null;
+  }
+}
+
+function saveToStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const payload = JSON.stringify(movements);
+    window.localStorage.setItem(STORAGE_KEY, payload);
+  } catch (e) {
+    console.warn("FDMS: failed to save movements to storage", e);
+  }
+}
+
+function computeNextId() {
+  if (!movements.length) return 1;
+  return (
+    movements.reduce((max, m) => {
+      const id = typeof m.id === "number" ? m.id : 0;
+      return id > max ? id : max;
+    }, 0) + 1
+  );
+}
+
+function ensureInitialised() {
+  if (movementsInitialised) return;
+
+  const loaded = loadFromStorage();
+  if (loaded && loaded.length) {
+    movements = loaded;
+  } else {
+    movements = cloneDemoMovements();
+    saveToStorage();
+  }
+
+  nextId = computeNextId();
+  movementsInitialised = true;
+}
 
 export function getMovements() {
-  // In future this could query by date range / facility.
-  return demoMovements;
+  ensureInitialised();
+  return movements;
 }
 
 export function statusClass(status) {
@@ -263,17 +323,26 @@ export function statusLabel(status) {
   }
 }
 
-// Simple placeholder for future creation logic.
-// Currently just pushes into the in-memory array.
 export function createMovement(partial) {
+  ensureInitialised();
   const movement = { id: nextId++, ...partial };
-  demoMovements.push(movement);
+  movements.push(movement);
+  saveToStorage();
   return movement;
 }
 
 export function updateMovement(id, patch) {
-  const movement = demoMovements.find((m) => m.id === id);
+  ensureInitialised();
+  const movement = movements.find((m) => m.id === id);
   if (!movement) return null;
   Object.assign(movement, patch);
+  saveToStorage();
   return movement;
+}
+
+export function resetMovementsToDemo() {
+  movements = cloneDemoMovements();
+  nextId = computeNextId();
+  movementsInitialised = true;
+  saveToStorage();
 }

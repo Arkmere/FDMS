@@ -1,7 +1,7 @@
 // ui_liveboard.js
 // Handles rendering and interactions for the Live Board view.
 
-import { getMovements, statusClass, statusLabel, createMovement, updateMovement } from "./datamodel.js";
+import { getMovements, statusClass, statusLabel, createMovement, updateMovement, resetMovementsToDemo } from "./datamodel.js";
 
 let expandedId = null;
 
@@ -763,6 +763,24 @@ export function initVkbLookup() {
 
   searchInput.addEventListener("input", () => {
     renderVkbLookup(searchInput.value);
+  });
+}
+
+export function initAdminPanel() {
+  const btn = document.getElementById("btnResetSession");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    const confirmed = window.confirm(
+      "Reset FDMS demo data for this browser?\n\n" +
+        "This will clear all current movements and restore the original demo set."
+    );
+    if (!confirmed) return;
+
+    resetMovementsToDemo();
+    renderLiveBoard();
+    renderHistoryBoard();
+    renderReportsSummary();
   });
 }
 
