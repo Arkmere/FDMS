@@ -108,6 +108,11 @@
         <div class="page-subtitle">
           Completed and cancelled movements. Will reuse the Live Board table with additional filters.
         </div>
+        <div class="panel-actions" style="margin-bottom:10px;">
+          <button class="btn btn-secondary" id="btnExportHistory">
+            Export History as CSV
+          </button>
+        </div>
         <div class="table-container">
           <table>
             <thead>
@@ -145,9 +150,32 @@
         <div class="page-subtitle">
           Embedded view onto the Vectair Knowledge Base (airline codes, callsigns, locations, types, squawks).
         </div>
-        <div class="placeholder">
-          Future implementation: tables mirroring vectair.org with per-column search and the ability
-          to send selected rows directly into a strip (e.g. “Use as callsign”, “Use as DEP/ARR”).
+        <div class="lookup-toolbar">
+          <input
+            id="vkbSearch"
+            class="field field-search-global"
+            placeholder="Search callsigns, locations, aircraft types…"
+          />
+          <span class="lookup-hint">
+            Demo lookup over a small static VKB dataset. Full VKB integration will follow later.
+          </span>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 120px;">Kind</th>
+                <th>Code</th>
+                <th>Label</th>
+                <th>Details</th>
+                <th style="width: 110px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vkbResultsBody">
+              <!-- VKB lookup rows injected by ui_liveboard.js -->
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -157,9 +185,15 @@
         <div class="page-subtitle">
           Facility configuration, VKB packs, users &amp; roles, and business rules.
         </div>
+        <div class="panel-actions">
+          <button class="btn btn-secondary" id="btnResetSession">
+            Reset session data (demo)
+          </button>
+        </div>
+
         <div class="placeholder">
-          This demo does not implement Admin logic yet. In the full version this tab will control facility settings,
-          WTC scheme selection, VKB pack recommendations, and user permissions.
+          Current demo uses localStorage to persist movements between refreshes.
+          Use "Reset session data" to clear this browser's session and reload the demo set.
         </div>
       </section>
     </main>

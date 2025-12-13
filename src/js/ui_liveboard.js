@@ -1,7 +1,7 @@
 // ui_liveboard.js
 // Handles rendering and interactions for the Live Board view.
 
-import { getMovements, statusClass, statusLabel, createMovement, updateMovement } from "./datamodel.js";
+import { getMovements, statusClass, statusLabel, createMovement, updateMovement, resetMovementsToDemo } from "./datamodel.js";
 
 let expandedId = null;
 
@@ -29,6 +29,87 @@ function inferAdName(adCode) {
   // Later this can use VKB lookup; for now just return code.
   return code;
 }
+
+// --- VKB demo dataset -------------------------------------------------------
+
+const vkbDemoEntries = [
+  // Callsigns – civil
+  {
+    kind: "Callsign",
+    category: "Airline",
+    code: "BAW",
+    label: "SPEEDBIRD",
+    details: "British Airways (BA/BAW)",
+  },
+  {
+    kind: "Callsign",
+    category: "Airline",
+    code: "EZY",
+    label: "EASY",
+    details: "easyJet (U2/EZY)",
+  },
+  // Callsigns – military / state
+  {
+    kind: "Callsign",
+    category: "Military",
+    code: "RRR",
+    label: "ASCOT",
+    details: "RAF Air Transport / VIP flights",
+  },
+  {
+    kind: "Callsign",
+    category: "Military",
+    code: "SYS",
+    label: "SHAWBURY",
+    details: "RAF Shawbury training flights",
+  },
+
+  // Locations
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGOW",
+    label: "RAF Woodvale",
+    details: "Local unit – Woodvale (Sefton), 21/03 runway pair",
+  },
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGGP",
+    label: "Liverpool John Lennon",
+    details: "Regional; often used as O/S or practice diversion",
+  },
+  {
+    kind: "Location",
+    category: "Aerodrome",
+    code: "EGCC",
+    label: "Manchester",
+    details: "Major regional hub; frequent visiting traffic",
+  },
+
+  // Aircraft types
+  {
+    kind: "Aircraft type",
+    category: "Trainer",
+    code: "G115E",
+    label: "Grob Tutor",
+    details: "Light trainer, WTC L, used for UAS / EFT",
+  },
+  {
+    kind: "Aircraft type",
+    category: "Helicopter",
+    code: "EH10",
+    label: "Eurocopter Dauphin (demo)",
+    details: "Helicopter, WTC L/M depending on scheme",
+  },
+  {
+    kind: "Aircraft type",
+    category: "Airliner",
+    code: "A320",
+    label: "Airbus A320",
+    details: "Typical short-haul jet, WTC M",
+  },
+];
 
 function getStatusFilter() {
   const select = document.getElementById("statusFilter");
@@ -484,6 +565,226 @@ export function renderReportsSummary() {
 }
 
 /**
+ * CSV Export Helpers
+ */
+function csvEscape(value) {
+  if (value == null) return "";
+  const str = String(value);
+  // If it contains comma, quote, newline, or leading/trailing space, wrap in quotes and escape internal quotes
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r") || /^\s|\s$/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCsv(filename, csvString) {
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportHistoryCsv() {
+  const movements = getMovements().filter(
+    (m) => m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  if (!movements.length) {
+    alert("No completed or cancelled movements to export.");
+    return;
+  }
+
+  // Define CSV columns (24 total)
+  const headers = [
+    "ID",
+    "Status",
+    "Callsign Code",
+    "Callsign Label",
+    "Registration",
+    "Type",
+    "WTC",
+    "Dep AD",
+    "Dep Name",
+    "Arr AD",
+    "Arr Name",
+    "Dep Planned",
+    "Dep Actual",
+    "Arr Planned",
+    "Arr Actual",
+    "Flight Type",
+    "Is Local",
+    "TNG Count",
+    "OS Count",
+    "FIS Count",
+    "POB",
+    "Remarks",
+    "EGOW Code",
+    "EGOW Desc",
+  ];
+
+  const rows = movements.map((m) => {
+    return [
+      m.id,
+      m.status,
+      m.callsignCode,
+      m.callsignLabel,
+      m.registration,
+      m.type,
+      m.wtc,
+      m.depAd,
+      m.depName,
+      m.arrAd,
+      m.arrName,
+      m.depPlanned,
+      m.depActual,
+      m.arrPlanned,
+      m.arrActual,
+      m.flightType,
+      m.isLocal ? "Yes" : "No",
+      m.tngCount,
+      m.osCount,
+      m.fisCount,
+      m.pob,
+      m.remarks,
+      m.egowCode,
+      m.egowDesc,
+    ].map(csvEscape).join(",");
+  });
+
+  const csvContent = [headers.map(csvEscape).join(","), ...rows].join("\n");
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+  const filename = `FDMS_History_${yyyy}${mm}${dd}_${hh}${min}.csv`;
+
+  downloadCsv(filename, csvContent);
+}
+
+export function initHistoryExport() {
+  const btn = document.getElementById("btnExportHistory");
+  if (btn) {
+    btn.addEventListener("click", exportHistoryCsv);
+  }
+}
+
+/**
+ * VKB Lookup – Render and Filter
+ */
+export function renderVkbLookup(filterText = "") {
+  const tbody = document.getElementById("vkbResultsBody");
+  if (!tbody) return;
+
+  const query = (filterText || "").trim().toUpperCase();
+
+  let entries = vkbDemoEntries;
+
+  if (query) {
+    entries = entries.filter((entry) => {
+      const haystack =
+        (entry.kind || "") +
+        " " +
+        (entry.category || "") +
+        " " +
+        (entry.code || "") +
+        " " +
+        (entry.label || "") +
+        " " +
+        (entry.details || "");
+      return haystack.toUpperCase().includes(query);
+    });
+  }
+
+  tbody.innerHTML = "";
+
+  if (!entries.length) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="5" class="cell-muted">
+        No VKB entries match "${query}".
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const tr = document.createElement("tr");
+    tr.className = "strip-row";
+
+    tr.innerHTML = `
+      <td>
+        <div class="cell-strong">${entry.kind}</div>
+        <div class="cell-muted">${entry.category || ""}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${entry.code}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${entry.label}</div>
+      </td>
+      <td>
+        <div class="cell-muted">${entry.details}</div>
+      </td>
+      <td>
+        <button class="small-btn js-vkb-use">Use…</button>
+      </td>
+    `;
+
+    const useBtn = tr.querySelector(".js-vkb-use");
+    useBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openVkbUseChooser(entry);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+export function initVkbLookup() {
+  const searchInput = document.getElementById("vkbSearch");
+  if (!searchInput) {
+    // Still render the default list if the input isn't found.
+    renderVkbLookup("");
+    return;
+  }
+
+  // Initial render with no filter
+  renderVkbLookup("");
+
+  searchInput.addEventListener("input", () => {
+    renderVkbLookup(searchInput.value);
+  });
+}
+
+export function initAdminPanel() {
+  const btn = document.getElementById("btnResetSession");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    const confirmed = window.confirm(
+      "Reset FDMS demo data for this browser?\n\n" +
+        "This will clear all current movements and restore the original demo set."
+    );
+    if (!confirmed) return;
+
+    resetMovementsToDemo();
+    renderLiveBoard();
+    renderHistoryBoard();
+    renderReportsSummary();
+  });
+}
+
+/**
  * Creates and shows a modal.
  * `contentHtml` is the inner HTML inserted into #modalRoot.
  * `initFn` (optional) receives { backdrop, closeModal } for per-modal wiring.
@@ -526,7 +827,209 @@ function openModal(contentHtml, initFn) {
   }
 }
 
-function openNewFlightModal() {
+/**
+ * VKB "Use in Strip" Helpers
+ */
+function openVkbUseChooser(entry) {
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Use VKB Entry</div>
+            <div class="modal-subtitle">
+              Select which field to pre-fill using ${entry.code}.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="modal-field">
+            <button class="btn btn-primary js-use-new-flight">New Flight…</button>
+          </div>
+          <div class="modal-field">
+            <button class="btn btn-secondary js-use-new-local">New Local…</button>
+          </div>
+          <div class="modal-field">
+            <button class="btn btn-ghost js-use-existing">Apply to Existing…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      // Use in New Flight
+      backdrop.querySelector(".js-use-new-flight").addEventListener("click", () => {
+        closeModal();
+        prefillAndOpenNewFlight(entry);
+      });
+
+      // Use in New Local
+      backdrop.querySelector(".js-use-new-local").addEventListener("click", () => {
+        closeModal();
+        prefillAndOpenNewLocal(entry);
+      });
+
+      // Apply to Existing
+      const existingBtn = backdrop.querySelector(".js-use-existing");
+      if (existingBtn) {
+        existingBtn.addEventListener("click", () => {
+          closeModal();
+          openVkbApplyToExisting(entry);
+        });
+      }
+    }
+  );
+}
+
+function prefillAndOpenNewFlight(entry) {
+  const prefill = {};
+
+  if (entry.kind === "Callsign") {
+    prefill.callsign = entry.label;    // SPEEDBIRD etc
+  }
+  if (entry.kind === "Location") {
+    prefill.depAd = entry.code;        // or arrAd; for now default to DEP
+  }
+  if (entry.kind === "Aircraft type") {
+    prefill.type = entry.code;
+  }
+
+  openNewFlightModal(prefill);
+}
+
+function prefillAndOpenNewLocal(entry) {
+  const prefill = {};
+
+  if (entry.kind === "Callsign") {
+    prefill.callsign = entry.label;
+  }
+  if (entry.kind === "Aircraft type") {
+    prefill.type = entry.code;
+  }
+
+  // For Local, ignore Location entries for now (always EGOW)
+  openNewLocalModal(prefill);
+}
+
+function openVkbApplyToExisting(entry) {
+  const movements = getMovements();
+  if (!movements.length) {
+    alert("There are no movements to apply this VKB entry to.");
+    return;
+  }
+
+  const rowsHtml = movements
+    .map(
+      (m) => `
+      <tr class="strip-row" data-id="${m.id}">
+        <td>
+          <div class="status-strip ${statusClass(m.status)}"></div>
+        </td>
+        <td>
+          <div class="call-main">${m.callsignCode}</div>
+          <div class="call-sub">${m.callsignLabel || "&nbsp;"}</div>
+        </td>
+        <td>
+          <div class="cell-strong">${m.registration || "—"}</div>
+          <div class="cell-muted">${m.depAd || ""} → ${m.arrAd || ""}</div>
+        </td>
+        <td>
+          <div class="cell-muted">${statusLabel(m.status)}</div>
+        </td>
+        <td class="actions-cell">
+          <button class="small-btn js-apply-to-this">Apply</button>
+        </td>
+      </tr>
+    `
+    )
+    .join("");
+
+  openModal(
+    `
+    <div class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Apply VKB Entry</div>
+            <div class="modal-subtitle">
+              Select the movement to update with ${entry.code}.
+            </div>
+          </div>
+          <button type="button" class="small-btn js-close-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:8px;"></th>
+                  <th>Callsign</th>
+                  <th>Reg / Route</th>
+                  <th>Status</th>
+                  <th style="width:80px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    `,
+    ({ backdrop, closeModal }) => {
+      const rows = backdrop.querySelectorAll("tr.strip-row");
+      rows.forEach((row) => {
+        const id = parseInt(row.dataset.id, 10);
+        const btn = row.querySelector(".js-apply-to-this");
+        if (!btn || !Number.isFinite(id)) return;
+
+        btn.addEventListener("click", () => {
+          applyVkbEntryToMovement(entry, id);
+          closeModal();
+        });
+      });
+    }
+  );
+}
+
+function applyVkbEntryToMovement(entry, id) {
+  const patch = {};
+
+  if (entry.kind === "Callsign") {
+    patch.callsignLabel = entry.label || entry.code || "";
+    patch.callsignCode = (entry.code || patch.callsignLabel || "").toUpperCase();
+  }
+
+  if (entry.kind === "Location") {
+    const ad = normaliseAdCode(entry.code || "");
+    patch.depAd = ad;
+    patch.depName = inferAdName(ad);
+    // In a later stage we might choose DEP vs ARR via a chooser.
+  }
+
+  if (entry.kind === "Aircraft type") {
+    patch.type = entry.code || "";
+    // WTC could be inferred later from VKB; for now leave unchanged.
+  }
+
+  if (Object.keys(patch).length === 0) {
+    alert("This VKB entry type is not yet mapped to movement fields.");
+    return;
+  }
+
+  updateMovement(id, patch);
+  renderLiveBoard();
+  renderHistoryBoard();
+  renderReportsSummary();
+}
+
+function openNewFlightModal(prefill = {}) {
   openModal(
     `
     <div class="modal-backdrop">
@@ -544,7 +1047,7 @@ function openNewFlightModal() {
         <div class="modal-body">
           <div class="modal-field">
             <label for="nf-callsign" class="modal-label">Callsign</label>
-            <input id="nf-callsign" class="modal-input" placeholder="e.g. SYS22" />
+            <input id="nf-callsign" class="modal-input" placeholder="e.g. SYS22" value="${prefill.callsign || ""}" />
           </div>
 
           <div class="modal-field">
@@ -573,7 +1076,7 @@ function openNewFlightModal() {
 
           <div class="modal-field">
             <label for="nf-depAd" class="modal-label">Departure AD</label>
-            <input id="nf-depAd" class="modal-input" placeholder="e.g. EGOW" />
+            <input id="nf-depAd" class="modal-input" placeholder="e.g. EGOW" value="${prefill.depAd || ""}" />
           </div>
 
           <div class="modal-field">
@@ -744,7 +1247,7 @@ function openNewFlightModal() {
   );
 }
 
-function openNewLocalModal() {
+function openNewLocalModal(prefill = {}) {
   openModal(
     `
     <div class="modal-backdrop">
@@ -762,7 +1265,7 @@ function openNewLocalModal() {
         <div class="modal-body">
           <div class="modal-field">
             <label for="nl-callsign" class="modal-label">Callsign</label>
-            <input id="nl-callsign" class="modal-input" placeholder="e.g. UAM11" />
+            <input id="nl-callsign" class="modal-input" placeholder="e.g. UAM11" value="${prefill.callsign || ""}" />
           </div>
 
           <div class="modal-field">

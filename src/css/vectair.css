@@ -585,3 +585,22 @@ tbody tr.strip-row:hover {
   font-size: 0.8rem;
   color: var(--va-text-soft);
 }
+
+/* VKB Lookup */
+
+.lookup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.lookup-toolbar .field-search-global {
+  flex: 1 1 240px;
+}
+
+.lookup-hint {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
