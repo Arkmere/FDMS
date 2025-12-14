@@ -1,207 +1,179 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Vectair FDMS Lite – Live Board</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="css/vectair.css" />
-</head>
-<body>
-  <div class="app-shell">
-    <header class="header">
-      <div class="header-left">
-        <div class="va-logo-box">VA</div>
-        <div>
-          <div class="va-title-main">Vectair FDMS Lite</div>
-          <div class="va-title-sub">Flight Data Management – Local VFR / Admin</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vectair FDMS Lite</title>
+    <link rel="stylesheet" href="./css/vectair.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="header">
+        <div class="header-left">
+          <div class="va-logo-box">VA</div>
+          <div>
+            <div class="va-title-main">Vectair FDMS Lite</div>
+            <div class="va-title-sub">EGOW / RAF Woodvale — Demo</div>
+          </div>
         </div>
-      </div>
-      <div class="header-right">
-        <div>Facility: EGOW · RAF Woodvale (Demo)</div>
-        <div id="utcClock">UTC: --:-- · ----------</div>
-      </div>
-    </header>
+        <div class="header-right">
+          <div><strong>UTC</strong></div>
+          <div id="utcClock">--:--:--</div>
+        </div>
+      </header>
 
-    <nav class="nav-bar">
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-tab="live">Live Board</button>
-        <button class="nav-tab" data-tab="history">History</button>
-        <button class="nav-tab" data-tab="reports">Reports</button>
-        <button class="nav-tab" data-tab="lookup">VKB Lookup</button>
-        <button class="nav-tab" data-tab="admin">Admin</button>
-      </div>
-    </nav>
+      <nav class="nav-bar">
+        <div class="nav-tabs" role="tablist">
+          <button class="nav-tab active" data-tab="tab-live">Live Board</button>
+          <button class="nav-tab" data-tab="tab-history">History</button>
+          <button class="nav-tab" data-tab="tab-reports">Reports</button>
+          <button class="nav-tab" data-tab="tab-vkb">VKB Lookup</button>
+          <button class="nav-tab" data-tab="tab-admin">Admin</button>
+        </div>
+      </nav>
 
-    <main class="page-body">
-      <!-- Live toolbar -->
-      <div class="toolbar" id="live-toolbar">
-        <div class="toolbar-left">
-          <select class="field field-select" id="dateRange">
-            <option value="today">Today</option>
-            <option value="3days">Today + 3 days</option>
-            <option value="all">All demo flights</option>
-          </select>
-          <select class="field field-select" id="statusFilter">
-            <option value="planned_active">Status: Planned & Active</option>
-            <option value="active">Status: Active only</option>
-            <option value="all">Status: All</option>
-          </select>
-          <input
-            class="field field-search-global"
-            id="searchGlobal"
-            placeholder="Global search (callsign, reg, aerodrome…)"
-          />
-        </div>
-        <div class="toolbar-right">
-          <button class="btn btn-secondary" id="btnNewLocal">New Local</button>
-          <button class="btn btn-primary" id="btnNewFlight">New Flight</button>
-        </div>
-      </div>
+      <main class="page-body">
+        <!-- LIVE -->
+        <section id="tab-live" class="tab-panel">
+          <div class="page-title">Live Board</div>
+          <div class="page-subtitle">Administrative strip-style movement list (not a controlling system).</div>
 
-      <!-- Toolbar placeholder for non-live tabs -->
-      <div class="toolbar" id="other-toolbar">
-        <div class="toolbar-left">
-          <span class="page-subtitle" style="margin:0;">
-            Demo view – filters and controls for this tab are not implemented yet.
-          </span>
-        </div>
-      </div>
+          <div class="panel">
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <select class="field field-select" id="statusFilter">
+                  <option value="planned_active" selected>Planned & Active</option>
+                  <option value="active">Active only</option>
+                  <option value="all">All</option>
+                </select>
 
-      <!-- Live Board panel -->
-      <section class="panel" id="live-panel">
-        <div class="page-title">Live Board</div>
-        <div class="page-subtitle">
-          Planned and active movements for EGOW. Click a row to view full details. Demo data only.
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:8px;"></th>
-                <th>Callsign</th>
-                <th>Reg / Type / WTC</th>
-                <th>Route</th>
-                <th>Times (Planned / Actual)</th>
-                <th>Activity</th>
-                <th style="width:70px; text-align:right;">Actions</th>
-              </tr>
-              <tr class="filter-row">
-                <th></th>
-                <th><input type="text" id="filterCallsign" placeholder="Search…" /></th>
-                <th><input type="text" id="filterReg" placeholder="Search…" /></th>
-                <th><input type="text" id="filterRoute" placeholder="DEP/ARR…" /></th>
-                <th></th>
-                <th></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="liveBody">
-              <!-- Rows injected by ui_liveboard.js -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+                <input
+                  class="field field-search-global"
+                  id="globalSearch"
+                  type="search"
+                  placeholder="Search callsign, reg, type, route, codes…"
+                />
+              </div>
 
-      <!-- History panel -->
-      <section class="panel" id="history-panel">
-        <div class="page-title">History</div>
-        <div class="page-subtitle">
-          Completed and cancelled movements. Will reuse the Live Board table with additional filters.
-        </div>
-        <div class="panel-actions" style="margin-bottom:10px;">
-          <button class="btn btn-secondary" id="btnExportHistory">
-            Export History as CSV
-          </button>
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:8px;"></th>
-                <th>Callsign</th>
-                <th>Reg / Type / WTC</th>
-                <th>Route</th>
-                <th>Times (Planned / Actual)</th>
-                <th>Activity</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="historyBody">
-              <!-- Rows injected by ui_liveboard.js -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+              <div class="toolbar-right">
+                <button class="btn btn-ft btn-ft-loc" id="btnNewLoc" type="button">New LOC</button>
+                <button class="btn btn-ft btn-ft-dep" id="btnNewDep" type="button">New DEP</button>
+                <button class="btn btn-ft btn-ft-arr" id="btnNewArr" type="button">New ARR</button>
+                <button class="btn btn-ft btn-ft-ovr" id="btnNewOvr" type="button">New OVR</button>
+              </div>
+            </div>
 
-      <!-- Reports panel -->
-      <section class="panel" id="reports-panel">
-        <div class="page-title">Reports</div>
-        <div class="page-subtitle">
-          EGOW-style movement summaries, monthly statistics, and export tools.
-        </div>
-        <div class="reports-grid" id="reportsSummary">
-          <!-- Summary tiles injected by ui_liveboard.js -->
-        </div>
-      </section>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 14px"></th>
+                    <th>Callsign</th>
+                    <th>Reg / Type / WTC</th>
+                    <th>Route</th>
+                    <th>Times</th>
+                    <th>Activity</th>
+                    <th style="width: 250px; text-align: right">Actions</th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th></th>
+                    <th><input id="colFilterCallsign" placeholder="Filter callsign…" /></th>
+                    <th><input id="colFilterReg" placeholder="Filter reg…" /></th>
+                    <th><input id="colFilterRoute" placeholder="Filter route…" /></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="liveBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
 
-      <!-- VKB Lookup panel -->
-      <section class="panel" id="lookup-panel">
-        <div class="page-title">VKB Lookup</div>
-        <div class="page-subtitle">
-          Embedded view onto the Vectair Knowledge Base (airline codes, callsigns, locations, types, squawks).
-        </div>
-        <div class="lookup-toolbar">
-          <input
-            id="vkbSearch"
-            class="field field-search-global"
-            placeholder="Search callsigns, locations, aircraft types…"
-          />
-          <span class="lookup-hint">
-            Demo lookup over a small static VKB dataset. Full VKB integration will follow later.
-          </span>
-        </div>
+        <!-- HISTORY -->
+        <section id="tab-history" class="tab-panel hidden">
+          <div class="page-title">History</div>
+          <div class="page-subtitle">Completed and cancelled movements (session).</div>
 
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 120px;">Kind</th>
-                <th>Code</th>
-                <th>Label</th>
-                <th>Details</th>
-                <th style="width: 110px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="vkbResultsBody">
-              <!-- VKB lookup rows injected by ui_liveboard.js -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <div class="panel">
+            <div class="history-actions">
+              <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
+                Export History as CSV
+              </button>
+            </div>
 
-      <!-- Admin panel -->
-      <section class="panel" id="admin-panel">
-        <div class="page-title">Admin</div>
-        <div class="page-subtitle">
-          Facility configuration, VKB packs, users &amp; roles, and business rules.
-        </div>
-        <div class="panel-actions">
-          <button class="btn btn-secondary" id="btnResetSession">
-            Reset session data (demo)
-          </button>
-        </div>
+            <div class="table-container">
+              <table id="historyTable">
+                <thead>
+                  <tr>
+                    <th style="width: 14px"></th>
+                    <th data-sort="callsign">Callsign</th>
+                    <th data-sort="regtype">Reg / Type / WTC</th>
+                    <th data-sort="route">Route</th>
+                    <th data-sort="time">Times</th>
+                    <th data-sort="activity">Activity</th>
+                    <th data-sort="status">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="historyBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
 
-        <div class="placeholder">
-          Current demo uses localStorage to persist movements between refreshes.
-          Use "Reset session data" to clear this browser's session and reload the demo set.
-        </div>
-      </section>
-    </main>
-  </div>
+        <!-- REPORTS -->
+        <section id="tab-reports" class="tab-panel hidden">
+          <div class="page-title">Reports</div>
+          <div class="page-subtitle">Basic session totals (no date slicing yet).</div>
 
-  <!-- Modal root for New Flight / New Local dialogs -->
-  <div id="modalRoot"></div>
+          <div class="panel">
+            <div class="reports-grid" id="reportsSummary"></div>
+          </div>
+        </section>
 
-  <script type="module" src="js/app.js"></script>
-</body>
+        <!-- VKB -->
+        <section id="tab-vkb" class="tab-panel hidden">
+          <div class="page-title">VKB Lookup</div>
+          <div class="page-subtitle">Static demo lookup (in-memory) for callsigns, locations, types.</div>
+
+          <div class="panel">
+            <div class="lookup-toolbar">
+              <input class="field field-search-global" id="vkbSearch" type="search" placeholder="Search VKB demo…" />
+              <div class="lookup-hint">Demo dataset only. Later: backed by Vectair KB.</div>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kind</th>
+                    <th>Code</th>
+                    <th>Label</th>
+                    <th>Details</th>
+                    <th style="width: 110px; text-align: right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="vkbBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ADMIN -->
+        <section id="tab-admin" class="tab-panel hidden">
+          <div class="page-title">Admin</div>
+          <div class="page-subtitle">
+            LocalStorage persistence is enabled. Reset restores demo seed (and overwrites local session data).
+          </div>
+
+          <div class="panel">
+            <button class="btn btn-secondary" id="btnResetDemo" type="button">Reset session data (demo)</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
 </html>
