@@ -329,23 +329,154 @@ Goal: replace the ad-hoc `demoMovements` with a proper model.
 
 ---
 
-## 6. Immediate Next Steps
+## 6. Post-Stage 13 Roadmap
 
-For Codex / Copilot:
+**Status**: Stages 0–13 complete. The application now has:
+- Core UI refactored into modular `/src` structure
+- In-memory data model with localStorage persistence
+- Live Board with flight-type-aware sorting and row tinting
+- Working modals for creating movements (4 flight types: LOC/DEP/ARR/OVR)
+- Basic tabs: Live Board, History, Reports, VKB, Admin
 
-1. **Refactor prototype into `/src`**  
-   - Preserve look and behaviour of `prototype/vectair_fdms_demo.html`.  
-   - Create the file structure from §5.2 and move code accordingly.
+The following sections outline the path to v1.0 release.
 
-2. **Introduce a data model module**  
-   - Implement `dataModel.js` with movement + formation structures consistent with §3.2 and §3.3.  
-   - Replace direct use of `demoMovements` with calls into the data model.
+---
 
-3. **Wire New Flight / New Local modals to the model (in-memory)**  
-   - On Save, create new movements in memory and re-render the Live Board.  
-   - No persistence beyond page refresh yet.
+### A. Stabilisation and Release Discipline
 
-4. **Add stubs for VKB Lookup and Admin**  
-   - Create placeholder views and functions for later VKB integration and facility config.
+**Bootstrap / wiring hardening**
 
-Once those steps are complete, FDMS Lite will have a solid, Vectair-branded front-end ready for a backend and desktop packaging.
+- Ensure `index.html` loads only `js/app.js`
+- Ensure `app.js` initialises all tabs/modules reliably
+- Add a minimal on-screen "JS loaded / init complete" indicator in Admin (optional but very useful)
+
+**LocalStorage schema + migration**
+
+- Version the storage payload (e.g., `vectair_fdms_movements_v2`)
+- Add safe migration path from older keys/structures
+- Add "Export/Import session JSON" for backup/restore (still local)
+
+**Error visibility without DevTools**
+
+- Add an in-app "Diagnostics" panel (Admin) that shows:
+  - last init time
+  - last render time
+  - last error (try/catch + console + UI surface)
+  - current storage key + movement count
+
+---
+
+### B. Data Model Completion for "Real Use"
+
+**Time semantics completion**
+
+- Introduce explicit fields (even if some are aliases initially):
+  - **DEP**: ETD/ATD
+  - **ARR**: ETA/ATA
+  - **OVR**: ECT/ACT
+  - **LOC**: Start/airborne/end (as needed)
+- Ensure sorting, display, and edit all align with those semantics
+
+**Reg → Type inference (minimal VKB integration)**
+
+- Add a lightweight lookup table (demo now; VKB later):
+  - known registration prefixes → type
+  - known full regs → type (optional)
+- Behaviour:
+  - if user enters reg and leaves type blank, infer type when known
+  - always allow override in Edit
+
+**Movement identity and audit basics**
+
+- Add `createdAtUtc`, `updatedAtUtc`
+- Add `updatedBy` placeholder ("local user")
+- Append-only "change log" per movement (minimal, local)
+
+---
+
+### C. UX to Match Strip-Bay Mental Model
+
+**Create buttons aligned to strip types** ✅ **DONE (Stage 13)**
+
+- Replace "New Flight / New Local" with 4 buttons:
+  - New LOC / New DEP / New ARR / New OVR
+- Colour-code buttons and preconfigure modal defaults per type
+
+**Strip appearance refinement** ✅ **DONE (Stage 12)**
+
+- Increase colour blocking and readability:
+  - flight-type tint across the full row ✅
+  - ensure status and flight-type cues don't fight each other
+  - consistent typography hierarchy for key fields
+
+**Keyboard and workflow efficiency**
+
+- Focus management in modals (tab order, enter-to-save where safe)
+- Quick actions on rows (Edit, Details, Status transitions)
+- Optional "duplicate movement" as a first-class workflow (already partly present)
+
+---
+
+### D. History and Reporting to "Replace Excel"
+
+**History defaults and sorting**
+
+- History defaults to "today"
+- Default sort: most recent first (using the same semantic time selection rules)
+- Add simple date filter (today / yesterday / custom range)
+
+**Sortable History table**
+
+- Click-to-sort headers (client-side)
+- Stable sort with secondary keys
+
+**Reports v1**
+
+- Add date scoping (today / range)
+- Add breakdowns:
+  - by flight type
+  - by unit / EGOW code
+  - totals: T&Gs / O/S / FIS / movements
+- Export report summary as CSV (optional)
+
+---
+
+### E. VKB Integration Path (Still "Lite")
+
+**VKB lookup data model upgrade**
+
+- Split demo entries into separate datasets:
+  - callsigns
+  - locations
+  - aircraft types
+  - registration prefixes
+- Keep search unified, but structure ready for real VKB ingestion later
+
+**Autocomplete / canonicalisation**
+
+- For aerodromes: typing "Woodvale" resolves to EGOW
+- For callsigns: typing "Speedbird" resolves label/code consistently
+- UI approach: datalist suggestions + light resolver logic (no heavy framework)
+
+---
+
+### F. "Fruition" Deliverables
+
+**Packaging for reliable local use**
+
+- Provide a "run locally" script and clear README steps
+- Optional: simple one-file `serve.bat` for Windows
+
+**QA pass / acceptance checklist**
+
+- New movement creation (4 types)
+- Status lifecycle
+- Sorting correctness for each type/time state
+- LocalStorage persistence and reset
+- History accuracy + export
+- Reports match totals
+- VKB apply/prefill + autocomplete
+
+**Release milestone**
+
+- Tag **v0.2** (or similar) once the above is stable
