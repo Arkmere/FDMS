@@ -51,6 +51,71 @@ function escapeHtml(s) {
 }
 
 /* -----------------------------
+   Sorting
+------------------------------ */
+
+function timeToMinutes(t) {
+  const s = (t || "").trim();
+  if (!s) return Number.POSITIVE_INFINITY;
+  const m = s.match(/^(\d{1,2}):?(\d{2})$/);
+  if (!m) return Number.POSITIVE_INFINITY;
+  const hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return Number.POSITIVE_INFINITY;
+  return hh * 60 + mm;
+}
+
+function statusRank(status) {
+  const s = (status || "").toUpperCase();
+  if (s === "ACTIVE") return 1;
+  if (s === "PLANNED") return 2;
+  return 3;
+}
+
+function plannedSortMinutes(m) {
+  const ft = (m.flightType || "").toUpperCase();
+  if (ft === "ARR") return timeToMinutes(m.arrPlanned);
+  if (ft === "OVR") return timeToMinutes(m.depPlanned);
+  return timeToMinutes(m.depPlanned);
+}
+
+function activeSortMinutes(m) {
+  const ft = (m.flightType || "").toUpperCase();
+  if (ft === "ARR") return timeToMinutes(m.arrActual || m.arrPlanned);
+  if (ft === "LOC") return timeToMinutes(m.depActual || m.arrActual || m.depPlanned);
+  if (ft === "OVR") return timeToMinutes(m.depActual || m.depPlanned);
+  return timeToMinutes(m.depActual || m.depPlanned);
+}
+
+function movementSortMinutes(m) {
+  const s = (m.status || "").toUpperCase();
+  if (s === "ACTIVE") return activeSortMinutes(m);
+  if (s === "PLANNED") return plannedSortMinutes(m);
+  return activeSortMinutes(m);
+}
+
+function compareForLiveBoard(a, b) {
+  const ra = statusRank(a.status);
+  const rb = statusRank(b.status);
+  if (ra !== rb) return ra - rb;
+
+  const ta = movementSortMinutes(a);
+  const tb = movementSortMinutes(b);
+  if (ta !== tb) return ta - tb;
+
+  return (a.id || 0) - (b.id || 0);
+}
+
+function flightTypeClass(ft) {
+  const t = (ft || "").toUpperCase();
+  if (t === "ARR") return "ft-arr";
+  if (t === "DEP") return "ft-dep";
+  if (t === "LOC") return "ft-loc";
+  if (t === "OVR") return "ft-ovr";
+  return "ft-unk";
+}
+
+/* -----------------------------
    Filters
 ------------------------------ */
 
@@ -231,11 +296,11 @@ export function renderLiveBoard() {
 
   tbody.innerHTML = "";
 
-  const movements = getMovements().filter(matchesFilters);
+  const movements = getMovements().filter(matchesFilters).slice().sort(compareForLiveBoard);
 
   for (const m of movements) {
     const tr = document.createElement("tr");
-    tr.className = "strip-row";
+    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
     tr.dataset.id = String(m.id);
 
     const depDisplay = m.depActual || m.depPlanned || "-";
@@ -342,11 +407,11 @@ function openModal(contentHtml) {
   document.addEventListener("keydown", escHandler);
 }
 
-function openNewFlightModal() {
+function openNewFlightModal(flightType = "DEP") {
   openModal(`
     <div class="modal-header">
       <div>
-        <div class="modal-title">New Flight (Demo)</div>
+        <div class="modal-title">New ${flightType} Flight (Demo)</div>
         <div class="modal-subtitle">Visual mock only – values are not stored.</div>
       </div>
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
@@ -542,11 +607,9 @@ export function initLiveBoard() {
   });
 
 safeOn(btnNewLoc, "click", openNewLocalModal);
-
-// Until you create dedicated DEP/ARR/OVR modals, reuse the generic modal:
-safeOn(btnNewDep, "click", openNewFlightModal);
-safeOn(btnNewArr, "click", openNewFlightModal);
-safeOn(btnNewOvr, "click", openNewFlightModal);
+safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
+safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
+safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
 
   renderLiveBoard();
 }
