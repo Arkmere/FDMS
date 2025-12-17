@@ -1,5 +1,6 @@
 // app.js
-// App bootstrap: tab switching, clock, and Live / History initialisation.
+// App bootstrap: tab switching, UTC clock, and Live / History initialisation.
+
 import {
   initLiveBoard,
   renderLiveBoard,
@@ -10,71 +11,143 @@ import {
   initAdminPanel
 } from "./ui_liveboard.js";
 
-function setTab(name) {
-  const tabButtons = document.querySelectorAll(".nav-tab");
-  const livePanel = document.getElementById("live-panel");
-  const historyPanel = document.getElementById("history-panel");
-  const reportsPanel = document.getElementById("reports-panel");
-  const lookupPanel = document.getElementById("lookup-panel");
-  const adminPanel = document.getElementById("admin-panel");
-  const liveToolbar = document.getElementById("live-toolbar");
-  const otherToolbar = document.getElementById("other-toolbar");
+window.addEventListener("error", (e) => {
+  const d = document.createElement("div");
+  d.style.cssText =
+    "position:fixed;left:0;right:0;bottom:0;background:#300;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
+  d.textContent = "JS error: " + (e.message || String(e.error || e));
+  document.body.appendChild(d);
+});
 
-  tabButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === name);
+window.addEventListener("unhandledrejection", (e) => {
+  const d = document.createElement("div");
+  d.style.cssText =
+    "position:fixed;left:0;right:0;bottom:0;background:#003;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
+  d.textContent = "Promise rejection: " + String(e.reason || e);
+  document.body.appendChild(d);
+});
+
+/**
+ * Configuration for tab behaviour.
+ * Must match index.html:
+ * - buttons: .nav-tab with data-tab="tab-live" etc
+ * - panels:  .tab-panel with id="tab-live" etc
+ * - hidden:  panels hidden via .hidden class
+ */
+const TAB = {
+  BUTTON_SELECTOR: ".nav-tab",
+  PANEL_SELECTOR: ".tab-panel",
+  ACTIVE_CLASS: "active",
+  HIDDEN_CLASS: "hidden",
+  DEFAULT_PANEL_ID: "tab-live"
+};
+
+/**
+ * Optional on-screen error overlay for environments without DevTools.
+ * Enable by setting ENABLE_ERROR_OVERLAY = true.
+ */
+const ENABLE_ERROR_OVERLAY = false;
+
+function $(selector, root = document) {
+  return root.querySelector(selector);
+}
+
+function $all(selector, root = document) {
+  return Array.from(root.querySelectorAll(selector));
+}
+
+function setActiveTab(panelId) {
+  const buttons = $all(TAB.BUTTON_SELECTOR);
+  const panels = $all(TAB.PANEL_SELECTOR);
+
+  // If the requested panel doesn't exist, fall back to default.
+  const targetPanel = document.getElementById(panelId) || document.getElementById(TAB.DEFAULT_PANEL_ID);
+  const targetId = targetPanel ? targetPanel.id : null;
+
+  // Update button active state
+  buttons.forEach((btn) => {
+    btn.classList.toggle(TAB.ACTIVE_CLASS, btn.dataset.tab === targetId);
   });
 
-  if (livePanel) livePanel.style.display = name === "live" ? "block" : "none";
-  if (historyPanel)
-    historyPanel.style.display = name === "history" ? "block" : "none";
-  if (reportsPanel)
-    reportsPanel.style.display = name === "reports" ? "block" : "none";
-  if (lookupPanel)
-    lookupPanel.style.display = name === "lookup" ? "block" : "none";
-  if (adminPanel)
-    adminPanel.style.display = name === "admin" ? "block" : "none";
-
-  if (liveToolbar) liveToolbar.style.display = name === "live" ? "flex" : "none";
-  if (otherToolbar)
-    otherToolbar.style.display = name === "live" ? "none" : "flex";
+  // Show/hide panels via the CSS class contract
+  panels.forEach((panel) => {
+    const isTarget = targetId && panel.id === targetId;
+    panel.classList.toggle(TAB.HIDDEN_CLASS, !isTarget);
+  });
 }
 
 function initTabs() {
-  const tabButtons = document.querySelectorAll(".nav-tab");
-  tabButtons.forEach((btn) => {
-    btn.addEventListener("click", () => setTab(btn.dataset.tab));
+  const buttons = $all(TAB.BUTTON_SELECTOR);
+
+  // Bind clicks
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tab;
+      if (target) setActiveTab(target);
+    });
   });
 
-  setTab("live");
+  // Ensure a sane initial view, regardless of HTML default classes
+  setActiveTab(TAB.DEFAULT_PANEL_ID);
 }
 
 function initClock() {
   const clockEl = document.getElementById("utcClock");
   if (!clockEl) return;
 
-  function updateClock() {
+  const updateClock = () => {
     const now = new Date();
     const hh = String(now.getUTCHours()).padStart(2, "0");
     const mm = String(now.getUTCMinutes()).padStart(2, "0");
     const yyyy = now.getUTCFullYear();
-    const mmn = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const mon = String(now.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(now.getUTCDate()).padStart(2, "0");
-    clockEl.textContent = `UTC: ${hh}:${mm} · ${yyyy}-${mmn}-${dd}`;
-  }
+
+    // Keep formatting stable and unambiguous
+    clockEl.textContent = `UTC: ${hh}:${mm} · ${yyyy}-${mon}-${dd}`;
+  };
 
   updateClock();
-  setInterval(updateClock, 30_000);
+  window.setInterval(updateClock, 30_000);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function initErrorOverlay() {
+  if (!ENABLE_ERROR_OVERLAY) return;
+
+  const show = (label, message) => {
+    const el = document.createElement("div");
+    el.style.cssText =
+      "position:fixed;left:0;right:0;bottom:0;background:#300;color:#fff;padding:10px;" +
+      "font:12px/1.4 monospace;z-index:99999;white-space:pre-wrap";
+    el.textContent = `${label}\n${message}`;
+    document.body.appendChild(el);
+  };
+
+  window.addEventListener("error", (e) => {
+    show("JS error:", e?.message || String(e?.error || e));
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    show("Promise rejection:", String(e?.reason || e));
+  });
+}
+
+function bootstrap() {
+  initErrorOverlay();
+
+  // Global UI primitives
   initTabs();
   initClock();
+
+  // Feature modules: bind handlers first, then render
   initLiveBoard();
-  renderLiveBoard();
-  renderHistoryBoard();
-  renderReportsSummary();
   initHistoryExport();
   initVkbLookup();
   initAdminPanel();
-});
 
+  renderLiveBoard();
+  renderHistoryBoard();
+  renderReportsSummary();
+}
+
+document.addEventListener("DOMContentLoaded", bootstrap);
