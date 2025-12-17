@@ -308,17 +308,20 @@ tbody tr.strip-row:hover {
 }
 
 /* Flight-type row colour blocking (main strip bay tint) */
-.strip.ft-arr {
-  background: color-mix(in srgb, var(--ft-arr) calc(var(--ft-tint) * 100%), #fff) !important;
+tr.strip.ft-arr > td {
+  background-color: rgba(230,165,87,0.22) !important;
 }
-.strip.ft-dep {
-  background: color-mix(in srgb, var(--ft-dep) calc(var(--ft-tint) * 100%), #fff) !important;
+
+tr.strip.ft-dep > td {
+  background-color: rgba(122,163,204,0.22) !important;
 }
-.strip.ft-loc {
-  background: color-mix(in srgb, var(--ft-loc) calc(var(--ft-tint) * 100%), #fff) !important;
+
+tr.strip.ft-loc > td {
+  background-color: rgba(232,158,196,0.22) !important;
 }
-.strip.ft-ovr {
-  background: color-mix(in srgb, var(--ft-ovr) calc(var(--ft-tint) * 100%), #fff) !important;
+
+tr.strip.ft-ovr > td {
+  background-color: rgba(139,201,144,0.22) !important;
 }
 
 /* Cell content */
