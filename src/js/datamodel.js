@@ -2,7 +2,9 @@
 // Storage-backed demo data + helpers for statuses and basic querying.
 // Movements persist in localStorage between page reloads.
 
-const STORAGE_KEY = "vectair_fdms_movements_v1";
+const STORAGE_KEY = "vectair_fdms_movements_v2";
+const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
+const SCHEMA_VERSION = 2;
 
 // The original hard-coded demo data
 const demoMovementsSeed = [
@@ -239,14 +241,38 @@ function cloneDemoMovements() {
   return demoMovementsSeed.map((m) => ({ ...m }));
 }
 
-function loadFromStorage() {
+function migrateFromV1() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY_V1);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
+    console.log("FDMS: Migrating data from v1 to v2 schema");
+    // Remove old key after successful migration
+    window.localStorage.removeItem(STORAGE_KEY_V1);
     return parsed;
+  } catch (e) {
+    console.warn("FDMS: failed to migrate from v1", e);
+    return null;
+  }
+}
+
+function loadFromStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    // Try loading v2 schema first
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // v2 schema: { version, timestamp, movements }
+      if (parsed && typeof parsed === "object" && parsed.version === SCHEMA_VERSION) {
+        return Array.isArray(parsed.movements) ? parsed.movements : null;
+      }
+    }
+
+    // Fall back to v1 migration if v2 not found
+    return migrateFromV1();
   } catch (e) {
     console.warn("FDMS: failed to load movements from storage", e);
     return null;
@@ -256,7 +282,12 @@ function loadFromStorage() {
 function saveToStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const payload = JSON.stringify(movements);
+    // v2 schema: wrap movements with version and timestamp
+    const payload = JSON.stringify({
+      version: SCHEMA_VERSION,
+      timestamp: new Date().toISOString(),
+      movements: movements
+    });
     window.localStorage.setItem(STORAGE_KEY, payload);
   } catch (e) {
     console.warn("FDMS: failed to save movements to storage", e);
@@ -345,4 +376,50 @@ export function resetMovementsToDemo() {
   nextId = computeNextId();
   movementsInitialised = true;
   saveToStorage();
+}
+
+export function exportSessionJSON() {
+  ensureInitialised();
+  return {
+    version: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    movements: movements.map(m => ({ ...m }))
+  };
+}
+
+export function importSessionJSON(data) {
+  try {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid import data");
+    }
+
+    // Support both v1 (array) and v2 (object with version) formats
+    let importedMovements;
+    if (Array.isArray(data)) {
+      // v1 format
+      importedMovements = data;
+    } else if (data.version && Array.isArray(data.movements)) {
+      // v2 format
+      importedMovements = data.movements;
+    } else {
+      throw new Error("Unrecognized import format");
+    }
+
+    movements = importedMovements.map(m => ({ ...m }));
+    nextId = computeNextId();
+    movementsInitialised = true;
+    saveToStorage();
+    return { success: true, count: movements.length };
+  } catch (e) {
+    console.error("FDMS: import failed", e);
+    return { success: false, error: e.message };
+  }
+}
+
+export function getStorageInfo() {
+  return {
+    key: STORAGE_KEY,
+    version: SCHEMA_VERSION,
+    movementCount: movementsInitialised ? movements.length : 0
+  };
 }

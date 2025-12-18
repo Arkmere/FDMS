@@ -331,38 +331,39 @@ Goal: replace the ad-hoc `demoMovements` with a proper model.
 
 ## 6. Post-Stage 13 Roadmap
 
-**Status**: Stages 0–13 complete. The application now has:
+**Status**: Stages 0–14 complete. The application now has:
 - Core UI refactored into modular `/src` structure
-- In-memory data model with localStorage persistence
+- In-memory data model with localStorage v2 persistence (with v1 migration)
 - Live Board with flight-type-aware sorting and row tinting
 - Working modals for creating movements (4 flight types: LOC/DEP/ARR/OVR)
 - Basic tabs: Live Board, History, Reports, VKB, Admin
+- Diagnostics panel with init status, error tracking, and session export/import
 
 The following sections outline the path to v1.0 release.
 
 ---
 
-### A. Stabilisation and Release Discipline
+### A. Stabilisation and Release Discipline ✅ **DONE (Stage 14)**
 
-**Bootstrap / wiring hardening**
+**Bootstrap / wiring hardening** ✅
 
-- Ensure `index.html` loads only `js/app.js`
-- Ensure `app.js` initialises all tabs/modules reliably
-- Add a minimal on-screen "JS loaded / init complete" indicator in Admin (optional but very useful)
+- ✅ Ensure `index.html` loads only `js/app.js`
+- ✅ Ensure `app.js` initialises all tabs/modules reliably
+- ✅ Add a minimal on-screen "JS loaded / init complete" indicator in Admin
 
-**LocalStorage schema + migration**
+**LocalStorage schema + migration** ✅
 
-- Version the storage payload (e.g., `vectair_fdms_movements_v2`)
-- Add safe migration path from older keys/structures
-- Add "Export/Import session JSON" for backup/restore (still local)
+- ✅ Version the storage payload (`vectair_fdms_movements_v2`)
+- ✅ Add safe migration path from v1 to v2 schema
+- ✅ Add "Export/Import session JSON" for backup/restore
 
-**Error visibility without DevTools**
+**Error visibility without DevTools** ✅
 
-- Add an in-app "Diagnostics" panel (Admin) that shows:
-  - last init time
-  - last render time
-  - last error (try/catch + console + UI surface)
-  - current storage key + movement count
+- ✅ Add an in-app "Diagnostics" panel (Admin) that shows:
+  - ✅ last init time
+  - ✅ last render time
+  - ✅ last error (captured via window error handlers)
+  - ✅ current storage key + movement count
 
 ---
 
