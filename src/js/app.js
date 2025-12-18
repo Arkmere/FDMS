@@ -11,19 +11,41 @@ import {
   initAdminPanel
 } from "./ui_liveboard.js";
 
+import {
+  resetMovementsToDemo,
+  exportSessionJSON,
+  importSessionJSON,
+  getStorageInfo
+} from "./datamodel.js";
+
+// Diagnostics state
+const diagnostics = {
+  initTime: null,
+  lastRenderTime: null,
+  lastError: null
+};
+
 window.addEventListener("error", (e) => {
+  const message = e.message || String(e.error || e);
+  diagnostics.lastError = message;
+  updateDiagnostics();
+
   const d = document.createElement("div");
   d.style.cssText =
     "position:fixed;left:0;right:0;bottom:0;background:#300;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
-  d.textContent = "JS error: " + (e.message || String(e.error || e));
+  d.textContent = "JS error: " + message;
   document.body.appendChild(d);
 });
 
 window.addEventListener("unhandledrejection", (e) => {
+  const message = String(e.reason || e);
+  diagnostics.lastError = message;
+  updateDiagnostics();
+
   const d = document.createElement("div");
   d.style.cssText =
     "position:fixed;left:0;right:0;bottom:0;background:#003;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
-  d.textContent = "Promise rejection: " + String(e.reason || e);
+  d.textContent = "Promise rejection: " + message;
   document.body.appendChild(d);
 });
 
@@ -132,22 +154,141 @@ function initErrorOverlay() {
   });
 }
 
+function updateDiagnostics() {
+  const storageInfo = getStorageInfo();
+
+  const initTimeEl = document.getElementById("diagInitTime");
+  const renderTimeEl = document.getElementById("diagRenderTime");
+  const storageKeyEl = document.getElementById("diagStorageKey");
+  const movementCountEl = document.getElementById("diagMovementCount");
+  const lastErrorEl = document.getElementById("diagLastError");
+
+  if (initTimeEl) initTimeEl.textContent = diagnostics.initTime || "—";
+  if (renderTimeEl) renderTimeEl.textContent = diagnostics.lastRenderTime || "—";
+  if (storageKeyEl) storageKeyEl.textContent = storageInfo.key || "—";
+  if (movementCountEl) movementCountEl.textContent = String(storageInfo.movementCount);
+  if (lastErrorEl) lastErrorEl.textContent = diagnostics.lastError || "None";
+}
+
+function updateInitStatus(message, isComplete = false) {
+  const statusEl = document.getElementById("initStatus");
+  if (!statusEl) return;
+
+  if (isComplete) {
+    statusEl.style.background = "#e8f5e9";
+    statusEl.style.borderColor = "#4caf50";
+    statusEl.innerHTML = `<strong>✅ ${message}</strong>`;
+  } else {
+    statusEl.style.background = "#fff3e0";
+    statusEl.style.borderColor = "#ff9800";
+    statusEl.innerHTML = `<strong>⏳ ${message}</strong>`;
+  }
+}
+
+function initAdminPanelHandlers() {
+  const btnReset = document.getElementById("btnResetDemo");
+  const btnExport = document.getElementById("btnExportSession");
+  const btnImport = document.getElementById("btnImportSession");
+  const fileInput = document.getElementById("importFileInput");
+
+  if (btnReset) {
+    btnReset.addEventListener("click", () => {
+      if (confirm("Reset to demo data? This will overwrite your current session.")) {
+        resetMovementsToDemo();
+        renderLiveBoard();
+        renderHistoryBoard();
+        renderReportsSummary();
+        diagnostics.lastRenderTime = new Date().toISOString();
+        updateDiagnostics();
+        alert("Session reset to demo data.");
+      }
+    });
+  }
+
+  if (btnExport) {
+    btnExport.addEventListener("click", () => {
+      try {
+        const data = exportSessionJSON();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `fdms-session-${new Date().toISOString().split("T")[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("Export failed: " + e.message);
+      }
+    });
+  }
+
+  if (btnImport && fileInput) {
+    btnImport.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          const result = importSessionJSON(data);
+
+          if (result.success) {
+            renderLiveBoard();
+            renderHistoryBoard();
+            renderReportsSummary();
+            diagnostics.lastRenderTime = new Date().toISOString();
+            updateDiagnostics();
+            alert(`Import successful! Loaded ${result.count} movements.`);
+          } else {
+            alert("Import failed: " + result.error);
+          }
+        } catch (e) {
+          alert("Import failed: " + e.message);
+        }
+        fileInput.value = "";
+      };
+      reader.readAsText(file);
+    });
+  }
+}
+
 function bootstrap() {
-  initErrorOverlay();
+  updateInitStatus("Initialising app...");
 
-  // Global UI primitives
-  initTabs();
-  initClock();
+  try {
+    initErrorOverlay();
 
-  // Feature modules: bind handlers first, then render
-  initLiveBoard();
-  initHistoryExport();
-  initVkbLookup();
-  initAdminPanel();
+    // Global UI primitives
+    initTabs();
+    initClock();
 
-  renderLiveBoard();
-  renderHistoryBoard();
-  renderReportsSummary();
+    // Feature modules: bind handlers first, then render
+    initLiveBoard();
+    initHistoryExport();
+    initVkbLookup();
+    initAdminPanel();
+    initAdminPanelHandlers();
+
+    renderLiveBoard();
+    renderHistoryBoard();
+    renderReportsSummary();
+
+    // Record init complete
+    diagnostics.initTime = new Date().toISOString();
+    diagnostics.lastRenderTime = diagnostics.initTime;
+    updateInitStatus("Init complete", true);
+    updateDiagnostics();
+  } catch (e) {
+    diagnostics.lastError = e.message || String(e);
+    updateInitStatus("Init failed - check diagnostics", false);
+    updateDiagnostics();
+    throw e;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", bootstrap);

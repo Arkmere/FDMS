@@ -167,8 +167,50 @@
             LocalStorage persistence is enabled. Reset restores demo seed (and overwrites local session data).
           </div>
 
+          <!-- Init Status -->
           <div class="panel">
-            <button class="btn btn-secondary" id="btnResetDemo" type="button">Reset session data (demo)</button>
+            <h3>System Status</h3>
+            <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
+              <strong>⏳ Initialising...</strong>
+            </div>
+          </div>
+
+          <!-- Diagnostics Panel -->
+          <div class="panel">
+            <h3>Diagnostics</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px; font-weight: bold; width: 200px;">Last Init Time:</td>
+                <td id="diagInitTime" style="padding: 6px; font-family: monospace;">—</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
+                <td id="diagRenderTime" style="padding: 6px; font-family: monospace;">—</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px; font-weight: bold;">Storage Key:</td>
+                <td id="diagStorageKey" style="padding: 6px; font-family: monospace;">—</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
+                <td id="diagMovementCount" style="padding: 6px; font-family: monospace;">—</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px; font-weight: bold;">Last Error:</td>
+                <td id="diagLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">None</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Session Management -->
+          <div class="panel">
+            <h3>Session Management</h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary" id="btnExportSession" type="button">Export Session JSON</button>
+              <button class="btn btn-primary" id="btnImportSession" type="button">Import Session JSON</button>
+              <button class="btn btn-secondary" id="btnResetDemo" type="button">Reset to Demo Data</button>
+            </div>
+            <input type="file" id="importFileInput" accept=".json" style="display: none;" />
           </div>
         </section>
       </main>
