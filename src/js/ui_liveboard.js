@@ -2,7 +2,7 @@
 // Handles rendering and interactions for the Live Board, History, Reports, VKB, and Admin panels.
 // ES module, no framework, DOM-contract driven.
 
-import { getMovements, statusClass, statusLabel } from "./datamodel.js";
+import { getMovements, statusClass, statusLabel, createMovement } from "./datamodel.js";
 
 /* -----------------------------
    State
