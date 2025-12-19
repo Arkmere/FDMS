@@ -17,8 +17,39 @@ import {
   importSessionJSON,
   getStorageInfo,
   getConfig,
-  updateConfig
+  updateConfig,
+  getAerodromes,
+  getCallsigns
 } from "./datamodel.js";
+
+/**
+ * Populate datalists for autocomplete
+ */
+function populateAutocompleteDataLists() {
+  // Populate aerodrome datalist
+  const aerodromeList = document.getElementById("aerodromeList");
+  if (aerodromeList) {
+    aerodromeList.innerHTML = "";
+    getAerodromes().forEach(ad => {
+      const option = document.createElement("option");
+      option.value = ad.value;
+      option.label = ad.label;
+      aerodromeList.appendChild(option);
+    });
+  }
+
+  // Populate callsign datalist
+  const callsignList = document.getElementById("callsignList");
+  if (callsignList) {
+    callsignList.innerHTML = "";
+    getCallsigns().forEach(cs => {
+      const option = document.createElement("option");
+      option.value = cs.value;
+      option.label = cs.label;
+      callsignList.appendChild(option);
+    });
+  }
+}
 
 // Diagnostics state
 const diagnostics = {
@@ -313,6 +344,9 @@ function bootstrap() {
     // Global UI primitives
     initTabs();
     initClock();
+
+    // Populate autocomplete datalists
+    populateAutocompleteDataLists();
 
     // Feature modules: bind handlers first, then render
     initLiveBoard();

@@ -368,26 +368,210 @@ export function getMovements() {
 }
 
 /* -----------------------------
-   Registration → Type Inference
+   VKB (Virtual Knowledge Base) - Phase E
 ------------------------------ */
 
-// Lightweight lookup table: registration prefix → aircraft type
-// In Phase E, this will be replaced with full VKB integration
-const registrationTypeLookup = {
-  // UK Civil (G- prefix)
-  "G-VAIR": "G115",
-  "G-BYUL": "A109",
-  // UK Military (ZM, ZJ, ZK, etc.)
-  "ZM300": "JUNO",
-  "ZJ": "MERLIN",
-  "ZK": "SEA KING",
-  // Prefix-based inference
-  "G-B": "Various UK Civil",
-  "G-C": "Various UK Civil"
+/**
+ * VKB data structure: separate datasets for callsigns, locations, aircraft types, and registrations
+ * This is demo data - later will be backed by Vectair KB
+ */
+const vkbData = {
+  callsigns: [
+    { code: "ASCOT", label: "Ascot", voice: "Ascot", type: "Military Transport", notes: "RAF transport flights" },
+    { code: "RAFAIR", label: "RAF Air", voice: "Rafair", type: "Military", notes: "RAF general flights" },
+    { code: "SPEEDBIRD", label: "British Airways", voice: "Speedbird", type: "Commercial", notes: "BA commercial" },
+    { code: "RESCUE", label: "Search & Rescue", voice: "Rescue", type: "SAR", notes: "Coast Guard/RAF SAR" },
+    { code: "ANGEL", label: "Air Ambulance", voice: "Angel", type: "Medical", notes: "Emergency medical" },
+    { code: "PHOENIX", label: "Phoenix", voice: "Phoenix", type: "Military Training", notes: "RAF training" },
+    { code: "VORTEX", label: "Vortex", voice: "Vortex", type: "Military Training", notes: "RAF fast jet" },
+    { code: "TOPCAT", label: "Topcat", voice: "Topcat", type: "Military Training", notes: "RAF training" }
+  ],
+
+  locations: [
+    { icao: "EGOW", name: "RAF Woodvale", city: "Formby", country: "UK", type: "Military" },
+    { icao: "EGCC", name: "Manchester", city: "Manchester", country: "UK", type: "Commercial" },
+    { icao: "EGNH", name: "Blackpool", city: "Blackpool", country: "UK", type: "Civilian" },
+    { icao: "EGGP", name: "Liverpool John Lennon", city: "Liverpool", country: "UK", type: "Commercial" },
+    { icao: "EGOS", name: "RAF Shawbury", city: "Shawbury", country: "UK", type: "Military" },
+    { icao: "EGOV", name: "RAF Valley", city: "Valley", country: "UK", type: "Military" },
+    { icao: "EGQL", name: "RAF Leuchars", city: "Leuchars", country: "UK", type: "Military" },
+    { icao: "EGUL", name: "RAF Lakenheath", city: "Lakenheath", country: "UK", type: "Military" },
+    { icao: "EGUN", name: "RAF Mildenhall", city: "Mildenhall", country: "UK", type: "Military" },
+    { icao: "EGVA", name: "RAF Fairford", city: "Fairford", country: "UK", type: "Military" }
+  ],
+
+  aircraftTypes: [
+    { code: "G115", name: "Grob 115", manufacturer: "Grob", category: "Light Training", wtc: "L", notes: "Tutor trainer" },
+    { code: "JUNO", name: "Jupiter HT1", manufacturer: "Airbus", category: "Helicopter Trainer", wtc: "L", notes: "Formerly H145" },
+    { code: "A109", name: "Agusta A109", manufacturer: "Leonardo", category: "Light Helicopter", wtc: "L", notes: "Multi-role" },
+    { code: "MERLIN", name: "AW101 Merlin", manufacturer: "Leonardo", category: "Medium Helicopter", wtc: "M", notes: "Multi-role transport" },
+    { code: "SEA KING", name: "Westland Sea King", manufacturer: "Westland", category: "Medium Helicopter", wtc: "M", notes: "SAR/Transport" },
+    { code: "APACHE", name: "AH-64 Apache", manufacturer: "Boeing", category: "Attack Helicopter", wtc: "M", notes: "Attack helicopter" },
+    { code: "CHINOOK", name: "CH-47 Chinook", manufacturer: "Boeing", category: "Heavy Helicopter", wtc: "M", notes: "Heavy lift" },
+    { code: "WILDCAT", name: "AW159 Wildcat", manufacturer: "Leonardo", category: "Light Helicopter", wtc: "L", notes: "Army/Navy multi-role" },
+    { code: "PUMA", name: "SA 330 Puma", manufacturer: "Airbus", category: "Medium Helicopter", wtc: "M", notes: "Support helicopter" },
+    { code: "HAWK", name: "BAE Hawk", manufacturer: "BAE Systems", category: "Jet Trainer", wtc: "M", notes: "Fast jet trainer" }
+  ],
+
+  registrations: [
+    { registration: "G-VAIR", type: "G115", operator: "RAF", notes: "Tutor trainer fleet" },
+    { registration: "G-BYUL", type: "A109", operator: "Private", notes: "" },
+    { registration: "ZM300", type: "JUNO", operator: "RAF", notes: "RAF Shawbury training" },
+    { registration: "ZM301", type: "JUNO", operator: "RAF", notes: "RAF Shawbury training" },
+    { registration: "ZM302", type: "JUNO", operator: "RAF", notes: "RAF Shawbury training" },
+    { registration: "ZJ", type: "MERLIN", operator: "RAF/RN", notes: "Merlin fleet prefix" },
+    { registration: "ZK", type: "SEA KING", operator: "RAF", notes: "Sea King fleet prefix" },
+    { registration: "G-B", type: "Various UK Civil", operator: "Civil", notes: "UK civil registration prefix" },
+    { registration: "G-C", type: "Various UK Civil", operator: "Civil", notes: "UK civil registration prefix" }
+  ]
 };
 
 /**
- * Infer aircraft type from registration.
+ * Get all VKB entries (unified search across all datasets)
+ */
+export function getVkbEntries() {
+  const entries = [];
+
+  // Add callsigns
+  vkbData.callsigns.forEach(c => {
+    entries.push({
+      kind: "Callsign",
+      code: c.code,
+      label: c.label,
+      details: `${c.type} · Voice: ${c.voice}`,
+      notes: c.notes,
+      data: c
+    });
+  });
+
+  // Add locations
+  vkbData.locations.forEach(l => {
+    entries.push({
+      kind: "Location",
+      code: l.icao,
+      label: l.name,
+      details: `${l.city}, ${l.country} · ${l.type}`,
+      notes: "",
+      data: l
+    });
+  });
+
+  // Add aircraft types
+  vkbData.aircraftTypes.forEach(a => {
+    entries.push({
+      kind: "Aircraft",
+      code: a.code,
+      label: a.name,
+      details: `${a.manufacturer} · ${a.category} · WTC: ${a.wtc}`,
+      notes: a.notes,
+      data: a
+    });
+  });
+
+  // Add registrations
+  vkbData.registrations.forEach(r => {
+    entries.push({
+      kind: "Registration",
+      code: r.registration,
+      label: r.type,
+      details: `Operator: ${r.operator}`,
+      notes: r.notes,
+      data: r
+    });
+  });
+
+  return entries;
+}
+
+/**
+ * Search VKB entries by query
+ */
+export function searchVkb(query) {
+  if (!query) return getVkbEntries();
+
+  const q = query.toLowerCase().trim();
+  return getVkbEntries().filter(entry => {
+    return (
+      entry.code.toLowerCase().includes(q) ||
+      entry.label.toLowerCase().includes(q) ||
+      entry.details.toLowerCase().includes(q) ||
+      entry.notes.toLowerCase().includes(q)
+    );
+  });
+}
+
+/**
+ * Resolve aerodrome name to ICAO code
+ * e.g., "Woodvale" → "EGOW", "Shawbury" → "EGOS"
+ */
+export function resolveAerodrome(input) {
+  if (!input) return null;
+  const q = input.toLowerCase().trim();
+
+  // Try exact ICAO match first
+  const exactIcao = vkbData.locations.find(l => l.icao.toLowerCase() === q);
+  if (exactIcao) return { icao: exactIcao.icao, name: exactIcao.name };
+
+  // Try name match
+  const byName = vkbData.locations.find(l => l.name.toLowerCase().includes(q));
+  if (byName) return { icao: byName.icao, name: byName.name };
+
+  // Try city match
+  const byCity = vkbData.locations.find(l => l.city.toLowerCase().includes(q));
+  if (byCity) return { icao: byCity.icao, name: byCity.name };
+
+  return null;
+}
+
+/**
+ * Resolve callsign to code/label
+ * e.g., "Speedbird" → { code: "SPEEDBIRD", label: "British Airways", voice: "Speedbird" }
+ */
+export function resolveCallsign(input) {
+  if (!input) return null;
+  const q = input.toLowerCase().trim();
+
+  // Try exact code match
+  const exactCode = vkbData.callsigns.find(c => c.code.toLowerCase() === q);
+  if (exactCode) return exactCode;
+
+  // Try label match
+  const byLabel = vkbData.callsigns.find(c => c.label.toLowerCase().includes(q));
+  if (byLabel) return byLabel;
+
+  // Try voice match
+  const byVoice = vkbData.callsigns.find(c => c.voice.toLowerCase().includes(q));
+  if (byVoice) return byVoice;
+
+  return null;
+}
+
+/**
+ * Get all aerodromes for autocomplete
+ */
+export function getAerodromes() {
+  return vkbData.locations.map(l => ({
+    value: l.icao,
+    label: `${l.icao} - ${l.name}`
+  }));
+}
+
+/**
+ * Get all callsigns for autocomplete
+ */
+export function getCallsigns() {
+  return vkbData.callsigns.map(c => ({
+    value: c.code,
+    label: `${c.code} - ${c.label}`
+  }));
+}
+
+/* -----------------------------
+   Registration → Type Inference (Legacy compatibility)
+------------------------------ */
+
+/**
+ * Infer aircraft type from registration using VKB data
  * Returns type if known, null otherwise.
  * Always allow manual override.
  */
@@ -396,16 +580,14 @@ export function inferTypeFromReg(registration) {
   const reg = registration.toUpperCase().trim();
 
   // Try exact match first
-  if (registrationTypeLookup[reg]) {
-    return registrationTypeLookup[reg];
-  }
+  const exact = vkbData.registrations.find(r => r.registration === reg);
+  if (exact) return exact.type;
 
-  // Try prefix match (first 3-4 chars)
+  // Try prefix match (first 4-2 chars)
   for (let len = 4; len >= 2; len--) {
     const prefix = reg.substring(0, len);
-    if (registrationTypeLookup[prefix]) {
-      return registrationTypeLookup[prefix];
-    }
+    const prefixMatch = vkbData.registrations.find(r => r.registration === prefix);
+    if (prefixMatch) return prefixMatch.type;
   }
 
   return null;

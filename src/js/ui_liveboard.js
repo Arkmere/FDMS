@@ -17,7 +17,10 @@ import {
   getACT,
   getConfig,
   convertUTCToLocal,
-  getTimezoneOffsetLabel
+  getTimezoneOffsetLabel,
+  searchVkb,
+  getAerodromes,
+  getCallsigns
 } from "./datamodel.js";
 
 /* -----------------------------
@@ -552,7 +555,7 @@ function openNewFlightModal(flightType = "DEP") {
     <div class="modal-body">
       <div class="modal-field">
         <label class="modal-label">Callsign</label>
-        <input id="newCallsign" class="modal-input" placeholder="e.g. CONNECT or CNNCT22" />
+        <input id="newCallsign" class="modal-input" list="callsignList" placeholder="e.g. CONNECT or CNNCT22" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
@@ -581,11 +584,11 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <div class="modal-field">
         <label class="modal-label">Departure AD</label>
-        <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
+        <input id="newDepAd" class="modal-input" list="aerodromeList" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Arrival AD</label>
-        <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
+        <input id="newArrAd" class="modal-input" list="aerodromeList" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Date of Flight (DOF)</label>
@@ -1409,8 +1412,62 @@ export function initHistoryExport() {
   // No-op stub: implement if needed in this file.
 }
 
+/* -----------------------------
+   VKB Lookup
+------------------------------ */
+
+let vkbSearchQuery = "";
+
+export function renderVkbLookup() {
+  const tbody = byId("vkbBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const entries = searchVkb(vkbSearchQuery);
+
+  for (const entry of entries) {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td><span class="badge">${escapeHtml(entry.kind)}</span></td>
+      <td><strong>${escapeHtml(entry.code)}</strong></td>
+      <td>${escapeHtml(entry.label)}</td>
+      <td>${escapeHtml(entry.details)}</td>
+      <td style="text-align: right;">
+        <button class="small-btn js-vkb-apply" type="button">Apply</button>
+      </td>
+    `;
+
+    // Bind Apply button (future: pre-fill modal fields)
+    const applyBtn = tr.querySelector(".js-vkb-apply");
+    safeOn(applyBtn, "click", () => {
+      alert(`Apply functionality coming soon!\n\nThis will pre-fill modal fields with:\n${entry.kind}: ${entry.code} - ${entry.label}`);
+    });
+
+    tbody.appendChild(tr);
+  }
+
+  if (!entries.length) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="5" style="padding:8px; font-size:12px; color:#777; text-align: center;">
+        No VKB entries match "${escapeHtml(vkbSearchQuery)}"
+      </td>
+    `;
+    tbody.appendChild(empty);
+  }
+}
+
 export function initVkbLookup() {
-  // No-op stub: implement if needed in this file.
+  const vkbSearch = byId("vkbSearch");
+
+  safeOn(vkbSearch, "input", (e) => {
+    vkbSearchQuery = e.target.value;
+    renderVkbLookup();
+  });
+
+  renderVkbLookup();
 }
 
 export function initAdminPanel() {
