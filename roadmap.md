@@ -331,7 +331,7 @@ Goal: replace the ad-hoc `demoMovements` with a proper model.
 
 ## 6. Post-Stage 13 Roadmap
 
-**Status**: Stages 0–14 complete, Phase B complete. The application now has:
+**Status**: Stages 0–14 complete, Phase B and Phase C complete. The application now has:
 - Core UI refactored into modular `/src` structure
 - In-memory data model with localStorage v2 persistence (with v1 migration)
 - Live Board with flight-type-aware sorting and row tinting
@@ -341,6 +341,7 @@ Goal: replace the ad-hoc `demoMovements` with a proper model.
 - Semantic time fields (ETD/ATD, ETA/ATA, ECT/ACT) with flight-type-aware display and sorting
 - Registration → type inference with auto-fill in modals
 - Audit tracking (createdAtUtc, updatedAtUtc, updatedBy, changeLog)
+- Workflow efficiency features: Edit movement, status transitions (PLANNED → ACTIVE → COMPLETED), Duplicate movement, Enter-to-save in modals
 
 The following sections outline the path to v1.0 release.
 
@@ -398,7 +399,7 @@ The following sections outline the path to v1.0 release.
 
 ---
 
-### C. UX to Match Strip-Bay Mental Model
+### C. UX to Match Strip-Bay Mental Model ✅ **DONE (Phase C)**
 
 **Create buttons aligned to strip types** ✅ **DONE (Stage 13)**
 
@@ -413,11 +414,11 @@ The following sections outline the path to v1.0 release.
   - ensure status and flight-type cues don't fight each other
   - consistent typography hierarchy for key fields
 
-**Keyboard and workflow efficiency**
+**Keyboard and workflow efficiency** ✅ **DONE (Phase C)**
 
-- Focus management in modals (tab order, enter-to-save where safe)
-- Quick actions on rows (Edit, Details, Status transitions)
-- Optional "duplicate movement" as a first-class workflow (already partly present)
+- Focus management in modals (tab order, enter-to-save where safe) ✅
+- Quick actions on rows (Edit, Details, Status transitions) ✅
+- Optional "duplicate movement" as a first-class workflow (already partly present) ✅
 
 ---
 
