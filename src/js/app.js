@@ -15,7 +15,9 @@ import {
   resetMovementsToDemo,
   exportSessionJSON,
   importSessionJSON,
-  getStorageInfo
+  getStorageInfo,
+  getConfig,
+  updateConfig
 } from "./datamodel.js";
 
 // Diagnostics state
@@ -253,6 +255,28 @@ function initAdminPanelHandlers() {
         fileInput.value = "";
       };
       reader.readAsText(file);
+    });
+  }
+
+  // Configuration handlers
+  const configTimeOffsetInput = document.getElementById("configTimeOffset");
+  const btnSaveConfig = document.getElementById("btnSaveConfig");
+
+  // Load current config value
+  if (configTimeOffsetInput) {
+    const currentConfig = getConfig();
+    configTimeOffsetInput.value = currentConfig.defaultTimeOffsetMinutes;
+  }
+
+  if (btnSaveConfig && configTimeOffsetInput) {
+    btnSaveConfig.addEventListener("click", () => {
+      const newOffset = parseInt(configTimeOffsetInput.value, 10);
+      if (isNaN(newOffset) || newOffset < 1 || newOffset > 120) {
+        alert("Please enter a valid offset between 1 and 120 minutes.");
+        return;
+      }
+      updateConfig({ defaultTimeOffsetMinutes: newOffset });
+      alert(`Default time offset updated to ${newOffset} minutes.`);
     });
   }
 }

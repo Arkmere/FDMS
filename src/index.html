@@ -212,6 +212,29 @@
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display: none;" />
           </div>
+
+          <!-- Configuration -->
+          <div class="panel">
+            <h3>Configuration</h3>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 4px;">
+                Default Time Offset (minutes)
+              </label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input
+                  type="number"
+                  id="configTimeOffset"
+                  min="1"
+                  max="120"
+                  style="width: 80px; padding: 6px; border: 1px solid #ccc; border-radius: 3px;"
+                />
+                <button class="btn btn-primary" id="btnSaveConfig" type="button">Save</button>
+              </div>
+              <div style="font-size: 11px; color: #666; margin-top: 4px;">
+                When creating a new movement without times, default to current time + this offset.
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>

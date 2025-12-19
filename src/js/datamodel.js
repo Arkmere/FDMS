@@ -5,6 +5,15 @@
 const STORAGE_KEY = "vectair_fdms_movements_v2";
 const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
 const SCHEMA_VERSION = 2;
+const CONFIG_KEY = "vectair_fdms_config";
+
+// Default configuration
+const defaultConfig = {
+  defaultTimeOffsetMinutes: 10 // Default time for new movements: current time + this offset
+};
+
+// Configuration state
+let config = { ...defaultConfig };
 
 // The original hard-coded demo data
 const demoMovementsSeed = [
@@ -294,6 +303,31 @@ function saveToStorage() {
   }
 }
 
+function loadConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      config = { ...defaultConfig, ...parsed };
+    } else {
+      config = { ...defaultConfig };
+    }
+  } catch (e) {
+    console.warn("FDMS: failed to load config from storage", e);
+    config = { ...defaultConfig };
+  }
+}
+
+function saveConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn("FDMS: failed to save config to storage", e);
+  }
+}
+
 function computeNextId() {
   if (!movements.length) return 1;
   return (
@@ -306,6 +340,9 @@ function computeNextId() {
 
 function ensureInitialised() {
   if (movementsInitialised) return;
+
+  // Load config first
+  loadConfig();
 
   const loaded = loadFromStorage();
   if (loaded && loaded.length) {
@@ -366,6 +403,60 @@ export function inferTypeFromReg(registration) {
   }
 
   return null;
+}
+
+/* -----------------------------
+   Time Offset Helpers
+------------------------------ */
+
+/**
+ * Get current time plus offset in HH:MM format
+ * @param {number} offsetMinutes - Minutes to add to current time
+ * @returns {string} Time in HH:MM format
+ */
+function getTimeWithOffset(offsetMinutes) {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + offsetMinutes);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Apply default times to a movement based on flight type
+ * @param {object} movement - Movement object (may have blank time fields)
+ * @returns {object} Movement with default times applied
+ */
+function applyDefaultTimes(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  const offset = config.defaultTimeOffsetMinutes;
+
+  // DEP: default ETD to now + offset
+  if (ft === "DEP" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(offset);
+  }
+
+  // ARR: default ETA to now + offset
+  if (ft === "ARR" && !movement.arrPlanned) {
+    movement.arrPlanned = getTimeWithOffset(offset);
+  }
+
+  // LOC: default ETD to now + offset, ETA to now + (offset * 2)
+  if (ft === "LOC") {
+    if (!movement.depPlanned) {
+      movement.depPlanned = getTimeWithOffset(offset);
+    }
+    if (!movement.arrPlanned) {
+      movement.arrPlanned = getTimeWithOffset(offset * 2);
+    }
+  }
+
+  // OVR: default ECT to now + offset
+  if (ft === "OVR" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(offset);
+  }
+
+  return movement;
 }
 
 /* -----------------------------
@@ -473,9 +564,13 @@ export function statusLabel(status) {
 export function createMovement(partial) {
   ensureInitialised();
   const now = new Date().toISOString();
+
+  // Apply default times if not provided
+  const withDefaults = applyDefaultTimes({ ...partial });
+
   const movement = {
     id: nextId++,
-    ...partial,
+    ...withDefaults,
     createdAtUtc: now,
     updatedAtUtc: now,
     updatedBy: "local user",
@@ -576,4 +671,27 @@ export function getStorageInfo() {
     version: SCHEMA_VERSION,
     movementCount: movementsInitialised ? movements.length : 0
   };
+}
+
+/* -----------------------------
+   Configuration Management
+------------------------------ */
+
+/**
+ * Get current configuration
+ * @returns {object} Configuration object
+ */
+export function getConfig() {
+  ensureInitialised(); // Ensures config is loaded
+  return { ...config };
+}
+
+/**
+ * Update configuration
+ * @param {object} updates - Partial config updates
+ */
+export function updateConfig(updates) {
+  ensureInitialised();
+  config = { ...config, ...updates };
+  saveConfig();
 }
