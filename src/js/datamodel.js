@@ -9,7 +9,11 @@ const CONFIG_KEY = "vectair_fdms_config";
 
 // Default configuration
 const defaultConfig = {
-  defaultTimeOffsetMinutes: 10 // Default time for new movements: current time + this offset
+  defaultTimeOffsetMinutes: 10, // Legacy - kept for backwards compatibility
+  depOffsetMinutes: 10,   // DEP: ETD = now + this
+  arrOffsetMinutes: 90,   // ARR: ETA = now + this
+  locOffsetMinutes: 10,   // LOC: ETD/ETA = now + this
+  ovrOffsetMinutes: 0     // OVR: ECT = now + this
 };
 
 // Configuration state
@@ -429,31 +433,30 @@ function getTimeWithOffset(offsetMinutes) {
  */
 function applyDefaultTimes(movement) {
   const ft = (movement.flightType || "").toUpperCase();
-  const offset = config.defaultTimeOffsetMinutes;
 
-  // DEP: default ETD to now + offset (10 minutes)
+  // DEP: default ETD to now + depOffsetMinutes
   if (ft === "DEP" && !movement.depPlanned) {
-    movement.depPlanned = getTimeWithOffset(offset);
+    movement.depPlanned = getTimeWithOffset(config.depOffsetMinutes);
   }
 
-  // ARR: default ETA to now + 90 minutes
+  // ARR: default ETA to now + arrOffsetMinutes
   if (ft === "ARR" && !movement.arrPlanned) {
-    movement.arrPlanned = getTimeWithOffset(90);
+    movement.arrPlanned = getTimeWithOffset(config.arrOffsetMinutes);
   }
 
-  // LOC: default ETD and ETA to now + offset (both 10 minutes)
+  // LOC: default ETD and ETA to now + locOffsetMinutes
   if (ft === "LOC") {
     if (!movement.depPlanned) {
-      movement.depPlanned = getTimeWithOffset(offset);
+      movement.depPlanned = getTimeWithOffset(config.locOffsetMinutes);
     }
     if (!movement.arrPlanned) {
-      movement.arrPlanned = getTimeWithOffset(offset);
+      movement.arrPlanned = getTimeWithOffset(config.locOffsetMinutes);
     }
   }
 
-  // OVR: default ECT to current time (no offset)
+  // OVR: default ECT to now + ovrOffsetMinutes
   if (ft === "OVR" && !movement.depPlanned) {
-    movement.depPlanned = getTimeWithOffset(0);
+    movement.depPlanned = getTimeWithOffset(config.ovrOffsetMinutes);
   }
 
   return movement;

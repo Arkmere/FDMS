@@ -259,24 +259,42 @@ function initAdminPanelHandlers() {
   }
 
   // Configuration handlers
-  const configTimeOffsetInput = document.getElementById("configTimeOffset");
+  const configDepOffset = document.getElementById("configDepOffset");
+  const configArrOffset = document.getElementById("configArrOffset");
+  const configLocOffset = document.getElementById("configLocOffset");
+  const configOvrOffset = document.getElementById("configOvrOffset");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
-  // Load current config value
-  if (configTimeOffsetInput) {
-    const currentConfig = getConfig();
-    configTimeOffsetInput.value = currentConfig.defaultTimeOffsetMinutes;
-  }
+  // Load current config values
+  const currentConfig = getConfig();
+  if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
+  if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
+  if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
+  if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
 
-  if (btnSaveConfig && configTimeOffsetInput) {
+  if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
-      const newOffset = parseInt(configTimeOffsetInput.value, 10);
-      if (isNaN(newOffset) || newOffset < 1 || newOffset > 120) {
-        alert("Please enter a valid offset between 1 and 120 minutes.");
+      const depOffset = parseInt(configDepOffset?.value || "10", 10);
+      const arrOffset = parseInt(configArrOffset?.value || "90", 10);
+      const locOffset = parseInt(configLocOffset?.value || "10", 10);
+      const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
+
+      // Validate all offsets
+      if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
+          isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
+          isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
+          isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180) {
+        alert("Please enter valid offsets between 0 and 180 minutes.");
         return;
       }
-      updateConfig({ defaultTimeOffsetMinutes: newOffset });
-      alert(`Default time offset updated to ${newOffset} minutes.`);
+
+      updateConfig({
+        depOffsetMinutes: depOffset,
+        arrOffsetMinutes: arrOffset,
+        locOffsetMinutes: locOffset,
+        ovrOffsetMinutes: ovrOffset
+      });
+      alert("Configuration saved successfully!");
     });
   }
 }
