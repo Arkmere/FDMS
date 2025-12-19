@@ -431,29 +431,29 @@ function applyDefaultTimes(movement) {
   const ft = (movement.flightType || "").toUpperCase();
   const offset = config.defaultTimeOffsetMinutes;
 
-  // DEP: default ETD to now + offset
+  // DEP: default ETD to now + offset (10 minutes)
   if (ft === "DEP" && !movement.depPlanned) {
     movement.depPlanned = getTimeWithOffset(offset);
   }
 
-  // ARR: default ETA to now + offset
+  // ARR: default ETA to now + 90 minutes
   if (ft === "ARR" && !movement.arrPlanned) {
-    movement.arrPlanned = getTimeWithOffset(offset);
+    movement.arrPlanned = getTimeWithOffset(90);
   }
 
-  // LOC: default ETD to now + offset, ETA to now + (offset * 2)
+  // LOC: default ETD and ETA to now + offset (both 10 minutes)
   if (ft === "LOC") {
     if (!movement.depPlanned) {
       movement.depPlanned = getTimeWithOffset(offset);
     }
     if (!movement.arrPlanned) {
-      movement.arrPlanned = getTimeWithOffset(offset * 2);
+      movement.arrPlanned = getTimeWithOffset(offset);
     }
   }
 
-  // OVR: default ECT to now + offset
+  // OVR: default ECT to current time (no offset)
   if (ft === "OVR" && !movement.depPlanned) {
-    movement.depPlanned = getTimeWithOffset(offset);
+    movement.depPlanned = getTimeWithOffset(0);
   }
 
   return movement;
