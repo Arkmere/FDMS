@@ -324,6 +324,122 @@ export function getMovements() {
   return movements;
 }
 
+/* -----------------------------
+   Registration → Type Inference
+------------------------------ */
+
+// Lightweight lookup table: registration prefix → aircraft type
+// In Phase E, this will be replaced with full VKB integration
+const registrationTypeLookup = {
+  // UK Civil (G- prefix)
+  "G-VAIR": "G115",
+  "G-BYUL": "A109",
+  // UK Military (ZM, ZJ, ZK, etc.)
+  "ZM300": "JUNO",
+  "ZJ": "MERLIN",
+  "ZK": "SEA KING",
+  // Prefix-based inference
+  "G-B": "Various UK Civil",
+  "G-C": "Various UK Civil"
+};
+
+/**
+ * Infer aircraft type from registration.
+ * Returns type if known, null otherwise.
+ * Always allow manual override.
+ */
+export function inferTypeFromReg(registration) {
+  if (!registration) return null;
+  const reg = registration.toUpperCase().trim();
+
+  // Try exact match first
+  if (registrationTypeLookup[reg]) {
+    return registrationTypeLookup[reg];
+  }
+
+  // Try prefix match (first 3-4 chars)
+  for (let len = 4; len >= 2; len--) {
+    const prefix = reg.substring(0, len);
+    if (registrationTypeLookup[prefix]) {
+      return registrationTypeLookup[prefix];
+    }
+  }
+
+  return null;
+}
+
+/* -----------------------------
+   Semantic Time Field Helpers
+------------------------------ */
+
+/**
+ * Get Estimated Time of Departure (ETD)
+ * For DEP/LOC: uses depPlanned
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getETD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Departure (ATD)
+ * For DEP/LOC: uses depActual
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getATD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Time of Arrival (ETA)
+ * For ARR/LOC: uses arrPlanned
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getETA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Arrival (ATA)
+ * For ARR/LOC: uses arrActual
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getATA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Crossing Time (ECT)
+ * For OVR: uses depPlanned as placeholder
+ */
+export function getECT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Crossing Time (ACT)
+ * For OVR: uses depActual as placeholder
+ */
+export function getACT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depActual || null;
+  return null;
+}
+
+/* -----------------------------
+   CRUD Operations
+------------------------------ */
+
 export function statusClass(status) {
   switch (status) {
     case "PLANNED":
@@ -356,7 +472,22 @@ export function statusLabel(status) {
 
 export function createMovement(partial) {
   ensureInitialised();
-  const movement = { id: nextId++, ...partial };
+  const now = new Date().toISOString();
+  const movement = {
+    id: nextId++,
+    ...partial,
+    createdAtUtc: now,
+    updatedAtUtc: now,
+    updatedBy: "local user",
+    changeLog: [
+      {
+        timestamp: now,
+        user: "local user",
+        action: "created",
+        changes: {}
+      }
+    ]
+  };
   movements.push(movement);
   saveToStorage();
   return movement;
@@ -366,7 +497,30 @@ export function updateMovement(id, patch) {
   ensureInitialised();
   const movement = movements.find((m) => m.id === id);
   if (!movement) return null;
+
+  // Track what changed
+  const changes = {};
+  for (const key in patch) {
+    if (patch[key] !== movement[key]) {
+      changes[key] = { from: movement[key], to: patch[key] };
+    }
+  }
+
+  // Update movement
+  const now = new Date().toISOString();
   Object.assign(movement, patch);
+  movement.updatedAtUtc = now;
+  movement.updatedBy = "local user";
+
+  // Append to change log
+  if (!movement.changeLog) movement.changeLog = [];
+  movement.changeLog.push({
+    timestamp: now,
+    user: "local user",
+    action: "updated",
+    changes
+  });
+
   saveToStorage();
   return movement;
 }
