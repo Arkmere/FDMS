@@ -5,6 +5,19 @@
 const STORAGE_KEY = "vectair_fdms_movements_v2";
 const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
 const SCHEMA_VERSION = 2;
+const CONFIG_KEY = "vectair_fdms_config";
+
+// Default configuration
+const defaultConfig = {
+  defaultTimeOffsetMinutes: 10, // Legacy - kept for backwards compatibility
+  depOffsetMinutes: 10,   // DEP: ETD = now + this
+  arrOffsetMinutes: 90,   // ARR: ETA = now + this
+  locOffsetMinutes: 10,   // LOC: ETD/ETA = now + this
+  ovrOffsetMinutes: 0     // OVR: ECT = now + this
+};
+
+// Configuration state
+let config = { ...defaultConfig };
 
 // The original hard-coded demo data
 const demoMovementsSeed = [
@@ -294,6 +307,31 @@ function saveToStorage() {
   }
 }
 
+function loadConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      config = { ...defaultConfig, ...parsed };
+    } else {
+      config = { ...defaultConfig };
+    }
+  } catch (e) {
+    console.warn("FDMS: failed to load config from storage", e);
+    config = { ...defaultConfig };
+  }
+}
+
+function saveConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn("FDMS: failed to save config to storage", e);
+  }
+}
+
 function computeNextId() {
   if (!movements.length) return 1;
   return (
@@ -306,6 +344,9 @@ function computeNextId() {
 
 function ensureInitialised() {
   if (movementsInitialised) return;
+
+  // Load config first
+  loadConfig();
 
   const loaded = loadFromStorage();
   if (loaded && loaded.length) {
@@ -323,6 +364,175 @@ export function getMovements() {
   ensureInitialised();
   return movements;
 }
+
+/* -----------------------------
+   Registration → Type Inference
+------------------------------ */
+
+// Lightweight lookup table: registration prefix → aircraft type
+// In Phase E, this will be replaced with full VKB integration
+const registrationTypeLookup = {
+  // UK Civil (G- prefix)
+  "G-VAIR": "G115",
+  "G-BYUL": "A109",
+  // UK Military (ZM, ZJ, ZK, etc.)
+  "ZM300": "JUNO",
+  "ZJ": "MERLIN",
+  "ZK": "SEA KING",
+  // Prefix-based inference
+  "G-B": "Various UK Civil",
+  "G-C": "Various UK Civil"
+};
+
+/**
+ * Infer aircraft type from registration.
+ * Returns type if known, null otherwise.
+ * Always allow manual override.
+ */
+export function inferTypeFromReg(registration) {
+  if (!registration) return null;
+  const reg = registration.toUpperCase().trim();
+
+  // Try exact match first
+  if (registrationTypeLookup[reg]) {
+    return registrationTypeLookup[reg];
+  }
+
+  // Try prefix match (first 3-4 chars)
+  for (let len = 4; len >= 2; len--) {
+    const prefix = reg.substring(0, len);
+    if (registrationTypeLookup[prefix]) {
+      return registrationTypeLookup[prefix];
+    }
+  }
+
+  return null;
+}
+
+/* -----------------------------
+   Time Offset Helpers
+------------------------------ */
+
+/**
+ * Get current time plus offset in HH:MM format
+ * @param {number} offsetMinutes - Minutes to add to current time
+ * @returns {string} Time in HH:MM format
+ */
+function getTimeWithOffset(offsetMinutes) {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + offsetMinutes);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Apply default times to a movement based on flight type
+ * @param {object} movement - Movement object (may have blank time fields)
+ * @returns {object} Movement with default times applied
+ */
+function applyDefaultTimes(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+
+  // DEP: default ETD to now + depOffsetMinutes
+  if (ft === "DEP" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(config.depOffsetMinutes);
+  }
+
+  // ARR: default ETA to now + arrOffsetMinutes
+  if (ft === "ARR" && !movement.arrPlanned) {
+    movement.arrPlanned = getTimeWithOffset(config.arrOffsetMinutes);
+  }
+
+  // LOC: default ETD and ETA to now + locOffsetMinutes
+  if (ft === "LOC") {
+    if (!movement.depPlanned) {
+      movement.depPlanned = getTimeWithOffset(config.locOffsetMinutes);
+    }
+    if (!movement.arrPlanned) {
+      movement.arrPlanned = getTimeWithOffset(config.locOffsetMinutes);
+    }
+  }
+
+  // OVR: default ECT to now + ovrOffsetMinutes
+  if (ft === "OVR" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(config.ovrOffsetMinutes);
+  }
+
+  return movement;
+}
+
+/* -----------------------------
+   Semantic Time Field Helpers
+------------------------------ */
+
+/**
+ * Get Estimated Time of Departure (ETD)
+ * For DEP/LOC: uses depPlanned
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getETD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Departure (ATD)
+ * For DEP/LOC: uses depActual
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getATD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Time of Arrival (ETA)
+ * For ARR/LOC: uses arrPlanned
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getETA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Arrival (ATA)
+ * For ARR/LOC: uses arrActual
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getATA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Crossing Time (ECT)
+ * For OVR: uses depPlanned as placeholder
+ */
+export function getECT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Crossing Time (ACT)
+ * For OVR: uses depActual as placeholder
+ */
+export function getACT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depActual || null;
+  return null;
+}
+
+/* -----------------------------
+   CRUD Operations
+------------------------------ */
 
 export function statusClass(status) {
   switch (status) {
@@ -356,7 +566,26 @@ export function statusLabel(status) {
 
 export function createMovement(partial) {
   ensureInitialised();
-  const movement = { id: nextId++, ...partial };
+  const now = new Date().toISOString();
+
+  // Apply default times if not provided
+  const withDefaults = applyDefaultTimes({ ...partial });
+
+  const movement = {
+    id: nextId++,
+    ...withDefaults,
+    createdAtUtc: now,
+    updatedAtUtc: now,
+    updatedBy: "local user",
+    changeLog: [
+      {
+        timestamp: now,
+        user: "local user",
+        action: "created",
+        changes: {}
+      }
+    ]
+  };
   movements.push(movement);
   saveToStorage();
   return movement;
@@ -366,7 +595,30 @@ export function updateMovement(id, patch) {
   ensureInitialised();
   const movement = movements.find((m) => m.id === id);
   if (!movement) return null;
+
+  // Track what changed
+  const changes = {};
+  for (const key in patch) {
+    if (patch[key] !== movement[key]) {
+      changes[key] = { from: movement[key], to: patch[key] };
+    }
+  }
+
+  // Update movement
+  const now = new Date().toISOString();
   Object.assign(movement, patch);
+  movement.updatedAtUtc = now;
+  movement.updatedBy = "local user";
+
+  // Append to change log
+  if (!movement.changeLog) movement.changeLog = [];
+  movement.changeLog.push({
+    timestamp: now,
+    user: "local user",
+    action: "updated",
+    changes
+  });
+
   saveToStorage();
   return movement;
 }
@@ -422,4 +674,27 @@ export function getStorageInfo() {
     version: SCHEMA_VERSION,
     movementCount: movementsInitialised ? movements.length : 0
   };
+}
+
+/* -----------------------------
+   Configuration Management
+------------------------------ */
+
+/**
+ * Get current configuration
+ * @returns {object} Configuration object
+ */
+export function getConfig() {
+  ensureInitialised(); // Ensures config is loaded
+  return { ...config };
+}
+
+/**
+ * Update configuration
+ * @param {object} updates - Partial config updates
+ */
+export function updateConfig(updates) {
+  ensureInitialised();
+  config = { ...config, ...updates };
+  saveConfig();
 }

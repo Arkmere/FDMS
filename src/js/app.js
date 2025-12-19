@@ -15,7 +15,9 @@ import {
   resetMovementsToDemo,
   exportSessionJSON,
   importSessionJSON,
-  getStorageInfo
+  getStorageInfo,
+  getConfig,
+  updateConfig
 } from "./datamodel.js";
 
 // Diagnostics state
@@ -253,6 +255,46 @@ function initAdminPanelHandlers() {
         fileInput.value = "";
       };
       reader.readAsText(file);
+    });
+  }
+
+  // Configuration handlers
+  const configDepOffset = document.getElementById("configDepOffset");
+  const configArrOffset = document.getElementById("configArrOffset");
+  const configLocOffset = document.getElementById("configLocOffset");
+  const configOvrOffset = document.getElementById("configOvrOffset");
+  const btnSaveConfig = document.getElementById("btnSaveConfig");
+
+  // Load current config values
+  const currentConfig = getConfig();
+  if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
+  if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
+  if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
+  if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
+
+  if (btnSaveConfig) {
+    btnSaveConfig.addEventListener("click", () => {
+      const depOffset = parseInt(configDepOffset?.value || "10", 10);
+      const arrOffset = parseInt(configArrOffset?.value || "90", 10);
+      const locOffset = parseInt(configLocOffset?.value || "10", 10);
+      const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
+
+      // Validate all offsets
+      if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
+          isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
+          isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
+          isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180) {
+        alert("Please enter valid offsets between 0 and 180 minutes.");
+        return;
+      }
+
+      updateConfig({
+        depOffsetMinutes: depOffset,
+        arrOffsetMinutes: arrOffset,
+        locOffsetMinutes: locOffset,
+        ovrOffsetMinutes: ovrOffset
+      });
+      alert("Configuration saved successfully!");
     });
   }
 }

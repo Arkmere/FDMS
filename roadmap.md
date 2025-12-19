@@ -331,13 +331,16 @@ Goal: replace the ad-hoc `demoMovements` with a proper model.
 
 ## 6. Post-Stage 13 Roadmap
 
-**Status**: Stages 0–14 complete. The application now has:
+**Status**: Stages 0–14 complete, Phase B complete. The application now has:
 - Core UI refactored into modular `/src` structure
 - In-memory data model with localStorage v2 persistence (with v1 migration)
 - Live Board with flight-type-aware sorting and row tinting
 - Working modals for creating movements (4 flight types: LOC/DEP/ARR/OVR)
 - Basic tabs: Live Board, History, Reports, VKB, Admin
 - Diagnostics panel with init status, error tracking, and session export/import
+- Semantic time fields (ETD/ATD, ETA/ATA, ECT/ACT) with flight-type-aware display and sorting
+- Registration → type inference with auto-fill in modals
+- Audit tracking (createdAtUtc, updatedAtUtc, updatedBy, changeLog)
 
 The following sections outline the path to v1.0 release.
 
@@ -367,31 +370,31 @@ The following sections outline the path to v1.0 release.
 
 ---
 
-### B. Data Model Completion for "Real Use"
+### B. Data Model Completion for "Real Use" ✅ **DONE (Phase B)**
 
-**Time semantics completion**
+**Time semantics completion** ✅ **DONE**
 
 - Introduce explicit fields (even if some are aliases initially):
-  - **DEP**: ETD/ATD
-  - **ARR**: ETA/ATA
-  - **OVR**: ECT/ACT
-  - **LOC**: Start/airborne/end (as needed)
-- Ensure sorting, display, and edit all align with those semantics
+  - **DEP**: ETD/ATD ✅
+  - **ARR**: ETA/ATA ✅
+  - **OVR**: ECT/ACT ✅
+  - **LOC**: Start/airborne/end (as needed) ✅
+- Ensure sorting, display, and edit all align with those semantics ✅
 
-**Reg → Type inference (minimal VKB integration)**
+**Reg → Type inference (minimal VKB integration)** ✅ **DONE**
 
-- Add a lightweight lookup table (demo now; VKB later):
-  - known registration prefixes → type
-  - known full regs → type (optional)
-- Behaviour:
-  - if user enters reg and leaves type blank, infer type when known
-  - always allow override in Edit
+- Add a lightweight lookup table (demo now; VKB later): ✅
+  - known registration prefixes → type ✅
+  - known full regs → type (optional) ✅
+- Behaviour: ✅
+  - if user enters reg and leaves type blank, infer type when known ✅
+  - always allow override in Edit ✅
 
-**Movement identity and audit basics**
+**Movement identity and audit basics** ✅ **DONE**
 
-- Add `createdAtUtc`, `updatedAtUtc`
-- Add `updatedBy` placeholder ("local user")
-- Append-only "change log" per movement (minimal, local)
+- Add `createdAtUtc`, `updatedAtUtc` ✅
+- Add `updatedBy` placeholder ("local user") ✅
+- Append-only "change log" per movement (minimal, local) ✅
 
 ---
 

@@ -47,6 +47,21 @@
                   <option value="all">All</option>
                 </select>
 
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                  <span style="white-space: nowrap;">Planned window:</span>
+                  <select class="field field-select" id="plannedWindowHours" style="width: auto;">
+                    <option value="1">1 hour</option>
+                    <option value="2">2 hours</option>
+                    <option value="4">4 hours</option>
+                    <option value="8">8 hours</option>
+                    <option value="12">12 hours</option>
+                    <option value="24" selected>24 hours</option>
+                    <option value="48">48 hours</option>
+                    <option value="168">7 days</option>
+                    <option value="999999">All future</option>
+                  </select>
+                </label>
+
                 <input
                   class="field field-search-global"
                   id="globalSearch"
@@ -74,15 +89,6 @@
                     <th>Times</th>
                     <th>Activity</th>
                     <th style="width: 250px; text-align: right">Actions</th>
-                  </tr>
-                  <tr class="filter-row">
-                    <th></th>
-                    <th><input id="colFilterCallsign" placeholder="Filter callsign…" /></th>
-                    <th><input id="colFilterReg" placeholder="Filter reg…" /></th>
-                    <th><input id="colFilterRoute" placeholder="Filter route…" /></th>
-                    <th></th>
-                    <th></th>
-                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="liveBody"></tbody>
@@ -211,6 +217,80 @@
               <button class="btn btn-secondary" id="btnResetDemo" type="button">Reset to Demo Data</button>
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display: none;" />
+          </div>
+
+          <!-- Configuration -->
+          <div class="panel">
+            <h3>Configuration</h3>
+            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+              Default time offsets for new movements (minutes from current time):
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+              <thead>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <th style="text-align: left; padding: 6px; font-weight: bold;">Flight Type</th>
+                  <th style="text-align: left; padding: 6px; font-weight: bold;">Offset (minutes)</th>
+                  <th style="text-align: left; padding: 6px; font-weight: bold;">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">DEP</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configDepOffset"
+                      min="0"
+                      max="180"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">ARR</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configArrOffset"
+                      min="0"
+                      max="180"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to now + this</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">LOC</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configLocOffset"
+                      min="0"
+                      max="180"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">ETD & ETA default to now + this</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">OVR</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configOvrOffset"
+                      min="0"
+                      max="180"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">ECT defaults to now + this</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <button class="btn btn-primary" id="btnSaveConfig" type="button">Save Configuration</button>
           </div>
         </section>
       </main>

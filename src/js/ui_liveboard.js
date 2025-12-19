@@ -2,7 +2,19 @@
 // Handles rendering and interactions for the Live Board, History, Reports, VKB, and Admin panels.
 // ES module, no framework, DOM-contract driven.
 
-import { getMovements, statusClass, statusLabel, createMovement } from "./datamodel.js";
+import {
+  getMovements,
+  statusClass,
+  statusLabel,
+  createMovement,
+  inferTypeFromReg,
+  getETD,
+  getATD,
+  getETA,
+  getATA,
+  getECT,
+  getACT
+} from "./datamodel.js";
 
 /* -----------------------------
    State
@@ -12,11 +24,7 @@ let expandedId = null;
 
 const state = {
   globalFilter: "",
-  columnFilters: {
-    callsign: "",
-    reg: "",
-    route: ""
-  }
+  plannedWindowHours: 24 // Show PLANNED movements within this many hours
 };
 
 /* -----------------------------
@@ -74,17 +82,17 @@ function statusRank(status) {
 
 function plannedSortMinutes(m) {
   const ft = (m.flightType || "").toUpperCase();
-  if (ft === "ARR") return timeToMinutes(m.arrPlanned);
-  if (ft === "OVR") return timeToMinutes(m.depPlanned);
-  return timeToMinutes(m.depPlanned);
+  if (ft === "ARR") return timeToMinutes(getETA(m));
+  if (ft === "OVR") return timeToMinutes(getECT(m));
+  return timeToMinutes(getETD(m));
 }
 
 function activeSortMinutes(m) {
   const ft = (m.flightType || "").toUpperCase();
-  if (ft === "ARR") return timeToMinutes(m.arrActual || m.arrPlanned);
-  if (ft === "LOC") return timeToMinutes(m.depActual || m.arrActual || m.depPlanned);
-  if (ft === "OVR") return timeToMinutes(m.depActual || m.depPlanned);
-  return timeToMinutes(m.depActual || m.depPlanned);
+  if (ft === "ARR") return timeToMinutes(getATA(m) || getETA(m));
+  if (ft === "LOC") return timeToMinutes(getATD(m) || getATA(m) || getETD(m));
+  if (ft === "OVR") return timeToMinutes(getACT(m) || getECT(m));
+  return timeToMinutes(getATD(m) || getETD(m));
 }
 
 function movementSortMinutes(m) {
@@ -124,6 +132,45 @@ function getStatusFilterValue() {
   return select ? select.value : "planned_active";
 }
 
+/**
+ * Get the planned time for a movement as a Date object
+ * Uses ETD/ETA/ECT based on flight type
+ * @param {object} m - Movement object
+ * @returns {Date|null} Parsed date or null if no valid time
+ */
+function getMovementPlannedTime(m) {
+  const ft = (m.flightType || "").toUpperCase();
+  let timeStr = null;
+
+  // Get the appropriate planned time based on flight type
+  if (ft === "DEP" || ft === "LOC") {
+    timeStr = getETD(m);
+  } else if (ft === "ARR") {
+    timeStr = getETA(m);
+  } else if (ft === "OVR") {
+    timeStr = getECT(m);
+  }
+
+  if (!timeStr) return null;
+
+  // Parse HH:MM format and create Date object for today
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const now = new Date();
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  const movementDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+
+  // If the time is before current time, assume it's tomorrow
+  if (movementDate < now) {
+    movementDate.setDate(movementDate.getDate() + 1);
+  }
+
+  return movementDate;
+}
+
 function matchesFilters(m) {
   const statusFilter = getStatusFilterValue();
 
@@ -134,6 +181,19 @@ function matchesFilters(m) {
     !(m.status === "PLANNED" || m.status === "ACTIVE")
   ) {
     return false;
+  }
+
+  // Time window filter for PLANNED movements only
+  if (m.status === "PLANNED" && state.plannedWindowHours < 999999) {
+    const movementTime = getMovementPlannedTime(m);
+    if (movementTime) {
+      const now = new Date();
+      const windowEnd = new Date(now.getTime() + state.plannedWindowHours * 60 * 60 * 1000);
+
+      if (movementTime > windowEnd) {
+        return false; // Movement is beyond the time window
+      }
+    }
   }
 
   const gq = state.globalFilter.trim().toLowerCase();
@@ -154,24 +214,6 @@ function matchesFilters(m) {
       .toLowerCase();
 
     if (!haystack.includes(gq)) return false;
-  }
-
-  if (state.columnFilters.callsign) {
-    const q = state.columnFilters.callsign.toLowerCase();
-    const s1 = (m.callsignCode || "").toLowerCase();
-    const s2 = (m.callsignLabel || "").toLowerCase();
-    if (!s1.includes(q) && !s2.includes(q)) return false;
-  }
-
-  if (state.columnFilters.reg) {
-    const q = state.columnFilters.reg.toLowerCase();
-    if (!(m.registration || "").toLowerCase().includes(q)) return false;
-  }
-
-  if (state.columnFilters.route) {
-    const q = state.columnFilters.route.toLowerCase();
-    const r = `${m.depAd} ${m.depName} ${m.arrAd} ${m.arrName}`.toLowerCase();
-    if (!r.includes(q)) return false;
   }
 
   return true;
@@ -262,8 +304,8 @@ function renderExpandedRow(tbody, m) {
           <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(m.flightType)}</div>
           <div class="kv-label">Departure</div><div class="kv-value">${escapeHtml(m.depAd)} – ${escapeHtml(m.depName)}</div>
           <div class="kv-label">Arrival</div><div class="kv-value">${escapeHtml(m.arrAd)} – ${escapeHtml(m.arrName)}</div>
-          <div class="kv-label">Planned times</div><div class="kv-value">${escapeHtml(m.depPlanned || "—")} → ${escapeHtml(m.arrPlanned || "—")}</div>
-          <div class="kv-label">Actual times</div><div class="kv-value">${escapeHtml(m.depActual || "—")} → ${escapeHtml(m.arrActual || "—")}</div>
+          <div class="kv-label">ETD / ETA / ECT</div><div class="kv-value">${escapeHtml(getETD(m) || getECT(m) || "—")} → ${escapeHtml(getETA(m) || "—")}</div>
+          <div class="kv-label">ATD / ATA / ACT</div><div class="kv-value">${escapeHtml(getATD(m) || getACT(m) || "—")} → ${escapeHtml(getATA(m) || "—")}</div>
           <div class="kv-label">T&amp;Gs</div><div class="kv-value">${escapeHtml(m.tngCount ?? 0)}</div>
           <div class="kv-label">O/S count</div><div class="kv-value">${escapeHtml(m.osCount ?? 0)}</div>
           <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
@@ -303,8 +345,21 @@ export function renderLiveBoard() {
     tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
     tr.dataset.id = String(m.id);
 
-    const depDisplay = m.depActual || m.depPlanned || "-";
-    const arrDisplay = m.arrActual || m.arrPlanned || "-";
+    // Use semantic time fields based on flight type
+    const ft = (m.flightType || "").toUpperCase();
+    let depDisplay = "-";
+    let arrDisplay = "-";
+
+    if (ft === "DEP" || ft === "LOC") {
+      depDisplay = getATD(m) || getETD(m) || "-";
+    }
+    if (ft === "ARR" || ft === "LOC") {
+      arrDisplay = getATA(m) || getETA(m) || "-";
+    }
+    if (ft === "OVR") {
+      depDisplay = getACT(m) || getECT(m) || "-";
+      arrDisplay = "-";
+    }
 
     tr.innerHTML = `
       <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
@@ -419,6 +474,10 @@ function openNewFlightModal(flightType = "DEP") {
         <input id="newReg" class="modal-input" placeholder="e.g. ZM300" />
       </div>
       <div class="modal-field">
+        <label class="modal-label">Aircraft Type</label>
+        <input id="newType" class="modal-input" placeholder="e.g. JUNO (auto-filled from registration)" />
+      </div>
+      <div class="modal-field">
         <label class="modal-label">Flight Type</label>
         <select id="newFlightType" class="modal-select">
           <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
@@ -444,11 +503,11 @@ function openNewFlightModal(flightType = "DEP") {
         <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned Departure</label>
+        <label class="modal-label">Estimated Departure (ETD / ECT)</label>
         <input id="newDepPlanned" class="modal-input" placeholder="12:30" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned Arrival</label>
+        <label class="modal-label">Estimated Arrival (ETA)</label>
         <input id="newArrPlanned" class="modal-input" placeholder="13:05" />
       </div>
       <div class="modal-field">
@@ -470,6 +529,18 @@ function openNewFlightModal(flightType = "DEP") {
     </div>
   `);
 
+  // Bind type inference to registration field
+  const regInput = document.getElementById("newReg");
+  const typeInput = document.getElementById("newType");
+  if (regInput && typeInput) {
+    regInput.addEventListener("input", () => {
+      const inferredType = inferTypeFromReg(regInput.value);
+      if (inferredType) {
+        typeInput.value = inferredType;
+      }
+    });
+  }
+
   // Bind save handler
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     const movement = {
@@ -478,7 +549,7 @@ function openNewFlightModal(flightType = "DEP") {
       callsignLabel: "",
       callsignVoice: "",
       registration: document.getElementById("newReg")?.value || "",
-      type: "",
+      type: document.getElementById("newType")?.value || "",
       wtc: "L (ICAO)",
       depAd: document.getElementById("newDepAd")?.value || "",
       depName: "",
@@ -532,6 +603,10 @@ function openNewLocalModal() {
         <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
       </div>
       <div class="modal-field">
+        <label class="modal-label">Aircraft Type</label>
+        <input id="newLocType" class="modal-input" placeholder="e.g. G115 (auto-filled from registration)" />
+      </div>
+      <div class="modal-field">
         <label class="modal-label">Flight Type</label>
         <input class="modal-input" value="LOC (Local)" disabled />
       </div>
@@ -540,11 +615,11 @@ function openNewLocalModal() {
         <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned Start</label>
+        <label class="modal-label">Estimated Departure (ETD)</label>
         <input id="newLocStart" class="modal-input" placeholder="12:30" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned End</label>
+        <label class="modal-label">Estimated Arrival (ETA)</label>
         <input id="newLocEnd" class="modal-input" placeholder="13:30" />
       </div>
       <div class="modal-field">
@@ -566,6 +641,18 @@ function openNewLocalModal() {
     </div>
   `);
 
+  // Bind type inference to registration field
+  const regInput = document.getElementById("newLocReg");
+  const typeInput = document.getElementById("newLocType");
+  if (regInput && typeInput) {
+    regInput.addEventListener("input", () => {
+      const inferredType = inferTypeFromReg(regInput.value);
+      if (inferredType) {
+        typeInput.value = inferredType;
+      }
+    });
+  }
+
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const movement = {
@@ -574,7 +661,7 @@ function openNewLocalModal() {
       callsignLabel: "",
       callsignVoice: "",
       registration: document.getElementById("newLocReg")?.value || "",
-      type: "",
+      type: document.getElementById("newLocType")?.value || "",
       wtc: "L (ICAO)",
       depAd: "EGOW",
       depName: "RAF Woodvale",
@@ -618,53 +705,35 @@ function openNewLocalModal() {
  * Supports both the current HTML IDs and legacy ones (for safety).
  */
 export function initLiveBoard() {
-  // Current index.html uses: globalSearch, colFilterCallsign, colFilterReg, colFilterRoute, btnNewLoc
-  // Legacy variants exist in older branches: searchGlobal, filterCallsign, filterReg, filterRoute, btnNewLocal
+  // Elements
   const globalSearch = firstById(["globalSearch", "searchGlobal"]);
-  const filterCallsign = firstById(["colFilterCallsign", "filterCallsign"]);
-  const filterReg = firstById(["colFilterReg", "filterReg"]);
-  const filterRoute = firstById(["colFilterRoute", "filterRoute"]);
   const statusFilter = byId("statusFilter");
-  const dateRange = byId("dateRange"); // optional, may not exist
-  const btnNewFlight = firstById(["btnNewFlight", "btnNewArr", "btnNewDep", "btnNewOvr"]);
+  const plannedWindowSelect = byId("plannedWindowHours");
   const btnNewLoc = document.getElementById("btnNewLoc");
   const btnNewDep = document.getElementById("btnNewDep");
   const btnNewArr = document.getElementById("btnNewArr");
   const btnNewOvr = document.getElementById("btnNewOvr");
- // demo fallback
-  const btnNewLocal = firstById(["btnNewLoc", "btnNewLocal"]);
 
+  // Global search filter
   safeOn(globalSearch, "input", (e) => {
     state.globalFilter = e.target.value;
     renderLiveBoard();
   });
 
-  safeOn(filterCallsign, "input", (e) => {
-    state.columnFilters.callsign = e.target.value;
-    renderLiveBoard();
-  });
-
-  safeOn(filterReg, "input", (e) => {
-    state.columnFilters.reg = e.target.value;
-    renderLiveBoard();
-  });
-
-  safeOn(filterRoute, "input", (e) => {
-    state.columnFilters.route = e.target.value;
-    renderLiveBoard();
-  });
-
+  // Status filter
   safeOn(statusFilter, "change", () => renderLiveBoard());
 
-  safeOn(dateRange, "change", () => {
-    // Placeholder for future behaviour (no-op today)
+  // Planned window filter
+  safeOn(plannedWindowSelect, "change", (e) => {
+    state.plannedWindowHours = parseInt(e.target.value, 10);
     renderLiveBoard();
   });
 
-safeOn(btnNewLoc, "click", openNewLocalModal);
-safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
-safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
-safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
+  // New movement buttons
+  safeOn(btnNewLoc, "click", openNewLocalModal);
+  safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
+  safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
+  safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
 
   renderLiveBoard();
 }
