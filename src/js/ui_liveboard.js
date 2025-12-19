@@ -7,13 +7,17 @@ import {
   statusClass,
   statusLabel,
   createMovement,
+  updateMovement,
   inferTypeFromReg,
   getETD,
   getATD,
   getETA,
   getATA,
   getECT,
-  getACT
+  getACT,
+  getConfig,
+  convertUTCToLocal,
+  getTimezoneOffsetLabel
 } from "./datamodel.js";
 
 /* -----------------------------
@@ -24,7 +28,8 @@ let expandedId = null;
 
 const state = {
   globalFilter: "",
-  plannedWindowHours: 24 // Show PLANNED movements within this many hours
+  plannedWindowHours: 24, // Show PLANNED movements within this many hours
+  showLocalTimeInModals: false // Show local time conversions in modals
 };
 
 /* -----------------------------
@@ -340,7 +345,23 @@ export function renderLiveBoard() {
 
   const movements = getMovements().filter(matchesFilters).slice().sort(compareForLiveBoard);
 
+  let previousStatus = null;
+
   for (const m of movements) {
+    // Insert divider when transitioning from ACTIVE to PLANNED
+    if (previousStatus === "ACTIVE" && m.status === "PLANNED") {
+      const dividerTr = document.createElement("tr");
+      dividerTr.className = "status-divider-row";
+      dividerTr.innerHTML = `
+        <td colspan="7" style="padding: 0;">
+          <div style="height: 2px; background: linear-gradient(to right, transparent, #ccc, transparent); margin: 4px 0;"></div>
+        </td>
+      `;
+      tbody.appendChild(dividerTr);
+    }
+
+    previousStatus = m.status;
+
     const tr = document.createElement("tr");
     tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
     tr.dataset.id = String(m.id);
@@ -385,9 +406,45 @@ export function renderLiveBoard() {
         </div>
       </td>
       <td class="actions-cell">
+        <button class="small-btn js-edit-movement" type="button">Edit</button>
+        ${
+          m.status === "PLANNED"
+            ? '<button class="small-btn js-activate" type="button">→ Active</button>'
+            : m.status === "ACTIVE"
+            ? '<button class="small-btn js-complete" type="button">→ Done</button>'
+            : ""
+        }
+        <button class="small-btn js-duplicate" type="button">Duplicate</button>
         <button class="small-btn js-toggle-details" type="button">Details ▾</button>
       </td>
     `;
+
+    // Bind Edit button
+    const editBtn = tr.querySelector(".js-edit-movement");
+    safeOn(editBtn, "click", (e) => {
+      e.stopPropagation();
+      openEditMovementModal(m);
+    });
+
+    // Bind status transition buttons
+    const activateBtn = tr.querySelector(".js-activate");
+    safeOn(activateBtn, "click", (e) => {
+      e.stopPropagation();
+      transitionToActive(m.id);
+    });
+
+    const completeBtn = tr.querySelector(".js-complete");
+    safeOn(completeBtn, "click", (e) => {
+      e.stopPropagation();
+      transitionToCompleted(m.id);
+    });
+
+    // Bind Duplicate button
+    const duplicateBtn = tr.querySelector(".js-duplicate");
+    safeOn(duplicateBtn, "click", (e) => {
+      e.stopPropagation();
+      openDuplicateMovementModal(m);
+    });
 
     // Bind details toggle
     const toggleBtn = tr.querySelector(".js-toggle-details");
@@ -416,8 +473,20 @@ export function renderLiveBoard() {
 }
 
 /* -----------------------------
-   Modal helpers (demo-only)
+   Modal helpers
 ------------------------------ */
+
+/**
+ * Get today's date in YYYY-MM-DD format
+ * @returns {string} Date string
+ */
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function openModal(contentHtml) {
   const root = byId("modalRoot");
@@ -435,11 +504,27 @@ function openModal(contentHtml) {
 
   const closeModal = () => {
     root.innerHTML = "";
-    document.removeEventListener("keydown", escHandler);
+    document.removeEventListener("keydown", keyHandler);
   };
 
-  const escHandler = (e) => {
-    if (e.key === "Escape") closeModal();
+  const keyHandler = (e) => {
+    if (e.key === "Escape") {
+      closeModal();
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      // Enter-to-save: trigger the primary save button
+      // Skip if focused on textarea (to allow multi-line input)
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.tagName === "TEXTAREA") {
+        return;
+      }
+
+      // Find the primary save button
+      const saveBtn = backdrop?.querySelector(".js-save-flight, .js-save-loc, .js-save-edit, .js-save-dup");
+      if (saveBtn) {
+        e.preventDefault();
+        saveBtn.click();
+      }
+    }
   };
 
   safeOn(backdrop, "click", (e) => {
@@ -452,7 +537,7 @@ function openModal(contentHtml) {
 
   // Real save handler is bound after modal opens via specific save functions
 
-  document.addEventListener("keydown", escHandler);
+  document.addEventListener("keydown", keyHandler);
 }
 
 function openNewFlightModal(flightType = "DEP") {
@@ -503,12 +588,32 @@ function openNewFlightModal(flightType = "DEP") {
         <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Departure (ETD / ECT)</label>
-        <input id="newDepPlanned" class="modal-input" placeholder="12:30" />
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Arrival (ETA)</label>
-        <input id="newArrPlanned" class="modal-input" placeholder="13:05" />
+        <label class="modal-label">
+          Estimated Departure (ETD / ECT) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
+          <span id="localDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
+          <span id="localArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
@@ -541,6 +646,41 @@ function openNewFlightModal(flightType = "DEP") {
     });
   }
 
+  // Bind local time display handlers
+  const depTimeInput = document.getElementById("newDepPlanned");
+  const arrTimeInput = document.getElementById("newArrPlanned");
+  const showLocalDepCheck = document.getElementById("showLocalTimeDep");
+  const showLocalArrCheck = document.getElementById("showLocalTimeArr");
+  const localDepSpan = document.getElementById("localDepTime");
+  const localArrSpan = document.getElementById("localArrTime");
+
+  function updateLocalDepTime() {
+    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
+      const utcTime = depTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localDepSpan) {
+      localDepSpan.textContent = "";
+    }
+  }
+
+  function updateLocalArrTime() {
+    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
+      const utcTime = arrTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localArrSpan) {
+      localArrSpan.textContent = "";
+    }
+  }
+
+  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
+  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalArrTime);
+  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
+  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
+
   // Bind save handler
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     const movement = {
@@ -559,6 +699,7 @@ function openNewFlightModal(flightType = "DEP") {
       depActual: "",
       arrPlanned: document.getElementById("newArrPlanned")?.value || "",
       arrActual: "",
+      dof: document.getElementById("newDOF")?.value || getTodayDateString(),
       flightType: document.getElementById("newFlightType")?.value || flightType,
       isLocal: flightType === "LOC",
       tngCount: parseInt(document.getElementById("newTng")?.value || "0", 10),
@@ -615,12 +756,32 @@ function openNewLocalModal() {
         <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Departure (ETD)</label>
-        <input id="newLocStart" class="modal-input" placeholder="12:30" />
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Arrival (ETA)</label>
-        <input id="newLocEnd" class="modal-input" placeholder="13:30" />
+        <label class="modal-label">
+          Estimated Departure (ETD) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
+          <span id="localLocDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
+          <span id="localLocArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
@@ -653,6 +814,41 @@ function openNewLocalModal() {
     });
   }
 
+  // Bind local time display handlers
+  const depTimeInput = document.getElementById("newLocStart");
+  const arrTimeInput = document.getElementById("newLocEnd");
+  const showLocalDepCheck = document.getElementById("showLocalTimeLocDep");
+  const showLocalArrCheck = document.getElementById("showLocalTimeLocArr");
+  const localDepSpan = document.getElementById("localLocDepTime");
+  const localArrSpan = document.getElementById("localLocArrTime");
+
+  function updateLocalLocDepTime() {
+    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
+      const utcTime = depTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localDepSpan) {
+      localDepSpan.textContent = "";
+    }
+  }
+
+  function updateLocalLocArrTime() {
+    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
+      const utcTime = arrTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localArrSpan) {
+      localArrSpan.textContent = "";
+    }
+  }
+
+  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalLocDepTime);
+  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalLocArrTime);
+  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalLocDepTime);
+  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalLocArrTime);
+
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const movement = {
@@ -671,6 +867,7 @@ function openNewLocalModal() {
       depActual: "",
       arrPlanned: document.getElementById("newLocEnd")?.value || "",
       arrActual: "",
+      dof: document.getElementById("newLocDOF")?.value || getTodayDateString(),
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(document.getElementById("newLocTng")?.value || "0", 10),
@@ -694,6 +891,463 @@ function openNewLocalModal() {
     const modalRoot = document.getElementById("modalRoot");
     if (modalRoot) modalRoot.innerHTML = "";
   });
+}
+
+/**
+ * Open edit modal for an existing movement
+ * Pre-fills all fields with current values
+ */
+function openEditMovementModal(m) {
+  const flightType = m.flightType || "DEP";
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Edit ${flightType} Flight</div>
+        <div class="modal-subtitle">Movement ID: ${m.id}</div>
+      </div>
+      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label class="modal-label">Callsign</label>
+        <input id="editCallsign" class="modal-input" value="${escapeHtml(m.callsignCode || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Registration</label>
+        <input id="editReg" class="modal-input" value="${escapeHtml(m.registration || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Aircraft Type</label>
+        <input id="editType" class="modal-input" value="${escapeHtml(m.type || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Type</label>
+        <select id="editFlightType" class="modal-select">
+          <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
+          <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
+          <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
+          <option ${flightType === "OVR" ? "selected" : ""}>OVR</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Rules</label>
+        <select id="editRules" class="modal-select">
+          <option ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
+          <option ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
+          <option ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Departure AD</label>
+        <input id="editDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Arrival AD</label>
+        <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="editDOF" type="date" class="modal-input" value="${m.dof || getTodayDateString()}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Departure (ETD / ECT) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeEditDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="editDepPlanned" class="modal-input" value="${m.depPlanned || ""}" style="width: 80px;" />
+          <span id="localEditDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Actual Departure (ATD / ACT) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeEditDepActual" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="editDepActual" class="modal-input" value="${m.depActual || ""}" style="width: 80px;" />
+          <span id="localEditDepActualTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeEditArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="editArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" style="width: 80px;" />
+          <span id="localEditArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Actual Arrival (ATA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeEditArrActual" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="editArrActual" class="modal-input" value="${m.arrActual || ""}" style="width: 80px;" />
+          <span id="localEditArrActualTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">POB</label>
+        <input id="editPob" class="modal-input" type="number" value="${m.pob || 0}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Touch &amp; Go count</label>
+        <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Remarks</label>
+        <textarea id="editRemarks" class="modal-textarea">${escapeHtml(m.remarks || "")}</textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+      <button class="btn btn-primary js-save-edit" type="button">Save Changes</button>
+    </div>
+  `);
+
+  // Bind type inference
+  const regInput = document.getElementById("editReg");
+  const typeInput = document.getElementById("editType");
+  if (regInput && typeInput) {
+    regInput.addEventListener("input", () => {
+      const inferredType = inferTypeFromReg(regInput.value);
+      if (inferredType) {
+        typeInput.value = inferredType;
+      }
+    });
+  }
+
+  // Bind local time display handlers for all time fields
+  const depPlannedInput = document.getElementById("editDepPlanned");
+  const depActualInput = document.getElementById("editDepActual");
+  const arrPlannedInput = document.getElementById("editArrPlanned");
+  const arrActualInput = document.getElementById("editArrActual");
+
+  const showLocalDepPlannedCheck = document.getElementById("showLocalTimeEditDep");
+  const showLocalDepActualCheck = document.getElementById("showLocalTimeEditDepActual");
+  const showLocalArrPlannedCheck = document.getElementById("showLocalTimeEditArr");
+  const showLocalArrActualCheck = document.getElementById("showLocalTimeEditArrActual");
+
+  const localDepPlannedSpan = document.getElementById("localEditDepTime");
+  const localDepActualSpan = document.getElementById("localEditDepActualTime");
+  const localArrPlannedSpan = document.getElementById("localEditArrTime");
+  const localArrActualSpan = document.getElementById("localEditArrActualTime");
+
+  function updateLocalTime(checkbox, input, span) {
+    if (checkbox && checkbox.checked && input && span) {
+      const utcTime = input.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      span.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (span) {
+      span.textContent = "";
+    }
+  }
+
+  if (showLocalDepPlannedCheck) {
+    showLocalDepPlannedCheck.addEventListener("change", () =>
+      updateLocalTime(showLocalDepPlannedCheck, depPlannedInput, localDepPlannedSpan));
+  }
+  if (depPlannedInput) {
+    depPlannedInput.addEventListener("input", () =>
+      updateLocalTime(showLocalDepPlannedCheck, depPlannedInput, localDepPlannedSpan));
+  }
+
+  if (showLocalDepActualCheck) {
+    showLocalDepActualCheck.addEventListener("change", () =>
+      updateLocalTime(showLocalDepActualCheck, depActualInput, localDepActualSpan));
+  }
+  if (depActualInput) {
+    depActualInput.addEventListener("input", () =>
+      updateLocalTime(showLocalDepActualCheck, depActualInput, localDepActualSpan));
+  }
+
+  if (showLocalArrPlannedCheck) {
+    showLocalArrPlannedCheck.addEventListener("change", () =>
+      updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan));
+  }
+  if (arrPlannedInput) {
+    arrPlannedInput.addEventListener("input", () =>
+      updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan));
+  }
+
+  if (showLocalArrActualCheck) {
+    showLocalArrActualCheck.addEventListener("change", () =>
+      updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
+  }
+  if (arrActualInput) {
+    arrActualInput.addEventListener("input", () =>
+      updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
+  }
+
+  // Bind save handler
+  document.querySelector(".js-save-edit")?.addEventListener("click", () => {
+    const updates = {
+      callsignCode: document.getElementById("editCallsign")?.value || "",
+      registration: document.getElementById("editReg")?.value || "",
+      type: document.getElementById("editType")?.value || "",
+      flightType: document.getElementById("editFlightType")?.value || flightType,
+      depAd: document.getElementById("editDepAd")?.value || "",
+      arrAd: document.getElementById("editArrAd")?.value || "",
+      depPlanned: document.getElementById("editDepPlanned")?.value || "",
+      depActual: document.getElementById("editDepActual")?.value || "",
+      arrPlanned: document.getElementById("editArrPlanned")?.value || "",
+      arrActual: document.getElementById("editArrActual")?.value || "",
+      dof: document.getElementById("editDOF")?.value || getTodayDateString(),
+      tngCount: parseInt(document.getElementById("editTng")?.value || "0", 10),
+      pob: parseInt(document.getElementById("editPob")?.value || "0", 10),
+      remarks: document.getElementById("editRemarks")?.value || ""
+    };
+
+    updateMovement(m.id, updates);
+    renderLiveBoard();
+    renderHistoryBoard();
+
+    // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
+  });
+}
+
+/**
+ * Open duplicate modal - copy existing movement with pre-filled values
+ * Creates new movement with PLANNED status
+ */
+function openDuplicateMovementModal(m) {
+  const flightType = m.flightType || "DEP";
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Duplicate ${flightType} Flight</div>
+        <div class="modal-subtitle">Creating copy of Movement ID: ${m.id}</div>
+      </div>
+      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label class="modal-label">Callsign</label>
+        <input id="dupCallsign" class="modal-input" value="${escapeHtml(m.callsignCode || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Registration</label>
+        <input id="dupReg" class="modal-input" value="${escapeHtml(m.registration || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Aircraft Type</label>
+        <input id="dupType" class="modal-input" value="${escapeHtml(m.type || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Type</label>
+        <select id="dupFlightType" class="modal-select">
+          <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
+          <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
+          <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
+          <option ${flightType === "OVR" ? "selected" : ""}>OVR</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Rules</label>
+        <select id="dupRules" class="modal-select">
+          <option ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
+          <option ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
+          <option ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Departure AD</label>
+        <input id="dupDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Arrival AD</label>
+        <input id="dupArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="dupDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Departure (ETD / ECT) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeDupDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="dupDepPlanned" class="modal-input" value="${m.depPlanned || ""}" style="width: 80px;" />
+          <span id="localDupDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeDupArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="dupArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" style="width: 80px;" />
+          <span id="localDupArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">POB</label>
+        <input id="dupPob" class="modal-input" type="number" value="${m.pob || 0}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Touch &amp; Go count</label>
+        <input id="dupTng" class="modal-input" type="number" value="${m.tngCount || 0}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Remarks</label>
+        <textarea id="dupRemarks" class="modal-textarea">${escapeHtml(m.remarks || "")}</textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+      <button class="btn btn-primary js-save-dup" type="button">Create Duplicate</button>
+    </div>
+  `);
+
+  // Bind type inference
+  const regInput = document.getElementById("dupReg");
+  const typeInput = document.getElementById("dupType");
+  if (regInput && typeInput) {
+    regInput.addEventListener("input", () => {
+      const inferredType = inferTypeFromReg(regInput.value);
+      if (inferredType) {
+        typeInput.value = inferredType;
+      }
+    });
+  }
+
+  // Bind local time display handlers
+  const depTimeInput = document.getElementById("dupDepPlanned");
+  const arrTimeInput = document.getElementById("dupArrPlanned");
+  const showLocalDepCheck = document.getElementById("showLocalTimeDupDep");
+  const showLocalArrCheck = document.getElementById("showLocalTimeDupArr");
+  const localDepSpan = document.getElementById("localDupDepTime");
+  const localArrSpan = document.getElementById("localDupArrTime");
+
+  function updateLocalDepTime() {
+    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
+      const utcTime = depTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localDepSpan) {
+      localDepSpan.textContent = "";
+    }
+  }
+
+  function updateLocalArrTime() {
+    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
+      const utcTime = arrTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localArrSpan) {
+      localArrSpan.textContent = "";
+    }
+  }
+
+  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
+  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalArrTime);
+  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
+  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
+
+  // Bind save handler
+  document.querySelector(".js-save-dup")?.addEventListener("click", () => {
+    const movement = {
+      status: "PLANNED",
+      callsignCode: document.getElementById("dupCallsign")?.value || "",
+      callsignLabel: m.callsignLabel || "",
+      callsignVoice: m.callsignVoice || "",
+      registration: document.getElementById("dupReg")?.value || "",
+      type: document.getElementById("dupType")?.value || "",
+      wtc: m.wtc || "L (ICAO)",
+      depAd: document.getElementById("dupDepAd")?.value || "",
+      depName: m.depName || "",
+      arrAd: document.getElementById("dupArrAd")?.value || "",
+      arrName: m.arrName || "",
+      depPlanned: document.getElementById("dupDepPlanned")?.value || "",
+      depActual: "",
+      arrPlanned: document.getElementById("dupArrPlanned")?.value || "",
+      arrActual: "",
+      dof: document.getElementById("dupDOF")?.value || getTodayDateString(),
+      flightType: document.getElementById("dupFlightType")?.value || flightType,
+      isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
+      tngCount: parseInt(document.getElementById("dupTng")?.value || "0", 10),
+      osCount: m.osCount || 0,
+      fisCount: m.fisCount || 0,
+      egowCode: m.egowCode || "",
+      egowDesc: m.egowDesc || "",
+      unitCode: m.unitCode || "",
+      unitDesc: m.unitDesc || "",
+      captain: m.captain || "",
+      pob: parseInt(document.getElementById("dupPob")?.value || "0", 10),
+      remarks: document.getElementById("dupRemarks")?.value || "",
+      formation: null
+    };
+
+    createMovement(movement);
+    renderLiveBoard();
+    renderHistoryBoard();
+
+    // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
+  });
+}
+
+/**
+ * Transition a PLANNED movement to ACTIVE
+ * Sets ATD/ACT to current time
+ */
+function transitionToActive(id) {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const currentTime = `${hours}:${minutes}`;
+
+  updateMovement(id, {
+    status: "ACTIVE",
+    depActual: currentTime
+  });
+
+  renderLiveBoard();
+  renderHistoryBoard();
+}
+
+/**
+ * Transition an ACTIVE movement to COMPLETED
+ * Sets ATA to current time if not already set
+ */
+function transitionToCompleted(id) {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const currentTime = `${hours}:${minutes}`;
+
+  updateMovement(id, {
+    status: "COMPLETED",
+    arrActual: currentTime
+  });
+
+  renderLiveBoard();
+  renderHistoryBoard();
 }
 
 /* -----------------------------

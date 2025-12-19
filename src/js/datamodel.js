@@ -13,7 +13,9 @@ const defaultConfig = {
   depOffsetMinutes: 10,   // DEP: ETD = now + this
   arrOffsetMinutes: 90,   // ARR: ETA = now + this
   locOffsetMinutes: 10,   // LOC: ETD/ETA = now + this
-  ovrOffsetMinutes: 0     // OVR: ECT = now + this
+  ovrOffsetMinutes: 0,    // OVR: ECT = now + this
+  timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
+  showLocalTime: false    // Show local time conversions alongside UTC
 };
 
 // Configuration state
@@ -697,4 +699,38 @@ export function updateConfig(updates) {
   ensureInitialised();
   config = { ...config, ...updates };
   saveConfig();
+}
+
+/**
+ * Convert UTC time to local time based on configured offset
+ * @param {string} utcTime - Time in HH:MM format (UTC)
+ * @returns {string} Time in HH:MM format (Local)
+ */
+export function convertUTCToLocal(utcTime) {
+  if (!utcTime) return "";
+  const match = utcTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return utcTime;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const offsetHours = config.timezoneOffsetHours;
+
+  let localHours = hours + offsetHours;
+
+  // Handle day wraparound
+  if (localHours < 0) localHours += 24;
+  if (localHours >= 24) localHours -= 24;
+
+  return `${String(localHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/**
+ * Get timezone offset label (e.g., "+1", "-5", "UTC")
+ * @returns {string} Offset label
+ */
+export function getTimezoneOffsetLabel() {
+  const offset = config.timezoneOffsetHours;
+  if (offset === 0) return "UTC";
+  const sign = offset > 0 ? "+" : "";
+  return `${sign}${offset}`;
 }

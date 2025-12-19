@@ -263,6 +263,7 @@ function initAdminPanelHandlers() {
   const configArrOffset = document.getElementById("configArrOffset");
   const configLocOffset = document.getElementById("configLocOffset");
   const configOvrOffset = document.getElementById("configOvrOffset");
+  const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Load current config values
@@ -271,6 +272,7 @@ function initAdminPanelHandlers() {
   if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
   if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
+  if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
 
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
@@ -278,13 +280,15 @@ function initAdminPanelHandlers() {
       const arrOffset = parseInt(configArrOffset?.value || "90", 10);
       const locOffset = parseInt(configLocOffset?.value || "10", 10);
       const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
+      const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
           isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
-          isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180) {
-        alert("Please enter valid offsets between 0 and 180 minutes.");
+          isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
+          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12) {
+        alert("Please enter valid configuration values.");
         return;
       }
 
@@ -292,7 +296,8 @@ function initAdminPanelHandlers() {
         depOffsetMinutes: depOffset,
         arrOffsetMinutes: arrOffset,
         locOffsetMinutes: locOffset,
-        ovrOffsetMinutes: ovrOffset
+        ovrOffsetMinutes: ovrOffset,
+        timezoneOffsetHours: timezoneOffset
       });
       alert("Configuration saved successfully!");
     });
