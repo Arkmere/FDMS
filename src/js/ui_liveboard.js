@@ -344,7 +344,23 @@ export function renderLiveBoard() {
 
   const movements = getMovements().filter(matchesFilters).slice().sort(compareForLiveBoard);
 
+  let previousStatus = null;
+
   for (const m of movements) {
+    // Insert divider when transitioning from ACTIVE to PLANNED
+    if (previousStatus === "ACTIVE" && m.status === "PLANNED") {
+      const dividerTr = document.createElement("tr");
+      dividerTr.className = "status-divider-row";
+      dividerTr.innerHTML = `
+        <td colspan="7" style="padding: 0;">
+          <div style="height: 2px; background: linear-gradient(to right, transparent, #ccc, transparent); margin: 4px 0;"></div>
+        </td>
+      `;
+      tbody.appendChild(dividerTr);
+    }
+
+    previousStatus = m.status;
+
     const tr = document.createElement("tr");
     tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
     tr.dataset.id = String(m.id);
