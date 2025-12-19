@@ -437,11 +437,11 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <div class="modal-field">
         <label class="modal-label">Departure AD</label>
-        <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" />
+        <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Arrival AD</label>
-        <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" />
+        <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Planned Departure</label>
@@ -506,7 +506,10 @@ function openNewFlightModal(flightType = "DEP") {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
-    closeModal();
+
+    // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
   });
 }
 
@@ -599,7 +602,10 @@ function openNewLocalModal() {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
-    closeModal();
+
+    // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
   });
 }
 
