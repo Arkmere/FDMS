@@ -13,7 +13,10 @@ import {
   getETA,
   getATA,
   getECT,
-  getACT
+  getACT,
+  getConfig,
+  convertUTCToLocal,
+  getTimezoneOffsetLabel
 } from "./datamodel.js";
 
 /* -----------------------------
@@ -24,7 +27,8 @@ let expandedId = null;
 
 const state = {
   globalFilter: "",
-  plannedWindowHours: 24 // Show PLANNED movements within this many hours
+  plannedWindowHours: 24, // Show PLANNED movements within this many hours
+  showLocalTimeInModals: false // Show local time conversions in modals
 };
 
 /* -----------------------------
@@ -416,8 +420,20 @@ export function renderLiveBoard() {
 }
 
 /* -----------------------------
-   Modal helpers (demo-only)
+   Modal helpers
 ------------------------------ */
+
+/**
+ * Get today's date in YYYY-MM-DD format
+ * @returns {string} Date string
+ */
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function openModal(contentHtml) {
   const root = byId("modalRoot");
@@ -503,12 +519,32 @@ function openNewFlightModal(flightType = "DEP") {
         <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Departure (ETD / ECT)</label>
-        <input id="newDepPlanned" class="modal-input" placeholder="12:30" />
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Arrival (ETA)</label>
-        <input id="newArrPlanned" class="modal-input" placeholder="13:05" />
+        <label class="modal-label">
+          Estimated Departure (ETD / ECT) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
+          <span id="localDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
+          <span id="localArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
@@ -541,6 +577,41 @@ function openNewFlightModal(flightType = "DEP") {
     });
   }
 
+  // Bind local time display handlers
+  const depTimeInput = document.getElementById("newDepPlanned");
+  const arrTimeInput = document.getElementById("newArrPlanned");
+  const showLocalDepCheck = document.getElementById("showLocalTimeDep");
+  const showLocalArrCheck = document.getElementById("showLocalTimeArr");
+  const localDepSpan = document.getElementById("localDepTime");
+  const localArrSpan = document.getElementById("localArrTime");
+
+  function updateLocalDepTime() {
+    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
+      const utcTime = depTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localDepSpan) {
+      localDepSpan.textContent = "";
+    }
+  }
+
+  function updateLocalArrTime() {
+    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
+      const utcTime = arrTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localArrSpan) {
+      localArrSpan.textContent = "";
+    }
+  }
+
+  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
+  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalArrTime);
+  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
+  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
+
   // Bind save handler
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     const movement = {
@@ -559,6 +630,7 @@ function openNewFlightModal(flightType = "DEP") {
       depActual: "",
       arrPlanned: document.getElementById("newArrPlanned")?.value || "",
       arrActual: "",
+      dof: document.getElementById("newDOF")?.value || getTodayDateString(),
       flightType: document.getElementById("newFlightType")?.value || flightType,
       isLocal: flightType === "LOC",
       tngCount: parseInt(document.getElementById("newTng")?.value || "0", 10),
@@ -615,12 +687,32 @@ function openNewLocalModal() {
         <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Departure (ETD)</label>
-        <input id="newLocStart" class="modal-input" placeholder="12:30" />
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Estimated Arrival (ETA)</label>
-        <input id="newLocEnd" class="modal-input" placeholder="13:30" />
+        <label class="modal-label">
+          Estimated Departure (ETD) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
+          <span id="localLocDepTime" style="font-size: 12px; color: #666;"></span>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
+          <span id="localLocArrTime" style="font-size: 12px; color: #666;"></span>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
@@ -653,6 +745,41 @@ function openNewLocalModal() {
     });
   }
 
+  // Bind local time display handlers
+  const depTimeInput = document.getElementById("newLocStart");
+  const arrTimeInput = document.getElementById("newLocEnd");
+  const showLocalDepCheck = document.getElementById("showLocalTimeLocDep");
+  const showLocalArrCheck = document.getElementById("showLocalTimeLocArr");
+  const localDepSpan = document.getElementById("localLocDepTime");
+  const localArrSpan = document.getElementById("localLocArrTime");
+
+  function updateLocalLocDepTime() {
+    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
+      const utcTime = depTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localDepSpan) {
+      localDepSpan.textContent = "";
+    }
+  }
+
+  function updateLocalLocArrTime() {
+    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
+      const utcTime = arrTimeInput.value;
+      const localTime = convertUTCToLocal(utcTime);
+      const offset = getTimezoneOffsetLabel();
+      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+    } else if (localArrSpan) {
+      localArrSpan.textContent = "";
+    }
+  }
+
+  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalLocDepTime);
+  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalLocArrTime);
+  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalLocDepTime);
+  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalLocArrTime);
+
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const movement = {
@@ -671,6 +798,7 @@ function openNewLocalModal() {
       depActual: "",
       arrPlanned: document.getElementById("newLocEnd")?.value || "",
       arrActual: "",
+      dof: document.getElementById("newLocDOF")?.value || getTodayDateString(),
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(document.getElementById("newLocTng")?.value || "0", 10),

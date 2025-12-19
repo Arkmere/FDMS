@@ -290,6 +290,44 @@
               </tbody>
             </table>
 
+            <div style="margin-top: 16px; margin-bottom: 12px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 4px;">
+                Timezone Offset (Local time relative to UTC)
+              </label>
+              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                <select id="configTimezoneOffset" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                  <option value="-12">UTC-12</option>
+                  <option value="-11">UTC-11</option>
+                  <option value="-10">UTC-10</option>
+                  <option value="-9">UTC-9</option>
+                  <option value="-8">UTC-8</option>
+                  <option value="-7">UTC-7</option>
+                  <option value="-6">UTC-6</option>
+                  <option value="-5">UTC-5</option>
+                  <option value="-4">UTC-4</option>
+                  <option value="-3">UTC-3</option>
+                  <option value="-2">UTC-2</option>
+                  <option value="-1">UTC-1</option>
+                  <option value="0" selected>UTC (GMT)</option>
+                  <option value="1">UTC+1 (BST)</option>
+                  <option value="2">UTC+2</option>
+                  <option value="3">UTC+3</option>
+                  <option value="4">UTC+4</option>
+                  <option value="5">UTC+5</option>
+                  <option value="6">UTC+6</option>
+                  <option value="7">UTC+7</option>
+                  <option value="8">UTC+8</option>
+                  <option value="9">UTC+9</option>
+                  <option value="10">UTC+10</option>
+                  <option value="11">UTC+11</option>
+                  <option value="12">UTC+12</option>
+                </select>
+              </div>
+              <div style="font-size: 11px; color: #666;">
+                Times are stored as UTC. This setting affects local time conversions shown in modals.
+              </div>
+            </div>
+
             <button class="btn btn-primary" id="btnSaveConfig" type="button">Save Configuration</button>
           </div>
         </section>
