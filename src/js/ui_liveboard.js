@@ -395,14 +395,7 @@ function openModal(contentHtml) {
     ?.querySelectorAll(".js-close-modal")
     .forEach((btn) => safeOn(btn, "click", closeModal));
 
-  backdrop
-    ?.querySelectorAll(".js-save-demo")
-    .forEach((btn) =>
-      safeOn(btn, "click", () => {
-        alert("Demo only: in the full app this would create a new movement.");
-        closeModal();
-      })
-    );
+  // Real save handler is bound after modal opens via specific save functions
 
   document.addEventListener("keydown", escHandler);
 }
@@ -411,32 +404,32 @@ function openNewFlightModal(flightType = "DEP") {
   openModal(`
     <div class="modal-header">
       <div>
-        <div class="modal-title">New ${flightType} Flight (Demo)</div>
-        <div class="modal-subtitle">Visual mock only – values are not stored.</div>
+        <div class="modal-title">New ${flightType} Flight</div>
+        <div class="modal-subtitle">Create a new movement</div>
       </div>
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
     <div class="modal-body">
       <div class="modal-field">
         <label class="modal-label">Callsign</label>
-        <input class="modal-input" placeholder="e.g. CONNECT or CNNCT22" />
+        <input id="newCallsign" class="modal-input" placeholder="e.g. CONNECT or CNNCT22" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
-        <input class="modal-input" placeholder="e.g. ZM300" />
+        <input id="newReg" class="modal-input" placeholder="e.g. ZM300" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Flight Type</label>
-        <select class="modal-select">
-          <option>ARR</option>
-          <option>DEP</option>
-          <option>LOC</option>
-          <option>OVR</option>
+        <select id="newFlightType" class="modal-select">
+          <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
+          <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
+          <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
+          <option ${flightType === "OVR" ? "selected" : ""}>OVR</option>
         </select>
       </div>
       <div class="modal-field">
         <label class="modal-label">Flight Rules</label>
-        <select class="modal-select">
+        <select id="newRules" class="modal-select">
           <option>VFR</option>
           <option>IFR</option>
           <option>SVFR</option>
@@ -444,75 +437,96 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <div class="modal-field">
         <label class="modal-label">Departure AD</label>
-        <input class="modal-input" placeholder="EGOS or Shawbury" />
+        <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Arrival AD</label>
-        <input class="modal-input" placeholder="EGOW or Woodvale" />
+        <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned Off-Block</label>
-        <input class="modal-input" placeholder="12:30" />
+        <label class="modal-label">Planned Departure</label>
+        <input id="newDepPlanned" class="modal-input" placeholder="12:30" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Planned ETA</label>
-        <input class="modal-input" placeholder="13:05" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Number of aircraft</label>
-        <input class="modal-input" placeholder="1" />
+        <label class="modal-label">Planned Arrival</label>
+        <input id="newArrPlanned" class="modal-input" placeholder="13:05" />
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input class="modal-input" placeholder="2" />
+        <input id="newPob" class="modal-input" type="number" placeholder="2" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input class="modal-input" placeholder="0" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Outstation?</label>
-        <select class="modal-select">
-          <option>No</option>
-          <option>Yes</option>
-        </select>
+        <input id="newTng" class="modal-input" type="number" placeholder="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
-        <textarea class="modal-textarea" placeholder="Any extra notes…"></textarea>
+        <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
-      <div style="display:flex; gap:6px;">
-        <button class="btn btn-secondary-modal js-save-demo" type="button">
-          Save &amp; Duplicate
-        </button>
-        <button class="btn btn-primary js-save-demo" type="button">
-          Save
-        </button>
-      </div>
+      <button class="btn btn-primary js-save-flight" type="button">Save</button>
     </div>
   `);
+
+  // Bind save handler
+  document.querySelector(".js-save-flight")?.addEventListener("click", () => {
+    const movement = {
+      status: "PLANNED",
+      callsignCode: document.getElementById("newCallsign")?.value || "",
+      callsignLabel: "",
+      callsignVoice: "",
+      registration: document.getElementById("newReg")?.value || "",
+      type: "",
+      wtc: "L (ICAO)",
+      depAd: document.getElementById("newDepAd")?.value || "",
+      depName: "",
+      arrAd: document.getElementById("newArrAd")?.value || "",
+      arrName: "",
+      depPlanned: document.getElementById("newDepPlanned")?.value || "",
+      depActual: "",
+      arrPlanned: document.getElementById("newArrPlanned")?.value || "",
+      arrActual: "",
+      flightType: document.getElementById("newFlightType")?.value || flightType,
+      isLocal: flightType === "LOC",
+      tngCount: parseInt(document.getElementById("newTng")?.value || "0", 10),
+      osCount: 0,
+      fisCount: 0,
+      egowCode: "",
+      egowDesc: "",
+      unitCode: "",
+      unitDesc: "",
+      captain: "",
+      pob: parseInt(document.getElementById("newPob")?.value || "0", 10),
+      remarks: document.getElementById("newRemarks")?.value || "",
+      formation: null
+    };
+
+    createMovement(movement);
+    renderLiveBoard();
+    renderHistoryBoard();
+    closeModal();
+  });
 }
 
 function openNewLocalModal() {
   openModal(`
     <div class="modal-header">
       <div>
-        <div class="modal-title">New Local Flight (Demo)</div>
-        <div class="modal-subtitle">Pre-configured for EGOW → EGOW VFR circuits.</div>
+        <div class="modal-title">New Local Flight</div>
+        <div class="modal-subtitle">Pre-configured for EGOW → EGOW VFR circuits</div>
       </div>
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
     <div class="modal-body">
       <div class="modal-field">
         <label class="modal-label">Callsign</label>
-        <input class="modal-input" placeholder="e.g. UAM11 or WOODVALE 11" />
+        <input id="newLocCallsign" class="modal-input" placeholder="e.g. UAM11 or WOODVALE 11" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
-        <input class="modal-input" placeholder="e.g. G-VAIR" />
+        <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Flight Type</label>
@@ -524,34 +538,69 @@ function openNewLocalModal() {
       </div>
       <div class="modal-field">
         <label class="modal-label">Planned Start</label>
-        <input class="modal-input" placeholder="12:30" />
+        <input id="newLocStart" class="modal-input" placeholder="12:30" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Planned End</label>
-        <input class="modal-input" placeholder="13:30" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Number of aircraft</label>
-        <input class="modal-input" placeholder="1" />
+        <input id="newLocEnd" class="modal-input" placeholder="13:30" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input class="modal-input" placeholder="6" />
+        <input id="newLocTng" class="modal-input" type="number" placeholder="6" />
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input class="modal-input" placeholder="2" />
+        <input id="newLocPob" class="modal-input" type="number" placeholder="2" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
-        <textarea class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
+        <textarea id="newLocRemarks" class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
-      <button class="btn btn-primary js-save-demo" type="button">Save</button>
+      <button class="btn btn-primary js-save-loc" type="button">Save</button>
     </div>
   `);
+
+  // Bind save handler
+  document.querySelector(".js-save-loc")?.addEventListener("click", () => {
+    const movement = {
+      status: "PLANNED",
+      callsignCode: document.getElementById("newLocCallsign")?.value || "",
+      callsignLabel: "",
+      callsignVoice: "",
+      registration: document.getElementById("newLocReg")?.value || "",
+      type: "",
+      wtc: "L (ICAO)",
+      depAd: "EGOW",
+      depName: "RAF Woodvale",
+      arrAd: "EGOW",
+      arrName: "RAF Woodvale",
+      depPlanned: document.getElementById("newLocStart")?.value || "",
+      depActual: "",
+      arrPlanned: document.getElementById("newLocEnd")?.value || "",
+      arrActual: "",
+      flightType: "LOC",
+      isLocal: true,
+      tngCount: parseInt(document.getElementById("newLocTng")?.value || "0", 10),
+      osCount: 0,
+      fisCount: 0,
+      egowCode: "",
+      egowDesc: "",
+      unitCode: "",
+      unitDesc: "",
+      captain: "",
+      pob: parseInt(document.getElementById("newLocPob")?.value || "0", 10),
+      remarks: document.getElementById("newLocRemarks")?.value || "",
+      formation: null
+    };
+
+    createMovement(movement);
+    renderLiveBoard();
+    renderHistoryBoard();
+    closeModal();
+  });
 }
 
 /* -----------------------------
