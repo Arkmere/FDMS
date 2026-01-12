@@ -26,6 +26,11 @@ import {
 
 import { showToast } from "./app.js";
 
+import {
+  searchAll,
+  getVKBStatus
+} from "./vkb.js";
+
 /* -----------------------------
    State
 ------------------------------ */
@@ -111,17 +116,6 @@ function timeToMinutes(t) {
   if (!Number.isFinite(hh) || !Number.isFinite(mm)) return Number.POSITIVE_INFINITY;
   return hh * 60 + mm;
 }
-
-/**
- * Time field getter functions
- * These provide consistent access to movement time fields
- */
-function getETD(m) { return m?.depPlanned || ""; }
-function getATD(m) { return m?.depActual || ""; }
-function getETA(m) { return m?.arrPlanned || ""; }
-function getATA(m) { return m?.arrActual || ""; }
-function getECT(m) { return m?.depPlanned || ""; } // For OVR, crossing time = dep planned
-function getACT(m) { return m?.depActual || ""; }  // For OVR/LOC, actual crossing = dep actual
 
 /**
  * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
@@ -2110,8 +2104,141 @@ export function initHistoryExport() {
   }
 }
 
+/* -----------------------------
+   VKB Lookup
+------------------------------ */
+
+let vkbSearchQuery = '';
+
+/**
+ * Render VKB lookup results
+ */
+function renderVkbLookup() {
+  const tbody = byId("vkbBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const status = getVKBStatus();
+  if (!status.loaded) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
+        ${status.error ? `Error: ${status.error}` : 'VKB data not loaded'}
+      </td>
+    `;
+    tbody.appendChild(row);
+    return;
+  }
+
+  if (!vkbSearchQuery.trim()) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
+        Enter a search term to query the VKB database
+      </td>
+    `;
+    tbody.appendChild(row);
+    return;
+  }
+
+  // Perform search
+  const results = searchAll(vkbSearchQuery, 20);
+  const allResults = [
+    ...results.aircraftTypes.map(r => ({
+      kind: 'Aircraft Type',
+      code: r['ICAO Type Designator'] || '-',
+      label: `${r['Manufacturer']} ${r['Model']}`,
+      details: `WTC: ${r['ICAO WTC'] || '-'}, ${r['Common Name'] || ''}`.trim(),
+      data: r
+    })),
+    ...results.callsigns.map(r => ({
+      kind: 'Callsign',
+      code: r['CALLSIGN'] || '-',
+      label: r['COMMON NAME'] || '-',
+      details: `${r['TRICODE'] || '-'} • ${r['COUNTRY'] || '-'}`,
+      data: r
+    })),
+    ...results.locations.map(r => ({
+      kind: 'Location',
+      code: r['ICAO CODE'] || '-',
+      label: r['AIRPORT'] || '-',
+      details: `${r['LOCATION SERVED'] || '-'} • ${r['COUNTRY'] || '-'}`,
+      data: r
+    })),
+    ...results.registrations.map(r => ({
+      kind: 'Registration',
+      code: r['REGISTRATION'] || '-',
+      label: r['OPERATOR'] || '-',
+      details: `${r['TYPE'] || '-'} • ${r['EGOW FLIGHT TYPE'] || '-'}`,
+      data: r
+    }))
+  ];
+
+  if (allResults.length === 0) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
+        No results found for "${escapeHtml(vkbSearchQuery)}"
+      </td>
+    `;
+    tbody.appendChild(row);
+    return;
+  }
+
+  // Render results
+  allResults.forEach(result => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="padding: 8px; font-weight: 600; font-size: 11px; color: #666; text-transform: uppercase;">
+        ${escapeHtml(result.kind)}
+      </td>
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">
+        ${escapeHtml(result.code)}
+      </td>
+      <td style="padding: 8px;">
+        ${escapeHtml(result.label)}
+      </td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">
+        ${escapeHtml(result.details)}
+      </td>
+      <td style="padding: 8px; text-align: right;">
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="${escapeHtml(result.kind)}" data-code="${escapeHtml(result.code)}">
+          Use
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // Bind "Use" buttons
+  tbody.querySelectorAll('.js-vkb-use').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.kind;
+      const code = btn.dataset.code;
+      showToast(`"${code}" ready to use (auto-fill coming in next update)`, 'info', 3000);
+    });
+  });
+}
+
+/**
+ * Initialize VKB lookup tab
+ */
 export function initVkbLookup() {
-  // No-op stub: implement if needed in this file.
+  const searchInput = byId("vkbSearch");
+  if (!searchInput) return;
+
+  // Debounced search
+  const debouncedSearch = debounce((query) => {
+    vkbSearchQuery = query;
+    renderVkbLookup();
+  }, 300);
+
+  searchInput.addEventListener('input', (e) => {
+    debouncedSearch(e.target.value);
+  });
+
+  renderVkbLookup();
 }
 
 export function initAdminPanel() {
