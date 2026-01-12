@@ -31,9 +31,12 @@ Or simply **double-click** `run.bat` or `run.ps1` in File Explorer.
 
 ## What the Scripts Do
 
-1. **Pull latest changes** from `claude/review-project-bYiIr` branch
-2. **Start HTTP server** on `http://localhost:8000`
-3. **Navigate to browser**: Open http://localhost:8000 to view the app
+1. **Fetch latest changes** from `claude/review-project-bYiIr` branch
+2. **Reset to remote version** (automatically discards any local changes)
+3. **Start HTTP server** on `http://localhost:8000`
+4. **Navigate to browser**: Open http://localhost:8000 to view the app
+
+> **Note**: The scripts will automatically discard any local changes and use the latest version from GitHub. This is intentional for testing/development workflow.
 
 ## Manual Steps (if scripts don't work)
 

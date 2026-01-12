@@ -8,19 +8,31 @@ echo   FDMS Development Server
 echo ====================================
 echo.
 
-echo [1/2] Pulling latest changes from git...
-git pull origin claude/review-project-bYiIr
+echo [1/3] Fetching latest changes from git...
+git fetch origin claude/review-project-bYiIr
 
 if errorlevel 1 (
     echo.
-    echo ERROR: Git pull failed!
+    echo ERROR: Git fetch failed!
     echo Please check your git configuration and try again.
     pause
     exit /b 1
 )
 
 echo.
-echo [2/2] Starting development server...
+echo [2/3] Resetting to latest version (discarding local changes)...
+git reset --hard origin/claude/review-project-bYiIr
+git clean -fd
+
+if errorlevel 1 (
+    echo.
+    echo ERROR: Git reset failed!
+    pause
+    exit /b 1
+)
+
+echo.
+echo [3/3] Starting development server...
 echo.
 echo Server running at: http://localhost:8000
 echo Press Ctrl+C to stop the server

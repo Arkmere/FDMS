@@ -4,11 +4,16 @@
 
 set -e  # Exit on error
 
-echo "🔄 Pulling latest changes from git..."
-git pull origin claude/review-project-bYiIr
+echo "🔄 Fetching latest changes from git..."
+git fetch origin claude/review-project-bYiIr
 
 echo ""
-echo "✅ Git pull complete!"
+echo "🔄 Resetting to latest version (discarding local changes)..."
+git reset --hard origin/claude/review-project-bYiIr
+git clean -fd
+
+echo ""
+echo "✅ Reset complete!"
 echo ""
 echo "🚀 Starting development server on http://localhost:8000"
 echo "   Press Ctrl+C to stop the server"
