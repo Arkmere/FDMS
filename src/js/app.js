@@ -16,9 +16,116 @@ import {
   exportSessionJSON,
   importSessionJSON,
   getStorageInfo,
+  getStorageQuota,
   getConfig,
   updateConfig
 } from "./datamodel.js";
+
+/* -----------------------------
+   Toast Notification System
+------------------------------ */
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {string} type - Toast type: 'success', 'error', 'warning', 'info'
+ * @param {number} duration - Duration in ms (0 = manual dismiss)
+ */
+export function showToast(message, type = 'info', duration = 4000) {
+  const container = getOrCreateToastContainer();
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+
+  const icon = getToastIcon(type);
+  const closeBtn = '<button class="toast-close" aria-label="Close">×</button>';
+
+  toast.innerHTML = `
+    <div class="toast-content">
+      <span class="toast-icon">${icon}</span>
+      <span class="toast-message">${escapeHtml(message)}</span>
+    </div>
+    ${closeBtn}
+  `;
+
+  // Add to container with fade-in animation
+  container.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.add('toast-show');
+  });
+
+  // Bind close button
+  const closeButton = toast.querySelector('.toast-close');
+  closeButton.addEventListener('click', () => dismissToast(toast));
+
+  // Auto-dismiss after duration
+  if (duration > 0) {
+    setTimeout(() => dismissToast(toast), duration);
+  }
+
+  return toast;
+}
+
+/**
+ * Dismiss a toast notification
+ * @param {HTMLElement} toast - Toast element to dismiss
+ */
+function dismissToast(toast) {
+  if (!toast || !toast.parentNode) return;
+
+  toast.classList.remove('toast-show');
+  toast.classList.add('toast-hide');
+
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, 300); // Match CSS transition duration
+}
+
+/**
+ * Get or create toast container
+ * @returns {HTMLElement} Toast container element
+ */
+function getOrCreateToastContainer() {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
+/**
+ * Get icon for toast type
+ * @param {string} type - Toast type
+ * @returns {string} Icon HTML
+ */
+function getToastIcon(type) {
+  switch (type) {
+    case 'success': return '✓';
+    case 'error': return '✕';
+    case 'warning': return '⚠';
+    case 'info': return 'ℹ';
+    default: return 'ℹ';
+  }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string
+ */
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 // Diagnostics state
 const diagnostics = {
@@ -32,11 +139,8 @@ window.addEventListener("error", (e) => {
   diagnostics.lastError = message;
   updateDiagnostics();
 
-  const d = document.createElement("div");
-  d.style.cssText =
-    "position:fixed;left:0;right:0;bottom:0;background:#300;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
-  d.textContent = "JS error: " + message;
-  document.body.appendChild(d);
+  // Show toast notification for user
+  showToast(`Error: ${message}`, 'error', 6000);
 });
 
 window.addEventListener("unhandledrejection", (e) => {
@@ -44,11 +148,8 @@ window.addEventListener("unhandledrejection", (e) => {
   diagnostics.lastError = message;
   updateDiagnostics();
 
-  const d = document.createElement("div");
-  d.style.cssText =
-    "position:fixed;left:0;right:0;bottom:0;background:#003;color:#fff;padding:10px;font:12px monospace;z-index:99999;white-space:pre-wrap";
-  d.textContent = "Promise rejection: " + message;
-  document.body.appendChild(d);
+  // Show toast notification for user
+  showToast(`Promise error: ${message}`, 'error', 6000);
 });
 
 /**
@@ -156,20 +257,47 @@ function initErrorOverlay() {
   });
 }
 
+/**
+ * Update diagnostics panel with current system state
+ */
 function updateDiagnostics() {
   const storageInfo = getStorageInfo();
+  const storageQuota = getStorageQuota();
 
   const initTimeEl = document.getElementById("diagInitTime");
   const renderTimeEl = document.getElementById("diagRenderTime");
   const storageKeyEl = document.getElementById("diagStorageKey");
   const movementCountEl = document.getElementById("diagMovementCount");
   const lastErrorEl = document.getElementById("diagLastError");
+  const storageUsageEl = document.getElementById("diagStorageUsage");
 
   if (initTimeEl) initTimeEl.textContent = diagnostics.initTime || "—";
   if (renderTimeEl) renderTimeEl.textContent = diagnostics.lastRenderTime || "—";
   if (storageKeyEl) storageKeyEl.textContent = storageInfo.key || "—";
   if (movementCountEl) movementCountEl.textContent = String(storageInfo.movementCount);
   if (lastErrorEl) lastErrorEl.textContent = diagnostics.lastError || "None";
+
+  // Update storage usage if element exists
+  if (storageUsageEl) {
+    const usedKB = (storageQuota.used / 1024).toFixed(1);
+    const quotaMB = (storageQuota.quota / (1024 * 1024)).toFixed(1);
+    const percentage = storageQuota.percentage;
+
+    let color = "#4caf50"; // green
+    if (percentage > 80) color = "#f44336"; // red
+    else if (percentage > 60) color = "#ff9800"; // orange
+
+    storageUsageEl.innerHTML = `
+      <span style="color: ${color}; font-weight: bold;">${usedKB} KB used</span>
+      (${percentage}% of ${quotaMB} MB)
+    `;
+
+    // Warn if storage is getting full
+    if (percentage > 80 && !storageUsageEl.dataset.warned) {
+      showToast(`Storage is ${percentage}% full. Consider exporting and clearing old data.`, 'warning', 8000);
+      storageUsageEl.dataset.warned = "true";
+    }
+  }
 }
 
 function updateInitStatus(message, isComplete = false) {
@@ -202,7 +330,7 @@ function initAdminPanelHandlers() {
         renderReportsSummary();
         diagnostics.lastRenderTime = new Date().toISOString();
         updateDiagnostics();
-        alert("Session reset to demo data.");
+        showToast("Session reset to demo data", 'success');
       }
     });
   }
@@ -218,8 +346,9 @@ function initAdminPanelHandlers() {
         a.download = `fdms-session-${new Date().toISOString().split("T")[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
+        showToast("Session exported successfully", 'success');
       } catch (e) {
-        alert("Export failed: " + e.message);
+        showToast(`Export failed: ${e.message}`, 'error');
       }
     });
   }
@@ -245,12 +374,12 @@ function initAdminPanelHandlers() {
             renderReportsSummary();
             diagnostics.lastRenderTime = new Date().toISOString();
             updateDiagnostics();
-            alert(`Import successful! Loaded ${result.count} movements.`);
+            showToast(`Import successful! Loaded ${result.count} movements`, 'success');
           } else {
-            alert("Import failed: " + result.error);
+            showToast(`Import failed: ${result.error}`, 'error');
           }
         } catch (e) {
-          alert("Import failed: " + e.message);
+          showToast(`Import failed: ${e.message}`, 'error');
         }
         fileInput.value = "";
       };
@@ -288,7 +417,7 @@ function initAdminPanelHandlers() {
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
           isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
           isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12) {
-        alert("Please enter valid configuration values.");
+        showToast("Please enter valid configuration values", 'error');
         return;
       }
 
@@ -299,7 +428,7 @@ function initAdminPanelHandlers() {
         ovrOffsetMinutes: ovrOffset,
         timezoneOffsetHours: timezoneOffset
       });
-      alert("Configuration saved successfully!");
+      showToast("Configuration saved successfully", 'success');
     });
   }
 }
