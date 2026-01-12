@@ -22,6 +22,11 @@ import {
   updateConfig
 } from "./datamodel.js";
 
+import {
+  loadVKBData,
+  getVKBStatus
+} from "./vkb.js";
+
 /* -----------------------------
    Toast Notification System
 ------------------------------ */
@@ -434,7 +439,7 @@ function initAdminPanelHandlers() {
   }
 }
 
-function bootstrap() {
+async function bootstrap() {
   updateInitStatus("Initialising app...");
 
   try {
@@ -443,6 +448,17 @@ function bootstrap() {
     // Global UI primitives
     initTabs();
     initClock();
+
+    // Load VKB data in background
+    updateInitStatus("Loading VKB data...");
+    try {
+      await loadVKBData();
+      const status = getVKBStatus();
+      showToast(`VKB loaded: ${status.counts.aircraftTypes + status.counts.callsignsStandard + status.counts.locations + status.counts.registrations} records`, 'success', 3000);
+    } catch (vkbError) {
+      console.warn('VKB load failed, continuing without VKB:', vkbError);
+      showToast('VKB data failed to load - lookup features unavailable', 'warning', 5000);
+    }
 
     // Feature modules: bind handlers first, then render
     initLiveBoard();
