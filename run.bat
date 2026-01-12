@@ -20,7 +20,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Resetting to latest version (discarding local changes)...
+echo [2/3] Resetting to latest version - discarding local changes...
 git reset --hard origin/claude/review-project-bYiIr
 git clean -fd
 

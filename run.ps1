@@ -23,7 +23,7 @@ try {
 }
 
 Write-Host ""
-Write-Host "[2/3] Resetting to latest version (discarding local changes)..." -ForegroundColor Yellow
+Write-Host "[2/3] Resetting to latest version - discarding local changes..." -ForegroundColor Yellow
 try {
     git reset --hard origin/claude/review-project-bYiIr
     if ($LASTEXITCODE -ne 0) {
