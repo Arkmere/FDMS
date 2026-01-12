@@ -113,6 +113,17 @@ function timeToMinutes(t) {
 }
 
 /**
+ * Time field getter functions
+ * These provide consistent access to movement time fields
+ */
+function getETD(m) { return m?.depPlanned || ""; }
+function getATD(m) { return m?.depActual || ""; }
+function getETA(m) { return m?.arrPlanned || ""; }
+function getATA(m) { return m?.arrActual || ""; }
+function getECT(m) { return m?.depPlanned || ""; } // For OVR, crossing time = dep planned
+function getACT(m) { return m?.depActual || ""; }  // For OVR/LOC, actual crossing = dep actual
+
+/**
  * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
  * @param {string} status - Movement status
  * @returns {number} Rank value (lower = higher priority)
