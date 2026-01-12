@@ -2,9 +2,10 @@
 // Storage-backed demo data + helpers for statuses and basic querying.
 // Movements persist in localStorage between page reloads.
 
-const STORAGE_KEY = "vectair_fdms_movements_v2";
+const STORAGE_KEY = "vectair_fdms_movements_v3";
+const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
 const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const CONFIG_KEY = "vectair_fdms_config";
 
 // Default configuration
@@ -40,6 +41,8 @@ const demoMovementsSeed = [
     depActual: "11:39",
     arrPlanned: "12:10",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD
+    rules: "VFR",
     flightType: "ARR",
     isLocal: false,
     tngCount: 0,
@@ -71,6 +74,8 @@ const demoMovementsSeed = [
     depActual: "",
     arrPlanned: "13:30",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "LOC",
     isLocal: true,
     tngCount: 6,
@@ -102,6 +107,8 @@ const demoMovementsSeed = [
     depActual: "13:15",
     arrPlanned: "13:50",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "DEP",
     isLocal: false,
     tngCount: 0,
@@ -166,6 +173,8 @@ const demoMovementsSeed = [
     depActual: "09:26",
     arrPlanned: "19:40",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "IFR",
     flightType: "OVR",
     isLocal: false,
     tngCount: 0,
@@ -197,6 +206,8 @@ const demoMovementsSeed = [
     depActual: "15:05",
     arrPlanned: "15:40",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "LOC",
     isLocal: true,
     tngCount: 0,
@@ -256,6 +267,10 @@ function cloneDemoMovements() {
   return demoMovementsSeed.map((m) => ({ ...m }));
 }
 
+/**
+ * Migrate from v1 schema (array) to current schema
+ * @returns {Array|null} Migrated movements array or null
+ */
 function migrateFromV1() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
@@ -263,30 +278,75 @@ function migrateFromV1() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
-    console.log("FDMS: Migrating data from v1 to v2 schema");
+    console.log("FDMS: Migrating data from v1 to v3 schema");
+    // Add missing fields to v1 data
+    const migrated = parsed.map(m => ({
+      ...m,
+      dof: m.dof || new Date().toISOString().split('T')[0],
+      rules: m.rules || "VFR"
+    }));
     // Remove old key after successful migration
     window.localStorage.removeItem(STORAGE_KEY_V1);
-    return parsed;
+    return migrated;
   } catch (e) {
     console.warn("FDMS: failed to migrate from v1", e);
     return null;
   }
 }
 
+/**
+ * Migrate from v2 schema to v3 schema
+ * Adds DOF and rules fields if missing
+ * @returns {Array|null} Migrated movements array or null
+ */
+function migrateFromV2() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_V2);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 2) return null;
+    if (!Array.isArray(parsed.movements)) return null;
+
+    console.log("FDMS: Migrating data from v2 to v3 schema");
+    // Add DOF and rules fields to v2 data
+    const migrated = parsed.movements.map(m => ({
+      ...m,
+      dof: m.dof || new Date().toISOString().split('T')[0],
+      rules: m.rules || "VFR"
+    }));
+    // Remove old key after successful migration
+    window.localStorage.removeItem(STORAGE_KEY_V2);
+    return migrated;
+  } catch (e) {
+    console.warn("FDMS: failed to migrate from v2", e);
+    return null;
+  }
+}
+
+/**
+ * Load movements from localStorage with schema migration support
+ * Tries v3 -> v2 -> v1 in order
+ * @returns {Array|null} Movements array or null
+ */
 function loadFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
-    // Try loading v2 schema first
+    // Try loading v3 schema first
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // v2 schema: { version, timestamp, movements }
+      // v3 schema: { version, timestamp, movements }
       if (parsed && typeof parsed === "object" && parsed.version === SCHEMA_VERSION) {
         return Array.isArray(parsed.movements) ? parsed.movements : null;
       }
     }
 
-    // Fall back to v1 migration if v2 not found
+    // Try v2 migration
+    const v2Data = migrateFromV2();
+    if (v2Data) return v2Data;
+
+    // Fall back to v1 migration
     return migrateFromV1();
   } catch (e) {
     console.warn("FDMS: failed to load movements from storage", e);
@@ -733,4 +793,150 @@ export function getTimezoneOffsetLabel() {
   if (offset === 0) return "UTC";
   const sign = offset > 0 ? "+" : "";
   return `${sign}${offset}`;
+}
+
+/* -----------------------------
+   Input Validation Utilities
+------------------------------ */
+
+/**
+ * Validate time format (HH:MM)
+ * @param {string} timeStr - Time string to validate
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateTime(timeStr) {
+  if (!timeStr || timeStr.trim() === "") {
+    return { valid: true, error: null }; // Empty is acceptable (optional field)
+  }
+
+  const match = timeStr.match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
+  if (!match) {
+    return { valid: false, error: "Time must be in HH:MM format (e.g., 09:30 or 14:45)" };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate date format (YYYY-MM-DD)
+ * @param {string} dateStr - Date string to validate
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateDate(dateStr) {
+  if (!dateStr || dateStr.trim() === "") {
+    return { valid: true, error: null }; // Empty is acceptable (will default to today)
+  }
+
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return { valid: false, error: "Date must be in YYYY-MM-DD format" };
+  }
+
+  // Check if date is valid
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12) {
+    return { valid: false, error: "Month must be between 01 and 12" };
+  }
+
+  if (day < 1 || day > 31) {
+    return { valid: false, error: "Day must be between 01 and 31" };
+  }
+
+  // Check if date exists
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return { valid: false, error: "Invalid date" };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate number range
+ * @param {string|number} value - Value to validate
+ * @param {number} min - Minimum value (inclusive)
+ * @param {number} max - Maximum value (inclusive)
+ * @param {string} fieldName - Field name for error message
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateNumberRange(value, min, max, fieldName = "Value") {
+  if (value === "" || value === null || value === undefined) {
+    return { valid: true, error: null }; // Empty is acceptable
+  }
+
+  const num = Number(value);
+  if (isNaN(num)) {
+    return { valid: false, error: `${fieldName} must be a number` };
+  }
+
+  if (num < min || num > max) {
+    return { valid: false, error: `${fieldName} must be between ${min} and ${max}` };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate required field
+ * @param {string} value - Value to validate
+ * @param {string} fieldName - Field name for error message
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateRequired(value, fieldName = "Field") {
+  if (!value || value.trim() === "") {
+    return { valid: false, error: `${fieldName} is required` };
+  }
+  return { valid: true, error: null };
+}
+
+/* -----------------------------
+   Storage Quota Monitoring
+------------------------------ */
+
+/**
+ * Get localStorage usage information
+ * @returns {{used: number, available: number, percentage: number, quota: number}} Storage info
+ */
+export function getStorageQuota() {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return { used: 0, available: 0, percentage: 0, quota: 0 };
+  }
+
+  try {
+    // Calculate current usage
+    let used = 0;
+    for (let key in window.localStorage) {
+      if (window.localStorage.hasOwnProperty(key)) {
+        used += window.localStorage[key].length + key.length;
+      }
+    }
+
+    // localStorage quota is typically 5-10MB, assume 5MB as conservative estimate
+    const quota = 5 * 1024 * 1024; // 5MB in bytes
+    const available = quota - used;
+    const percentage = (used / quota) * 100;
+
+    return {
+      used,
+      available,
+      percentage: Math.round(percentage * 10) / 10, // Round to 1 decimal
+      quota
+    };
+  } catch (e) {
+    console.warn("FDMS: failed to get storage quota", e);
+    return { used: 0, available: 0, percentage: 0, quota: 0 };
+  }
+}
+
+/**
+ * Check if there's enough space to save data
+ * @param {number} estimatedSize - Estimated size of data to save
+ * @returns {boolean} True if there's enough space
+ */
+export function hasEnoughStorageSpace(estimatedSize = 100000) {
+  const quota = getStorageQuota();
+  return quota.available > estimatedSize;
 }

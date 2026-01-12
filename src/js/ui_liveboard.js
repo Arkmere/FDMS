@@ -17,8 +17,14 @@ import {
   getACT,
   getConfig,
   convertUTCToLocal,
-  getTimezoneOffsetLabel
+  getTimezoneOffsetLabel,
+  validateTime,
+  validateDate,
+  validateNumberRange,
+  validateRequired
 } from "./datamodel.js";
+
+import { showToast } from "./app.js";
 
 /* -----------------------------
    State
@@ -53,6 +59,11 @@ function safeOn(el, eventName, handler) {
   el.addEventListener(eventName, handler);
 }
 
+/**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} s - String to escape
+ * @returns {string} Escaped string
+ */
 function escapeHtml(s) {
   // Defensive; most values are demo data, but keep rendering resilient.
   return String(s ?? "")
@@ -63,10 +74,33 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+/**
+ * Debounce a function call
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 /* -----------------------------
    Sorting
 ------------------------------ */
 
+/**
+ * Convert HH:MM time string to minutes since midnight
+ * @param {string} t - Time string in HH:MM format
+ * @returns {number} Minutes since midnight, or Infinity if invalid
+ */
 function timeToMinutes(t) {
   const s = (t || "").trim();
   if (!s) return Number.POSITIVE_INFINITY;
@@ -78,6 +112,11 @@ function timeToMinutes(t) {
   return hh * 60 + mm;
 }
 
+/**
+ * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
+ * @param {string} status - Movement status
+ * @returns {number} Rank value (lower = higher priority)
+ */
 function statusRank(status) {
   const s = (status || "").toUpperCase();
   if (s === "ACTIVE") return 1;
@@ -85,6 +124,11 @@ function statusRank(status) {
   return 3;
 }
 
+/**
+ * Get planned time in minutes for a movement
+ * @param {object} m - Movement object
+ * @returns {number} Minutes since midnight for planned time
+ */
 function plannedSortMinutes(m) {
   const ft = (m.flightType || "").toUpperCase();
   if (ft === "ARR") return timeToMinutes(getETA(m));
@@ -92,6 +136,11 @@ function plannedSortMinutes(m) {
   return timeToMinutes(getETD(m));
 }
 
+/**
+ * Get actual/active time in minutes for a movement
+ * @param {object} m - Movement object
+ * @returns {number} Minutes since midnight for actual time (or planned if not set)
+ */
 function activeSortMinutes(m) {
   const ft = (m.flightType || "").toUpperCase();
   if (ft === "ARR") return timeToMinutes(getATA(m) || getETA(m));
@@ -100,6 +149,11 @@ function activeSortMinutes(m) {
   return timeToMinutes(getATD(m) || getETD(m));
 }
 
+/**
+ * Get sort time for a movement based on status
+ * @param {object} m - Movement object
+ * @returns {number} Minutes since midnight for sorting
+ */
 function movementSortMinutes(m) {
   const s = (m.status || "").toUpperCase();
   if (s === "ACTIVE") return activeSortMinutes(m);
@@ -107,15 +161,41 @@ function movementSortMinutes(m) {
   return activeSortMinutes(m);
 }
 
+/**
+ * Get DOF (Date of Flight) as comparable timestamp
+ * @param {object} m - Movement object
+ * @returns {number} Timestamp in milliseconds, or 0 if no DOF
+ */
+function getDOFTimestamp(m) {
+  if (!m.dof) return 0; // No DOF = treat as earliest
+  const date = new Date(m.dof + "T00:00:00Z"); // Parse as UTC midnight
+  return date.getTime();
+}
+
+/**
+ * Compare two movements for Live Board sorting
+ * Sort order: DOF (nearest first), Status (ACTIVE, PLANNED, others), Time (earliest first), ID
+ * @param {object} a - First movement
+ * @param {object} b - Second movement
+ * @returns {number} Comparison result (-1, 0, 1)
+ */
 function compareForLiveBoard(a, b) {
+  // 1. Sort by DOF (nearest date first)
+  const dofA = getDOFTimestamp(a);
+  const dofB = getDOFTimestamp(b);
+  if (dofA !== dofB) return dofA - dofB;
+
+  // 2. Sort by status (ACTIVE first, then PLANNED)
   const ra = statusRank(a.status);
   const rb = statusRank(b.status);
   if (ra !== rb) return ra - rb;
 
+  // 3. Sort by time (earliest first within the same date and status)
   const ta = movementSortMinutes(a);
   const tb = movementSortMinutes(b);
   if (ta !== tb) return ta - tb;
 
+  // 4. Sort by ID as tiebreaker
   return (a.id || 0) - (b.id || 0);
 }
 
@@ -406,16 +486,16 @@ export function renderLiveBoard() {
         </div>
       </td>
       <td class="actions-cell">
-        <button class="small-btn js-edit-movement" type="button">Edit</button>
+        <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
         ${
           m.status === "PLANNED"
-            ? '<button class="small-btn js-activate" type="button">→ Active</button>'
+            ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
             : m.status === "ACTIVE"
-            ? '<button class="small-btn js-complete" type="button">→ Done</button>'
+            ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Done</button>'
             : ""
         }
-        <button class="small-btn js-duplicate" type="button">Duplicate</button>
-        <button class="small-btn js-toggle-details" type="button">Details ▾</button>
+        <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
+        <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
       </td>
     `;
 
@@ -681,11 +761,57 @@ function openNewFlightModal(flightType = "DEP") {
   if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
   if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
 
-  // Bind save handler
+  // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
+    // Get form values
+    const dof = document.getElementById("newDOF")?.value || getTodayDateString();
+    const depPlanned = document.getElementById("newDepPlanned")?.value || "";
+    const arrPlanned = document.getElementById("newArrPlanned")?.value || "";
+    const pob = document.getElementById("newPob")?.value || "0";
+    const tng = document.getElementById("newTng")?.value || "0";
+    const callsign = document.getElementById("newCallsign")?.value || "";
+
+    // Validate inputs
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) {
+      showToast(dofValidation.error, 'error');
+      return;
+    }
+
+    const depValidation = validateTime(depPlanned);
+    if (!depValidation.valid) {
+      showToast(`Departure time: ${depValidation.error}`, 'error');
+      return;
+    }
+
+    const arrValidation = validateTime(arrPlanned);
+    if (!arrValidation.valid) {
+      showToast(`Arrival time: ${arrValidation.error}`, 'error');
+      return;
+    }
+
+    const pobValidation = validateNumberRange(pob, 0, 999, "POB");
+    if (!pobValidation.valid) {
+      showToast(pobValidation.error, 'error');
+      return;
+    }
+
+    const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
+    if (!tngValidation.valid) {
+      showToast(tngValidation.error, 'error');
+      return;
+    }
+
+    const callsignValidation = validateRequired(callsign, "Callsign");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Create movement
     const movement = {
       status: "PLANNED",
-      callsignCode: document.getElementById("newCallsign")?.value || "",
+      callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: "",
       registration: document.getElementById("newReg")?.value || "",
@@ -695,14 +821,15 @@ function openNewFlightModal(flightType = "DEP") {
       depName: "",
       arrAd: document.getElementById("newArrAd")?.value || "",
       arrName: "",
-      depPlanned: document.getElementById("newDepPlanned")?.value || "",
+      depPlanned: depPlanned,
       depActual: "",
-      arrPlanned: document.getElementById("newArrPlanned")?.value || "",
+      arrPlanned: arrPlanned,
       arrActual: "",
-      dof: document.getElementById("newDOF")?.value || getTodayDateString(),
+      dof: dof,
+      rules: document.getElementById("newRules")?.value || "VFR",
       flightType: document.getElementById("newFlightType")?.value || flightType,
       isLocal: flightType === "LOC",
-      tngCount: parseInt(document.getElementById("newTng")?.value || "0", 10),
+      tngCount: parseInt(tng, 10),
       osCount: 0,
       fisCount: 0,
       egowCode: "",
@@ -710,7 +837,7 @@ function openNewFlightModal(flightType = "DEP") {
       unitCode: "",
       unitDesc: "",
       captain: "",
-      pob: parseInt(document.getElementById("newPob")?.value || "0", 10),
+      pob: parseInt(pob, 10),
       remarks: document.getElementById("newRemarks")?.value || "",
       formation: null
     };
@@ -718,6 +845,7 @@ function openNewFlightModal(flightType = "DEP") {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    showToast("Movement created successfully", 'success');
 
     // Close modal
     const modalRoot = document.getElementById("modalRoot");
@@ -849,11 +977,57 @@ function openNewLocalModal() {
   if (depTimeInput) depTimeInput.addEventListener("input", updateLocalLocDepTime);
   if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalLocArrTime);
 
-  // Bind save handler
+  // Bind save handler with validation
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
+    // Get form values
+    const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
+    const depPlanned = document.getElementById("newLocStart")?.value || "";
+    const arrPlanned = document.getElementById("newLocEnd")?.value || "";
+    const pob = document.getElementById("newLocPob")?.value || "0";
+    const tng = document.getElementById("newLocTng")?.value || "0";
+    const callsign = document.getElementById("newLocCallsign")?.value || "";
+
+    // Validate inputs
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) {
+      showToast(dofValidation.error, 'error');
+      return;
+    }
+
+    const depValidation = validateTime(depPlanned);
+    if (!depValidation.valid) {
+      showToast(`Departure time: ${depValidation.error}`, 'error');
+      return;
+    }
+
+    const arrValidation = validateTime(arrPlanned);
+    if (!arrValidation.valid) {
+      showToast(`Arrival time: ${arrValidation.error}`, 'error');
+      return;
+    }
+
+    const pobValidation = validateNumberRange(pob, 0, 999, "POB");
+    if (!pobValidation.valid) {
+      showToast(pobValidation.error, 'error');
+      return;
+    }
+
+    const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
+    if (!tngValidation.valid) {
+      showToast(tngValidation.error, 'error');
+      return;
+    }
+
+    const callsignValidation = validateRequired(callsign, "Callsign");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Create movement
     const movement = {
       status: "PLANNED",
-      callsignCode: document.getElementById("newLocCallsign")?.value || "",
+      callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: "",
       registration: document.getElementById("newLocReg")?.value || "",
@@ -863,14 +1037,15 @@ function openNewLocalModal() {
       depName: "RAF Woodvale",
       arrAd: "EGOW",
       arrName: "RAF Woodvale",
-      depPlanned: document.getElementById("newLocStart")?.value || "",
+      depPlanned: depPlanned,
       depActual: "",
-      arrPlanned: document.getElementById("newLocEnd")?.value || "",
+      arrPlanned: arrPlanned,
       arrActual: "",
-      dof: document.getElementById("newLocDOF")?.value || getTodayDateString(),
+      dof: dof,
+      rules: "VFR", // Local flights are always VFR
       flightType: "LOC",
       isLocal: true,
-      tngCount: parseInt(document.getElementById("newLocTng")?.value || "0", 10),
+      tngCount: parseInt(tng, 10),
       osCount: 0,
       fisCount: 0,
       egowCode: "",
@@ -878,7 +1053,7 @@ function openNewLocalModal() {
       unitCode: "",
       unitDesc: "",
       captain: "",
-      pob: parseInt(document.getElementById("newLocPob")?.value || "0", 10),
+      pob: parseInt(pob, 10),
       remarks: document.getElementById("newLocRemarks")?.value || "",
       formation: null
     };
@@ -886,6 +1061,7 @@ function openNewLocalModal() {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    showToast("Local flight created successfully", 'success');
 
     // Close modal
     const modalRoot = document.getElementById("modalRoot");
@@ -1092,28 +1268,64 @@ function openEditMovementModal(m) {
       updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
   }
 
-  // Bind save handler
+  // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
+    // Get form values
+    const dof = document.getElementById("editDOF")?.value || getTodayDateString();
+    const depPlanned = document.getElementById("editDepPlanned")?.value || "";
+    const depActual = document.getElementById("editDepActual")?.value || "";
+    const arrPlanned = document.getElementById("editArrPlanned")?.value || "";
+    const arrActual = document.getElementById("editArrActual")?.value || "";
+    const pob = document.getElementById("editPob")?.value || "0";
+    const tng = document.getElementById("editTng")?.value || "0";
+
+    // Validate inputs
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) {
+      showToast(dofValidation.error, 'error');
+      return;
+    }
+
+    const validations = [
+      { result: validateTime(depPlanned), label: "Planned departure time" },
+      { result: validateTime(depActual), label: "Actual departure time" },
+      { result: validateTime(arrPlanned), label: "Planned arrival time" },
+      { result: validateTime(arrActual), label: "Actual arrival time" },
+      { result: validateNumberRange(pob, 0, 999, "POB"), label: null },
+      { result: validateNumberRange(tng, 0, 99, "T&G count"), label: null }
+    ];
+
+    for (const validation of validations) {
+      if (!validation.result.valid) {
+        const msg = validation.label ? `${validation.label}: ${validation.result.error}` : validation.result.error;
+        showToast(msg, 'error');
+        return;
+      }
+    }
+
+    // Update movement
     const updates = {
       callsignCode: document.getElementById("editCallsign")?.value || "",
       registration: document.getElementById("editReg")?.value || "",
       type: document.getElementById("editType")?.value || "",
       flightType: document.getElementById("editFlightType")?.value || flightType,
+      rules: document.getElementById("editRules")?.value || "VFR",
       depAd: document.getElementById("editDepAd")?.value || "",
       arrAd: document.getElementById("editArrAd")?.value || "",
-      depPlanned: document.getElementById("editDepPlanned")?.value || "",
-      depActual: document.getElementById("editDepActual")?.value || "",
-      arrPlanned: document.getElementById("editArrPlanned")?.value || "",
-      arrActual: document.getElementById("editArrActual")?.value || "",
-      dof: document.getElementById("editDOF")?.value || getTodayDateString(),
-      tngCount: parseInt(document.getElementById("editTng")?.value || "0", 10),
-      pob: parseInt(document.getElementById("editPob")?.value || "0", 10),
+      depPlanned: depPlanned,
+      depActual: depActual,
+      arrPlanned: arrPlanned,
+      arrActual: arrActual,
+      dof: dof,
+      tngCount: parseInt(tng, 10),
+      pob: parseInt(pob, 10),
       remarks: document.getElementById("editRemarks")?.value || ""
     };
 
     updateMovement(m.id, updates);
     renderLiveBoard();
     renderHistoryBoard();
+    showToast("Movement updated successfully", 'success');
 
     // Close modal
     const modalRoot = document.getElementById("modalRoot");
@@ -1268,11 +1480,57 @@ function openDuplicateMovementModal(m) {
   if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
   if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
 
-  // Bind save handler
+  // Bind save handler with validation
   document.querySelector(".js-save-dup")?.addEventListener("click", () => {
+    // Get form values
+    const dof = document.getElementById("dupDOF")?.value || getTodayDateString();
+    const depPlanned = document.getElementById("dupDepPlanned")?.value || "";
+    const arrPlanned = document.getElementById("dupArrPlanned")?.value || "";
+    const pob = document.getElementById("dupPob")?.value || "0";
+    const tng = document.getElementById("dupTng")?.value || "0";
+    const callsign = document.getElementById("dupCallsign")?.value || "";
+
+    // Validate inputs
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) {
+      showToast(dofValidation.error, 'error');
+      return;
+    }
+
+    const depValidation = validateTime(depPlanned);
+    if (!depValidation.valid) {
+      showToast(`Departure time: ${depValidation.error}`, 'error');
+      return;
+    }
+
+    const arrValidation = validateTime(arrPlanned);
+    if (!arrValidation.valid) {
+      showToast(`Arrival time: ${arrValidation.error}`, 'error');
+      return;
+    }
+
+    const pobValidation = validateNumberRange(pob, 0, 999, "POB");
+    if (!pobValidation.valid) {
+      showToast(pobValidation.error, 'error');
+      return;
+    }
+
+    const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
+    if (!tngValidation.valid) {
+      showToast(tngValidation.error, 'error');
+      return;
+    }
+
+    const callsignValidation = validateRequired(callsign, "Callsign");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Create movement
     const movement = {
       status: "PLANNED",
-      callsignCode: document.getElementById("dupCallsign")?.value || "",
+      callsignCode: callsign,
       callsignLabel: m.callsignLabel || "",
       callsignVoice: m.callsignVoice || "",
       registration: document.getElementById("dupReg")?.value || "",
@@ -1282,14 +1540,15 @@ function openDuplicateMovementModal(m) {
       depName: m.depName || "",
       arrAd: document.getElementById("dupArrAd")?.value || "",
       arrName: m.arrName || "",
-      depPlanned: document.getElementById("dupDepPlanned")?.value || "",
+      depPlanned: depPlanned,
       depActual: "",
-      arrPlanned: document.getElementById("dupArrPlanned")?.value || "",
+      arrPlanned: arrPlanned,
       arrActual: "",
-      dof: document.getElementById("dupDOF")?.value || getTodayDateString(),
+      dof: dof,
+      rules: document.getElementById("dupRules")?.value || m.rules || "VFR",
       flightType: document.getElementById("dupFlightType")?.value || flightType,
       isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
-      tngCount: parseInt(document.getElementById("dupTng")?.value || "0", 10),
+      tngCount: parseInt(tng, 10),
       osCount: m.osCount || 0,
       fisCount: m.fisCount || 0,
       egowCode: m.egowCode || "",
@@ -1297,7 +1556,7 @@ function openDuplicateMovementModal(m) {
       unitCode: m.unitCode || "",
       unitDesc: m.unitDesc || "",
       captain: m.captain || "",
-      pob: parseInt(document.getElementById("dupPob")?.value || "0", 10),
+      pob: parseInt(pob, 10),
       remarks: document.getElementById("dupRemarks")?.value || "",
       formation: null
     };
@@ -1305,6 +1564,7 @@ function openDuplicateMovementModal(m) {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    showToast("Duplicate movement created successfully", 'success');
 
     // Close modal
     const modalRoot = document.getElementById("modalRoot");
@@ -1358,6 +1618,9 @@ function transitionToCompleted(id) {
  * Initialise Live Board event listeners and initial render.
  * Supports both the current HTML IDs and legacy ones (for safety).
  */
+/**
+ * Initialize Live Board event listeners and render
+ */
 export function initLiveBoard() {
   // Elements
   const globalSearch = firstById(["globalSearch", "searchGlobal"]);
@@ -1368,10 +1631,14 @@ export function initLiveBoard() {
   const btnNewArr = document.getElementById("btnNewArr");
   const btnNewOvr = document.getElementById("btnNewOvr");
 
-  // Global search filter
-  safeOn(globalSearch, "input", (e) => {
-    state.globalFilter = e.target.value;
+  // Global search filter with debounce (150ms delay)
+  const debouncedSearch = debounce((value) => {
+    state.globalFilter = value;
     renderLiveBoard();
+  }, 150);
+
+  safeOn(globalSearch, "input", (e) => {
+    debouncedSearch(e.target.value);
   });
 
   // Status filter
