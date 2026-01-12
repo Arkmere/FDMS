@@ -113,6 +113,17 @@ function timeToMinutes(t) {
 }
 
 /**
+ * Time field getter functions
+ * These provide consistent access to movement time fields
+ */
+function getETD(m) { return m?.depPlanned || ""; }
+function getATD(m) { return m?.depActual || ""; }
+function getETA(m) { return m?.arrPlanned || ""; }
+function getATA(m) { return m?.arrActual || ""; }
+function getECT(m) { return m?.depPlanned || ""; } // For OVR, crossing time = dep planned
+function getACT(m) { return m?.depActual || ""; }  // For OVR/LOC, actual crossing = dep actual
+
+/**
  * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
  * @param {string} status - Movement status
  * @returns {number} Rank value (lower = higher priority)
@@ -1664,16 +1675,439 @@ export function initLiveBoard() {
    If you already have implementations elsewhere in your file, keep those instead.
 ------------------------------ */
 
+/* -----------------------------
+   History Board
+------------------------------ */
+
+let historySortColumn = 'time';
+let historySortDirection = 'desc'; // desc = most recent first
+
+/**
+ * Sort history movements by specified column
+ * @param {Array} movements - Array of movements
+ * @param {string} column - Column to sort by
+ * @param {string} direction - 'asc' or 'desc'
+ * @returns {Array} Sorted movements
+ */
+function sortHistoryMovements(movements, column, direction) {
+  return movements.slice().sort((a, b) => {
+    let valA, valB;
+
+    switch (column) {
+      case 'callsign':
+        valA = (a.callsignCode || '').toLowerCase();
+        valB = (b.callsignCode || '').toLowerCase();
+        break;
+      case 'regtype':
+        valA = `${a.registration || ''} ${a.type || ''}`.toLowerCase();
+        valB = `${b.registration || ''} ${b.type || ''}`.toLowerCase();
+        break;
+      case 'route':
+        valA = `${a.depAd || ''} ${a.arrAd || ''}`.toLowerCase();
+        valB = `${b.depAd || ''} ${b.arrAd || ''}`.toLowerCase();
+        break;
+      case 'time':
+        // Sort by DOF first, then by completion time
+        const dofA = getDOFTimestamp(a);
+        const dofB = getDOFTimestamp(b);
+        if (dofA !== dofB) return direction === 'asc' ? dofA - dofB : dofB - dofA;
+
+        // Use actual times for completed movements
+        valA = timeToMinutes(getATA(a) || getATD(a) || getACT(a) || getETA(a) || getETD(a) || getECT(a));
+        valB = timeToMinutes(getATA(b) || getATD(b) || getACT(b) || getETA(b) || getETD(b) || getECT(b));
+        break;
+      case 'activity':
+        valA = (a.flightType || '').toLowerCase();
+        valB = (b.flightType || '').toLowerCase();
+        break;
+      case 'status':
+        valA = (a.status || '').toLowerCase();
+        valB = (b.status || '').toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+
+    if (valA === valB) return 0;
+    const comparison = valA < valB ? -1 : 1;
+    return direction === 'asc' ? comparison : -comparison;
+  });
+}
+
+/**
+ * Render the History Board table
+ * Shows COMPLETED and CANCELLED movements
+ */
 export function renderHistoryBoard() {
-  // No-op stub: implement if needed in this file.
+  const tbody = byId("historyBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  // Get completed and cancelled movements
+  const movements = getMovements().filter(m =>
+    m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  // Sort movements
+  const sorted = sortHistoryMovements(movements, historySortColumn, historySortDirection);
+
+  if (sorted.length === 0) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="7" style="padding:8px; font-size:12px; color:#777;">
+        No completed or cancelled movements in this session.
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  for (const m of sorted) {
+    const tr = document.createElement("tr");
+    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
+
+    // Calculate times display
+    const ft = (m.flightType || "").toUpperCase();
+    let depDisplay = "-";
+    let arrDisplay = "-";
+
+    if (ft === "DEP" || ft === "LOC") {
+      depDisplay = getATD(m) || getETD(m) || "-";
+    }
+    if (ft === "ARR" || ft === "LOC") {
+      arrDisplay = getATA(m) || getETA(m) || "-";
+    }
+    if (ft === "OVR") {
+      depDisplay = getACT(m) || getECT(m) || "-";
+      arrDisplay = "-";
+    }
+
+    tr.innerHTML = `
+      <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
+      <td>
+        <div class="call-main">${escapeHtml(m.callsignCode)}</div>
+        <div class="call-sub">${m.callsignLabel ? escapeHtml(m.callsignLabel) : "&nbsp;"}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? " · " + escapeHtml(m.type) : ""}</div>
+        <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${escapeHtml(m.depAd)} → ${escapeHtml(m.arrAd)}</div>
+        <div class="cell-muted">${escapeHtml(m.depName || m.depAd)} → ${escapeHtml(m.arrName || m.arrAd)}</div>
+      </td>
+      <td>
+        <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
+        <div class="cell-muted">${m.dof ? escapeHtml(m.dof) : "—"}</div>
+      </td>
+      <td>
+        <div class="badge-row">
+          ${renderBadges(m)}
+        </div>
+      </td>
+      <td>
+        <span class="badge ${m.status === 'COMPLETED' ? 'badge-success' : 'badge-cancelled'}">${escapeHtml(statusLabel(m.status))}</span>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  }
 }
 
+/**
+ * Initialize History board sorting
+ */
+export function initHistoryBoard() {
+  const historyTable = byId("historyTable");
+  if (!historyTable) return;
+
+  // Bind sort headers
+  const headers = historyTable.querySelectorAll("thead th[data-sort]");
+  headers.forEach(header => {
+    header.style.cursor = "pointer";
+    header.addEventListener("click", () => {
+      const column = header.dataset.sort;
+
+      // Toggle direction if clicking same column
+      if (historySortColumn === column) {
+        historySortDirection = historySortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        historySortColumn = column;
+        historySortDirection = 'desc'; // Default to descending for new column
+      }
+
+      // Update visual indicators
+      headers.forEach(h => {
+        h.textContent = h.textContent.replace(/ ▲| ▼/g, '');
+      });
+      const indicator = historySortDirection === 'asc' ? ' ▲' : ' ▼';
+      header.textContent = header.textContent + indicator;
+
+      renderHistoryBoard();
+    });
+  });
+
+  renderHistoryBoard();
+}
+
+/* -----------------------------
+   Reports
+------------------------------ */
+
+/**
+ * Render the Reports summary panel
+ * Shows statistics and breakdowns
+ */
 export function renderReportsSummary() {
-  // No-op stub: implement if needed in this file.
+  const container = byId("reportsSummary");
+  if (!container) return;
+
+  const movements = getMovements();
+
+  // Calculate statistics
+  const stats = {
+    total: movements.length,
+    byStatus: {},
+    byFlightType: {},
+    byUnit: {},
+    byEgowCode: {},
+    tngTotal: 0,
+    fisTotal: 0,
+    osTotal: 0,
+    pobTotal: 0
+  };
+
+  movements.forEach(m => {
+    // Status counts
+    const status = m.status || 'UNKNOWN';
+    stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+
+    // Flight type counts
+    const ft = m.flightType || 'UNKNOWN';
+    stats.byFlightType[ft] = (stats.byFlightType[ft] || 0) + 1;
+
+    // Unit counts
+    if (m.unitCode) {
+      const unit = `${m.unitCode}${m.unitDesc ? ' - ' + m.unitDesc : ''}`;
+      stats.byUnit[unit] = (stats.byUnit[unit] || 0) + 1;
+    }
+
+    // EGOW code counts
+    if (m.egowCode) {
+      const code = `${m.egowCode}${m.egowDesc ? ' - ' + m.egowDesc : ''}`;
+      stats.byEgowCode[code] = (stats.byEgowCode[code] || 0) + 1;
+    }
+
+    // Totals
+    stats.tngTotal += m.tngCount || 0;
+    stats.fisTotal += m.fisCount || 0;
+    stats.osTotal += m.osCount || 0;
+    stats.pobTotal += m.pob || 0;
+  });
+
+  // Build HTML
+  let html = '<div class="reports-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">';
+
+  // Summary card
+  html += `
+    <div class="report-card">
+      <div class="report-card-title">Total Movements</div>
+      <div class="report-card-main">${stats.total}</div>
+      <div class="report-card-breakdown">
+        Session statistics
+      </div>
+    </div>
+  `;
+
+  // Status breakdown
+  html += `
+    <div class="report-card">
+      <div class="report-card-title">By Status</div>
+      <div class="report-card-main">${stats.total}</div>
+      <div class="report-card-breakdown">
+        ${Object.entries(stats.byStatus).map(([status, count]) =>
+          `<div>${status}: ${count}</div>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+
+  // Flight type breakdown
+  html += `
+    <div class="report-card">
+      <div class="report-card-title">By Flight Type</div>
+      <div class="report-card-main">${stats.total}</div>
+      <div class="report-card-breakdown">
+        ${Object.entries(stats.byFlightType).map(([type, count]) =>
+          `<div>${type}: ${count}</div>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+
+  // Activity totals
+  html += `
+    <div class="report-card">
+      <div class="report-card-title">Activity Totals</div>
+      <div class="report-card-main">${stats.tngTotal + stats.fisTotal + stats.osTotal}</div>
+      <div class="report-card-breakdown">
+        <div>T&G: ${stats.tngTotal}</div>
+        <div>FIS: ${stats.fisTotal}</div>
+        <div>O/S: ${stats.osTotal}</div>
+        <div>Total POB: ${stats.pobTotal}</div>
+      </div>
+    </div>
+  `;
+
+  // Top units
+  const topUnits = Object.entries(stats.byUnit)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  if (topUnits.length > 0) {
+    html += `
+      <div class="report-card">
+        <div class="report-card-title">Top Units</div>
+        <div class="report-card-main">${topUnits.length}</div>
+        <div class="report-card-breakdown">
+          ${topUnits.map(([unit, count]) =>
+            `<div>${escapeHtml(unit)}: ${count}</div>`
+          ).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Top EGOW codes
+  const topCodes = Object.entries(stats.byEgowCode)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  if (topCodes.length > 0) {
+    html += `
+      <div class="report-card">
+        <div class="report-card-title">Top EGOW Codes</div>
+        <div class="report-card-main">${topCodes.length}</div>
+        <div class="report-card-breakdown">
+          ${topCodes.map(([code, count]) =>
+            `<div>${escapeHtml(code)}: ${count}</div>`
+          ).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  html += '</div>';
+
+  container.innerHTML = html;
 }
 
+/* -----------------------------
+   CSV Export
+------------------------------ */
+
+/**
+ * Export history to CSV
+ * Includes all relevant fields
+ */
+function exportHistoryCSV() {
+  const movements = getMovements().filter(m =>
+    m.status === "COMPLETED" || m.status === "CANCELLED"
+  );
+
+  if (movements.length === 0) {
+    showToast("No history movements to export", 'warning');
+    return;
+  }
+
+  // CSV headers
+  const headers = [
+    "ID",
+    "Status",
+    "Flight Type",
+    "Rules",
+    "Callsign",
+    "Registration",
+    "Type",
+    "WTC",
+    "Dep AD",
+    "Arr AD",
+    "DOF",
+    "ETD/ECT",
+    "ATD/ACT",
+    "ETA",
+    "ATA",
+    "T&G Count",
+    "O/S Count",
+    "FIS Count",
+    "POB",
+    "EGOW Code",
+    "Unit",
+    "Remarks"
+  ];
+
+  // Build CSV rows
+  const rows = movements.map(m => [
+    m.id || '',
+    m.status || '',
+    m.flightType || '',
+    m.rules || '',
+    m.callsignCode || '',
+    m.registration || '',
+    m.type || '',
+    m.wtc || '',
+    m.depAd || '',
+    m.arrAd || '',
+    m.dof || '',
+    getETD(m) || getECT(m) || '',
+    getATD(m) || getACT(m) || '',
+    getETA(m) || '',
+    getATA(m) || '',
+    m.tngCount || 0,
+    m.osCount || 0,
+    m.fisCount || 0,
+    m.pob || 0,
+    m.egowCode || '',
+    m.unitCode || '',
+    m.remarks || ''
+  ]);
+
+  // Escape CSV values (handle commas, quotes, newlines)
+  const escapeCSV = (value) => {
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  // Build CSV content
+  const csv = [
+    headers.join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n');
+
+  // Download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fdms-history-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  showToast(`Exported ${movements.length} movements to CSV`, 'success');
+}
+
+/**
+ * Initialize history export button
+ */
 export function initHistoryExport() {
-  // No-op stub: implement if needed in this file.
+  const exportBtn = byId("btnExportHistoryCsv");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportHistoryCSV);
+  }
 }
 
 export function initVkbLookup() {
