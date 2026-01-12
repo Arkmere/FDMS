@@ -3,6 +3,7 @@
 
 import {
   initLiveBoard,
+  initHistoryBoard,
   renderLiveBoard,
   renderHistoryBoard,
   renderReportsSummary,
@@ -445,6 +446,7 @@ function bootstrap() {
 
     // Feature modules: bind handlers first, then render
     initLiveBoard();
+    initHistoryBoard();
     initHistoryExport();
     initVkbLookup();
     initAdminPanel();
