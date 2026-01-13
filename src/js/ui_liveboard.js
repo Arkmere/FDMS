@@ -2109,41 +2109,29 @@ export function initHistoryExport() {
 ------------------------------ */
 
 let vkbSearchQuery = '';
+let vkbActiveCategory = 'all';
 
 /**
- * Render VKB lookup results
+ * Render empty state for a category
  */
-function renderVkbLookup() {
-  const tbody = byId("vkbBody");
+function renderVkbEmpty(tbody, colspan, message) {
+  tbody.innerHTML = "";
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td colspan="${colspan}" style="padding: 16px; text-align: center; color: #777;">
+      ${escapeHtml(message)}
+    </td>
+  `;
+  tbody.appendChild(row);
+}
+
+/**
+ * Render "All Results" tab
+ */
+function renderVkbAll(results) {
+  const tbody = byId("vkbBodyAll");
   if (!tbody) return;
 
-  tbody.innerHTML = "";
-
-  const status = getVKBStatus();
-  if (!status.loaded) {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
-        ${status.error ? `Error: ${status.error}` : 'VKB data not loaded'}
-      </td>
-    `;
-    tbody.appendChild(row);
-    return;
-  }
-
-  if (!vkbSearchQuery.trim()) {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
-        Enter a search term to query the VKB database
-      </td>
-    `;
-    tbody.appendChild(row);
-    return;
-  }
-
-  // Perform search
-  const results = searchAll(vkbSearchQuery, 20);
   const allResults = [
     ...results.aircraftTypes.map(r => ({
       kind: 'Aircraft Type',
@@ -2176,48 +2164,191 @@ function renderVkbLookup() {
   ];
 
   if (allResults.length === 0) {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td colspan="5" style="padding: 16px; text-align: center; color: #777;">
-        No results found for "${escapeHtml(vkbSearchQuery)}"
-      </td>
-    `;
-    tbody.appendChild(row);
+    renderVkbEmpty(tbody, 5, vkbSearchQuery ? `No results found for "${vkbSearchQuery}"` : 'Enter a search term to query the VKB database');
     return;
   }
 
-  // Render results
+  tbody.innerHTML = "";
   allResults.forEach(result => {
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td style="padding: 8px; font-weight: 600; font-size: 11px; color: #666; text-transform: uppercase;">
-        ${escapeHtml(result.kind)}
-      </td>
-      <td style="padding: 8px; font-family: monospace; font-weight: 600;">
-        ${escapeHtml(result.code)}
-      </td>
-      <td style="padding: 8px;">
-        ${escapeHtml(result.label)}
-      </td>
-      <td style="padding: 8px; font-size: 12px; color: #666;">
-        ${escapeHtml(result.details)}
-      </td>
+      <td style="padding: 8px; font-weight: 600; font-size: 11px; color: #666; text-transform: uppercase;">${escapeHtml(result.kind)}</td>
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">${escapeHtml(result.code)}</td>
+      <td style="padding: 8px;">${escapeHtml(result.label)}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(result.details)}</td>
       <td style="padding: 8px; text-align: right;">
-        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="${escapeHtml(result.kind)}" data-code="${escapeHtml(result.code)}">
-          Use
-        </button>
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="${escapeHtml(result.kind)}" data-code="${escapeHtml(result.code)}">Use</button>
       </td>
     `;
     tbody.appendChild(row);
   });
+}
 
-  // Bind "Use" buttons
-  tbody.querySelectorAll('.js-vkb-use').forEach(btn => {
+/**
+ * Render "Aircraft Types" tab
+ */
+function renderVkbTypes(types) {
+  const tbody = byId("vkbBodyTypes");
+  if (!tbody) return;
+
+  if (types.length === 0) {
+    renderVkbEmpty(tbody, 6, vkbSearchQuery ? 'No aircraft types found' : 'Enter a search term');
+    return;
+  }
+
+  tbody.innerHTML = "";
+  types.forEach(t => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">${escapeHtml(t['ICAO Type Designator'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(t['Manufacturer'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(t['Model'] || '-')}</td>
+      <td style="padding: 8px; text-align: center;">${escapeHtml(t['ICAO WTC'] || '-')}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(t['Common Name'] || '')}</td>
+      <td style="padding: 8px; text-align: right;">
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="type" data-code="${escapeHtml(t['ICAO Type Designator'] || '')}">Use</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+/**
+ * Render "Callsigns" tab
+ */
+function renderVkbCallsigns(callsigns) {
+  const tbody = byId("vkbBodyCallsigns");
+  if (!tbody) return;
+
+  if (callsigns.length === 0) {
+    renderVkbEmpty(tbody, 5, vkbSearchQuery ? 'No callsigns found' : 'Enter a search term');
+    return;
+  }
+
+  tbody.innerHTML = "";
+  callsigns.forEach(c => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">${escapeHtml(c['CALLSIGN'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(c['TRICODE'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(c['COMMON NAME'] || '-')}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(c['COUNTRY'] || '-')}</td>
+      <td style="padding: 8px; text-align: right;">
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="callsign" data-code="${escapeHtml(c['CALLSIGN'] || '')}">Use</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+/**
+ * Render "Locations" tab
+ */
+function renderVkbLocations(locations) {
+  const tbody = byId("vkbBodyLocations");
+  if (!tbody) return;
+
+  if (locations.length === 0) {
+    renderVkbEmpty(tbody, 6, vkbSearchQuery ? 'No locations found' : 'Enter a search term');
+    return;
+  }
+
+  tbody.innerHTML = "";
+  locations.forEach(l => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">${escapeHtml(l['ICAO CODE'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(l['IATA CODE'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(l['AIRPORT'] || '-')}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(l['LOCATION SERVED'] || '-')}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(l['COUNTRY'] || '-')}</td>
+      <td style="padding: 8px; text-align: right;">
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="location" data-code="${escapeHtml(l['ICAO CODE'] || '')}">Use</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+/**
+ * Render "Registrations" tab
+ */
+function renderVkbRegistrations(regs) {
+  const tbody = byId("vkbBodyRegistrations");
+  if (!tbody) return;
+
+  if (regs.length === 0) {
+    renderVkbEmpty(tbody, 5, vkbSearchQuery ? 'No registrations found' : 'Enter a search term');
+    return;
+  }
+
+  tbody.innerHTML = "";
+  regs.forEach(r => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td style="padding: 8px; font-family: monospace; font-weight: 600;">${escapeHtml(r['REGISTRATION'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(r['OPERATOR'] || '-')}</td>
+      <td style="padding: 8px;">${escapeHtml(r['TYPE'] || '-')}</td>
+      <td style="padding: 8px; font-size: 12px; color: #666;">${escapeHtml(r['EGOW FLIGHT TYPE'] || '-')}</td>
+      <td style="padding: 8px; text-align: right;">
+        <button class="btn btn-sm btn-secondary js-vkb-use" data-kind="registration" data-code="${escapeHtml(r['REGISTRATION'] || '')}">Use</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+/**
+ * Render VKB lookup results for current category
+ */
+function renderVkbLookup() {
+  const status = getVKBStatus();
+  if (!status.loaded) {
+    // Show error in all tables
+    ['vkbBodyAll', 'vkbBodyTypes', 'vkbBodyCallsigns', 'vkbBodyLocations', 'vkbBodyRegistrations'].forEach(id => {
+      const tbody = byId(id);
+      if (tbody) {
+        renderVkbEmpty(tbody, 5, status.error ? `Error: ${status.error}` : 'VKB data not loaded');
+      }
+    });
+    return;
+  }
+
+  // Perform search
+  const results = searchAll(vkbSearchQuery, 50);
+
+  // Render all categories
+  renderVkbAll(results);
+  renderVkbTypes(results.aircraftTypes);
+  renderVkbCallsigns(results.callsigns);
+  renderVkbLocations(results.locations);
+  renderVkbRegistrations(results.registrations);
+
+  // Bind all "Use" buttons
+  document.querySelectorAll('.js-vkb-use').forEach(btn => {
     btn.addEventListener('click', () => {
       const kind = btn.dataset.kind;
       const code = btn.dataset.code;
-      showToast(`"${code}" ready to use (auto-fill coming in next update)`, 'info', 3000);
+      showToast(`"${code}" ready to use (auto-fill coming soon)`, 'info', 3000);
     });
+  });
+}
+
+/**
+ * Switch VKB category tab
+ */
+function switchVkbCategory(category) {
+  vkbActiveCategory = category;
+
+  // Update tab buttons
+  document.querySelectorAll('.vkb-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.category === category);
+  });
+
+  // Show/hide category content
+  document.querySelectorAll('.vkb-category-content').forEach(content => {
+    const contentId = content.id.replace('vkb-', '');
+    content.classList.toggle('hidden', contentId !== category);
   });
 }
 
@@ -2238,6 +2369,14 @@ export function initVkbLookup() {
     debouncedSearch(e.target.value);
   });
 
+  // Bind category tabs
+  document.querySelectorAll('.vkb-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      switchVkbCategory(tab.dataset.category);
+    });
+  });
+
+  // Initial render
   renderVkbLookup();
 }
 
