@@ -28,7 +28,8 @@ import { showToast } from "./app.js";
 
 import {
   searchAll,
-  getVKBStatus
+  getVKBStatus,
+  getAutocompleteSuggestions
 } from "./vkb.js";
 
 /* -----------------------------
@@ -586,6 +587,10 @@ function openModal(contentHtml) {
   `;
 
   const backdrop = root.querySelector(".modal-backdrop");
+  const modal = root.querySelector(".modal");
+
+  // Initialize autocomplete for modal inputs
+  initModalAutocomplete(modal);
 
   const closeModal = () => {
     root.innerHTML = "";
@@ -2378,6 +2383,164 @@ export function initVkbLookup() {
 
   // Initial render
   renderVkbLookup();
+}
+
+/* -----------------------------
+   Autocomplete
+------------------------------ */
+
+/**
+ * Create autocomplete for an input field
+ * @param {HTMLElement} input - Input element
+ * @param {string} fieldType - 'type', 'callsign', 'location', 'registration'
+ */
+function createAutocomplete(input, fieldType) {
+  if (!input) return;
+
+  // Wrap input in container if not already wrapped
+  let container = input.parentElement;
+  if (!container.classList.contains('autocomplete-container')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'autocomplete-container';
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+    container = wrapper;
+  }
+
+  // Create suggestions dropdown
+  let suggestionsDiv = container.querySelector('.autocomplete-suggestions');
+  if (!suggestionsDiv) {
+    suggestionsDiv = document.createElement('div');
+    suggestionsDiv.className = 'autocomplete-suggestions';
+    container.appendChild(suggestionsDiv);
+  }
+
+  let selectedIndex = -1;
+  let currentSuggestions = [];
+
+  // Update suggestions
+  const updateSuggestions = (query) => {
+    if (!query || query.length < 2) {
+      suggestionsDiv.classList.remove('active');
+      currentSuggestions = [];
+      return;
+    }
+
+    const suggestions = getAutocompleteSuggestions(fieldType, query, 10);
+    currentSuggestions = suggestions;
+
+    if (suggestions.length === 0) {
+      suggestionsDiv.innerHTML = '<div class="autocomplete-empty">No matches found</div>';
+      suggestionsDiv.classList.add('active');
+      return;
+    }
+
+    suggestionsDiv.innerHTML = suggestions
+      .map((s, idx) => `
+        <div class="autocomplete-item" data-index="${idx}" data-value="${escapeHtml(s)}">
+          <span class="autocomplete-item-code">${escapeHtml(s)}</span>
+        </div>
+      `)
+      .join('');
+
+    suggestionsDiv.classList.add('active');
+    selectedIndex = -1;
+  };
+
+  // Debounced update
+  const debouncedUpdate = debounce(updateSuggestions, 200);
+
+  // Input event
+  input.addEventListener('input', (e) => {
+    debouncedUpdate(e.target.value);
+  });
+
+  // Keyboard navigation
+  input.addEventListener('keydown', (e) => {
+    const items = suggestionsDiv.querySelectorAll('.autocomplete-item');
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateSelection(items);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        updateSelection(items);
+      }
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault();
+      if (currentSuggestions[selectedIndex]) {
+        input.value = currentSuggestions[selectedIndex];
+        suggestionsDiv.classList.remove('active');
+        selectedIndex = -1;
+      }
+    } else if (e.key === 'Escape') {
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }
+  });
+
+  // Update visual selection
+  function updateSelection(items) {
+    items.forEach((item, idx) => {
+      item.classList.toggle('selected', idx === selectedIndex);
+    });
+    if (selectedIndex >= 0 && items[selectedIndex]) {
+      items[selectedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // Click on suggestion
+  suggestionsDiv.addEventListener('click', (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (item) {
+      const value = item.dataset.value;
+      input.value = value;
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }
+  });
+
+  // Close on focus loss (with delay to allow click)
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }, 200);
+  });
+
+  // Focus opens suggestions if there's text
+  input.addEventListener('focus', () => {
+    if (input.value.length >= 2) {
+      updateSuggestions(input.value);
+    }
+  });
+}
+
+/**
+ * Add autocomplete to modal input fields
+ * Call this after a modal is created
+ */
+export function initModalAutocomplete(modal) {
+  if (!modal) return;
+
+  // Find autocomplete fields
+  const callsignInputs = modal.querySelectorAll('#newCallsign, #editCallsign, #dupCallsign');
+  const typeInputs = modal.querySelectorAll('#newType, #editType, #dupType');
+  const regInputs = modal.querySelectorAll('#newReg, #editReg, #dupReg');
+  const depAdInputs = modal.querySelectorAll('#newDepAd, #editDepAd, #dupDepAd');
+  const arrAdInputs = modal.querySelectorAll('#newArrAd, #editArrAd, #dupArrAd');
+
+  // Create autocomplete for each field type
+  callsignInputs.forEach(input => createAutocomplete(input, 'callsign'));
+  typeInputs.forEach(input => createAutocomplete(input, 'type'));
+  regInputs.forEach(input => createAutocomplete(input, 'registration'));
+  depAdInputs.forEach(input => createAutocomplete(input, 'location'));
+  arrAdInputs.forEach(input => createAutocomplete(input, 'location'));
 }
 
 export function initAdminPanel() {
