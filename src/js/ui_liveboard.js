@@ -29,7 +29,9 @@ import { showToast } from "./app.js";
 import {
   searchAll,
   getVKBStatus,
-  getAutocompleteSuggestions
+  getAutocompleteSuggestions,
+  lookupRegistration,
+  lookupCallsign
 } from "./vkb.js";
 
 /* -----------------------------
@@ -707,11 +709,11 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input id="newPob" class="modal-input" type="number" placeholder="2" />
+        <input id="newPob" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newTng" class="modal-input" type="number" placeholder="0" />
+        <input id="newTng" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -724,14 +726,44 @@ function openNewFlightModal(flightType = "DEP") {
     </div>
   `);
 
-  // Bind type inference to registration field
+  // Bind registration and callsign field interactions with VKB
+  const callsignInput = document.getElementById("newCallsign");
   const regInput = document.getElementById("newReg");
   const typeInput = document.getElementById("newType");
+  const pobInput = document.getElementById("newPob");
+
+  // When registration is entered, auto-fill type and callsign (if fixed)
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
-      const inferredType = inferTypeFromReg(regInput.value);
-      if (inferredType) {
-        typeInput.value = inferredType;
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill aircraft type from VKB
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-') {
+          typeInput.value = vkbType;
+        }
+
+        // Auto-fill callsign if fixed
+        const fixedCallsign = regData['FIXED C/S'];
+        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
+          callsignInput.value = fixedCallsign;
+        }
+      } else {
+        // Fallback to hardcoded lookup if not in VKB
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) {
+          typeInput.value = inferredType;
+        }
+      }
+    });
+  }
+
+  // When callsign is entered, check for default POB pattern (UAM* = 2)
+  if (callsignInput && pobInput) {
+    callsignInput.addEventListener("input", () => {
+      const cs = callsignInput.value.toUpperCase().trim();
+      if (cs.startsWith('UAM') && !pobInput.value) {
+        pobInput.value = '2';
       }
     });
   }
@@ -923,11 +955,11 @@ function openNewLocalModal() {
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newLocTng" class="modal-input" type="number" placeholder="6" />
+        <input id="newLocTng" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input id="newLocPob" class="modal-input" type="number" placeholder="2" />
+        <input id="newLocPob" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -940,14 +972,44 @@ function openNewLocalModal() {
     </div>
   `);
 
-  // Bind type inference to registration field
+  // Bind registration and callsign field interactions with VKB
+  const callsignInput = document.getElementById("newLocCallsign");
   const regInput = document.getElementById("newLocReg");
   const typeInput = document.getElementById("newLocType");
+  const pobInput = document.getElementById("newLocPob");
+
+  // When registration is entered, auto-fill type and callsign (if fixed)
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
-      const inferredType = inferTypeFromReg(regInput.value);
-      if (inferredType) {
-        typeInput.value = inferredType;
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill aircraft type from VKB
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-') {
+          typeInput.value = vkbType;
+        }
+
+        // Auto-fill callsign if fixed
+        const fixedCallsign = regData['FIXED C/S'];
+        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
+          callsignInput.value = fixedCallsign;
+        }
+      } else {
+        // Fallback to hardcoded lookup if not in VKB
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) {
+          typeInput.value = inferredType;
+        }
+      }
+    });
+  }
+
+  // When callsign is entered, check for default POB pattern (UAM* = 2)
+  if (callsignInput && pobInput) {
+    callsignInput.addEventListener("input", () => {
+      const cs = callsignInput.value.toUpperCase().trim();
+      if (cs.startsWith('UAM') && pobInput.value === '0') {
+        pobInput.value = '2';
       }
     });
   }
