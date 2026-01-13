@@ -142,27 +142,113 @@
         <!-- VKB -->
         <section id="tab-vkb" class="tab-panel hidden">
           <div class="page-title">VKB Lookup</div>
-          <div class="page-subtitle">Static demo lookup (in-memory) for callsigns, locations, types.</div>
+          <div class="page-subtitle">Search across aircraft types, callsigns, locations, and registrations.</div>
 
           <div class="panel">
             <div class="lookup-toolbar">
-              <input class="field field-search-global" id="vkbSearch" type="search" placeholder="Search VKB demo…" />
-              <div class="lookup-hint">Demo dataset only. Later: backed by Vectair KB.</div>
+              <input class="field field-search-global" id="vkbSearch" type="search" placeholder="Search across all VKB data…" />
+              <div class="lookup-hint">Loaded from CSV databases (~6,000+ records)</div>
             </div>
 
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kind</th>
-                    <th>Code</th>
-                    <th>Label</th>
-                    <th>Details</th>
-                    <th style="width: 110px; text-align: right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="vkbBody"></tbody>
-              </table>
+            <!-- Category Tabs -->
+            <div class="vkb-category-tabs">
+              <button class="vkb-tab active" data-category="all">All Results</button>
+              <button class="vkb-tab" data-category="types">Aircraft Types</button>
+              <button class="vkb-tab" data-category="callsigns">Callsigns</button>
+              <button class="vkb-tab" data-category="locations">Locations</button>
+              <button class="vkb-tab" data-category="registrations">Registrations</button>
+            </div>
+
+            <!-- All Results -->
+            <div class="vkb-category-content" id="vkb-all">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Code</th>
+                      <th>Label</th>
+                      <th>Details</th>
+                      <th style="width: 110px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vkbBodyAll"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Aircraft Types -->
+            <div class="vkb-category-content hidden" id="vkb-types">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ICAO</th>
+                      <th>Manufacturer</th>
+                      <th>Model</th>
+                      <th>WTC</th>
+                      <th>Common Name</th>
+                      <th style="width: 110px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vkbBodyTypes"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Callsigns -->
+            <div class="vkb-category-content hidden" id="vkb-callsigns">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Callsign</th>
+                      <th>Tricode</th>
+                      <th>Common Name</th>
+                      <th>Country</th>
+                      <th style="width: 110px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vkbBodyCallsigns"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Locations -->
+            <div class="vkb-category-content hidden" id="vkb-locations">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ICAO</th>
+                      <th>IATA</th>
+                      <th>Airport</th>
+                      <th>Location Served</th>
+                      <th>Country</th>
+                      <th style="width: 110px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vkbBodyLocations"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Registrations -->
+            <div class="vkb-category-content hidden" id="vkb-registrations">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Registration</th>
+                      <th>Operator</th>
+                      <th>Type</th>
+                      <th>Flight Type</th>
+                      <th style="width: 110px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="vkbBodyRegistrations"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
