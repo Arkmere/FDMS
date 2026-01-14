@@ -28,7 +28,10 @@ import { showToast } from "./app.js";
 
 import {
   searchAll,
-  getVKBStatus
+  getVKBStatus,
+  getAutocompleteSuggestions,
+  lookupRegistration,
+  lookupCallsign
 } from "./vkb.js";
 
 /* -----------------------------
@@ -586,6 +589,10 @@ function openModal(contentHtml) {
   `;
 
   const backdrop = root.querySelector(".modal-backdrop");
+  const modal = root.querySelector(".modal");
+
+  // Initialize autocomplete for modal inputs
+  initModalAutocomplete(modal);
 
   const closeModal = () => {
     root.innerHTML = "";
@@ -702,11 +709,11 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input id="newPob" class="modal-input" type="number" placeholder="2" />
+        <input id="newPob" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newTng" class="modal-input" type="number" placeholder="0" />
+        <input id="newTng" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -719,14 +726,44 @@ function openNewFlightModal(flightType = "DEP") {
     </div>
   `);
 
-  // Bind type inference to registration field
+  // Bind registration and callsign field interactions with VKB
+  const callsignInput = document.getElementById("newCallsign");
   const regInput = document.getElementById("newReg");
   const typeInput = document.getElementById("newType");
+  const pobInput = document.getElementById("newPob");
+
+  // When registration is entered, auto-fill type and callsign (if fixed)
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
-      const inferredType = inferTypeFromReg(regInput.value);
-      if (inferredType) {
-        typeInput.value = inferredType;
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill aircraft type from VKB
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-') {
+          typeInput.value = vkbType;
+        }
+
+        // Auto-fill callsign if fixed
+        const fixedCallsign = regData['FIXED C/S'];
+        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
+          callsignInput.value = fixedCallsign;
+        }
+      } else {
+        // Fallback to hardcoded lookup if not in VKB
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) {
+          typeInput.value = inferredType;
+        }
+      }
+    });
+  }
+
+  // When callsign is entered, check for default POB pattern (UAM* = 2)
+  if (callsignInput && pobInput) {
+    callsignInput.addEventListener("input", () => {
+      const cs = callsignInput.value.toUpperCase().trim();
+      if (cs.startsWith('UAM') && !pobInput.value) {
+        pobInput.value = '2';
       }
     });
   }
@@ -918,11 +955,11 @@ function openNewLocalModal() {
       </div>
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newLocTng" class="modal-input" type="number" placeholder="6" />
+        <input id="newLocTng" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
-        <input id="newLocPob" class="modal-input" type="number" placeholder="2" />
+        <input id="newLocPob" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -935,14 +972,44 @@ function openNewLocalModal() {
     </div>
   `);
 
-  // Bind type inference to registration field
+  // Bind registration and callsign field interactions with VKB
+  const callsignInput = document.getElementById("newLocCallsign");
   const regInput = document.getElementById("newLocReg");
   const typeInput = document.getElementById("newLocType");
+  const pobInput = document.getElementById("newLocPob");
+
+  // When registration is entered, auto-fill type and callsign (if fixed)
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
-      const inferredType = inferTypeFromReg(regInput.value);
-      if (inferredType) {
-        typeInput.value = inferredType;
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill aircraft type from VKB
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-') {
+          typeInput.value = vkbType;
+        }
+
+        // Auto-fill callsign if fixed
+        const fixedCallsign = regData['FIXED C/S'];
+        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
+          callsignInput.value = fixedCallsign;
+        }
+      } else {
+        // Fallback to hardcoded lookup if not in VKB
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) {
+          typeInput.value = inferredType;
+        }
+      }
+    });
+  }
+
+  // When callsign is entered, check for default POB pattern (UAM* = 2)
+  if (callsignInput && pobInput) {
+    callsignInput.addEventListener("input", () => {
+      const cs = callsignInput.value.toUpperCase().trim();
+      if (cs.startsWith('UAM') && pobInput.value === '0') {
+        pobInput.value = '2';
       }
     });
   }
@@ -2378,6 +2445,164 @@ export function initVkbLookup() {
 
   // Initial render
   renderVkbLookup();
+}
+
+/* -----------------------------
+   Autocomplete
+------------------------------ */
+
+/**
+ * Create autocomplete for an input field
+ * @param {HTMLElement} input - Input element
+ * @param {string} fieldType - 'type', 'callsign', 'location', 'registration'
+ */
+function createAutocomplete(input, fieldType) {
+  if (!input) return;
+
+  // Wrap input in container if not already wrapped
+  let container = input.parentElement;
+  if (!container.classList.contains('autocomplete-container')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'autocomplete-container';
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+    container = wrapper;
+  }
+
+  // Create suggestions dropdown
+  let suggestionsDiv = container.querySelector('.autocomplete-suggestions');
+  if (!suggestionsDiv) {
+    suggestionsDiv = document.createElement('div');
+    suggestionsDiv.className = 'autocomplete-suggestions';
+    container.appendChild(suggestionsDiv);
+  }
+
+  let selectedIndex = -1;
+  let currentSuggestions = [];
+
+  // Update suggestions
+  const updateSuggestions = (query) => {
+    if (!query || query.length < 2) {
+      suggestionsDiv.classList.remove('active');
+      currentSuggestions = [];
+      return;
+    }
+
+    const suggestions = getAutocompleteSuggestions(fieldType, query, 10);
+    currentSuggestions = suggestions;
+
+    if (suggestions.length === 0) {
+      suggestionsDiv.innerHTML = '<div class="autocomplete-empty">No matches found</div>';
+      suggestionsDiv.classList.add('active');
+      return;
+    }
+
+    suggestionsDiv.innerHTML = suggestions
+      .map((s, idx) => `
+        <div class="autocomplete-item" data-index="${idx}" data-value="${escapeHtml(s)}">
+          <span class="autocomplete-item-code">${escapeHtml(s)}</span>
+        </div>
+      `)
+      .join('');
+
+    suggestionsDiv.classList.add('active');
+    selectedIndex = -1;
+  };
+
+  // Debounced update
+  const debouncedUpdate = debounce(updateSuggestions, 200);
+
+  // Input event
+  input.addEventListener('input', (e) => {
+    debouncedUpdate(e.target.value);
+  });
+
+  // Keyboard navigation
+  input.addEventListener('keydown', (e) => {
+    const items = suggestionsDiv.querySelectorAll('.autocomplete-item');
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateSelection(items);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        updateSelection(items);
+      }
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault();
+      if (currentSuggestions[selectedIndex]) {
+        input.value = currentSuggestions[selectedIndex];
+        suggestionsDiv.classList.remove('active');
+        selectedIndex = -1;
+      }
+    } else if (e.key === 'Escape') {
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }
+  });
+
+  // Update visual selection
+  function updateSelection(items) {
+    items.forEach((item, idx) => {
+      item.classList.toggle('selected', idx === selectedIndex);
+    });
+    if (selectedIndex >= 0 && items[selectedIndex]) {
+      items[selectedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // Click on suggestion
+  suggestionsDiv.addEventListener('click', (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (item) {
+      const value = item.dataset.value;
+      input.value = value;
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }
+  });
+
+  // Close on focus loss (with delay to allow click)
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      suggestionsDiv.classList.remove('active');
+      selectedIndex = -1;
+    }, 200);
+  });
+
+  // Focus opens suggestions if there's text
+  input.addEventListener('focus', () => {
+    if (input.value.length >= 2) {
+      updateSuggestions(input.value);
+    }
+  });
+}
+
+/**
+ * Add autocomplete to modal input fields
+ * Call this after a modal is created
+ */
+export function initModalAutocomplete(modal) {
+  if (!modal) return;
+
+  // Find autocomplete fields
+  const callsignInputs = modal.querySelectorAll('#newCallsign, #editCallsign, #dupCallsign');
+  const typeInputs = modal.querySelectorAll('#newType, #editType, #dupType');
+  const regInputs = modal.querySelectorAll('#newReg, #editReg, #dupReg');
+  const depAdInputs = modal.querySelectorAll('#newDepAd, #editDepAd, #dupDepAd');
+  const arrAdInputs = modal.querySelectorAll('#newArrAd, #editArrAd, #dupArrAd');
+
+  // Create autocomplete for each field type
+  callsignInputs.forEach(input => createAutocomplete(input, 'callsign'));
+  typeInputs.forEach(input => createAutocomplete(input, 'type'));
+  regInputs.forEach(input => createAutocomplete(input, 'registration'));
+  depAdInputs.forEach(input => createAutocomplete(input, 'location'));
+  arrAdInputs.forEach(input => createAutocomplete(input, 'location'));
 }
 
 export function initAdminPanel() {

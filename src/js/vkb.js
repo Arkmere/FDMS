@@ -288,12 +288,12 @@ export function searchLocations(query, limit = 50) {
 export function searchRegistrations(query, limit = 50) {
   if (!vkbData.loaded) return [];
 
-  const q = query.toLowerCase().trim();
+  const q = query.toLowerCase().trim().replace(/-/g, ''); // Remove dashes from query
   if (!q) return vkbData.registrations.slice(0, limit);
 
   return vkbData.registrations
     .filter(reg => {
-      const registration = (reg['REGISTRATION'] || '').toLowerCase();
+      const registration = (reg['REGISTRATION'] || '').toLowerCase().replace(/-/g, ''); // Remove dashes
       const operator = (reg['OPERATOR'] || '').toLowerCase();
       const type = (reg['TYPE'] || '').toLowerCase();
 
@@ -347,4 +347,44 @@ export function getAutocompleteSuggestions(fieldType, query, limit = 10) {
     default:
       return [];
   }
+}
+
+/**
+ * Look up a registration in the VKB database
+ * @param {string} registration - Registration to look up (e.g., "G-BYUN")
+ * @returns {Object|null} Registration data or null if not found
+ */
+export function lookupRegistration(registration) {
+  if (!vkbData.loaded || !registration) return null;
+  
+  const normalized = registration.toUpperCase().trim().replace(/-/g, '');
+  
+  return vkbData.registrations.find(reg => {
+    const regNormalized = (reg['REGISTRATION'] || '').toUpperCase().replace(/-/g, '');
+    return regNormalized === normalized;
+  }) || null;
+}
+
+/**
+ * Look up a callsign in the VKB database
+ * @param {string} callsign - Callsign to look up
+ * @returns {Object|null} Callsign data or null if not found
+ */
+export function lookupCallsign(callsign) {
+  if (!vkbData.loaded || !callsign) return null;
+  
+  const normalized = callsign.toUpperCase().trim();
+  
+  // Search both standard and nonstandard callsigns
+  let result = vkbData.callsignsStandard.find(cs => 
+    (cs['CALLSIGN'] || '').toUpperCase() === normalized
+  );
+  
+  if (!result) {
+    result = vkbData.callsignsNonstandard.find(cs => 
+      (cs['CALLSIGN'] || '').toUpperCase() === normalized
+    );
+  }
+  
+  return result || null;
 }
