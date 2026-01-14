@@ -480,3 +480,36 @@ export function lookupCallsign(callsign) {
 
   return result || null;
 }
+
+/**
+ * Get voice callsign for display on strip (only if different from contraction and registration)
+ * @param {string} contraction - The callsign contraction (e.g., "BAW")
+ * @param {string} registration - The aircraft registration (e.g., "G-BYUN")
+ * @returns {string} Voice callsign to display, or empty string if shouldn't be shown
+ */
+export function getVoiceCallsignForDisplay(contraction, registration) {
+  if (!vkbData.loaded || !contraction) return '';
+
+  // Look up the callsign (strip flight number to get base callsign)
+  const baseCallsign = contraction.replace(/\d+$/, '').trim();
+  if (!baseCallsign) return '';
+
+  const csData = lookupCallsign(baseCallsign);
+  if (!csData || !csData['CALLSIGN']) return '';
+
+  const voiceCallsign = csData['CALLSIGN'].toUpperCase().trim();
+  const contractionNormalized = contraction.toUpperCase().trim();
+  const registrationNormalized = (registration || '').toUpperCase().trim().replace(/-/g, '');
+
+  // Don't show if voice callsign is same as contraction
+  if (voiceCallsign === contractionNormalized) {
+    return '';
+  }
+
+  // Don't show if voice callsign is just the registration (with or without dash)
+  if (voiceCallsign === registrationNormalized || voiceCallsign.replace(/-/g, '') === registrationNormalized) {
+    return '';
+  }
+
+  return voiceCallsign;
+}

@@ -32,7 +32,8 @@ import {
   getAutocompleteSuggestions,
   lookupRegistration,
   lookupRegistrationByFixedCallsign,
-  lookupCallsign
+  lookupCallsign,
+  getVoiceCallsignForDisplay
 } from "./vkb.js";
 
 /* -----------------------------
@@ -478,10 +479,10 @@ export function renderLiveBoard() {
       <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
       <td>
         <div class="call-main">${escapeHtml(m.callsignCode)}</div>
-        <div class="call-sub">${m.callsignLabel ? escapeHtml(m.callsignLabel) : "&nbsp;"}</div>
+        <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? " · " + escapeHtml(m.type) : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
@@ -938,22 +939,27 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
-    // Get warnings, notes, and operator from VKB registration data
+    // Get warnings, notes, operator, and popular name from VKB registration data
     const regValue = document.getElementById("newReg")?.value || "";
     const regData = lookupRegistration(regValue);
     const warnings = regData ? (regData['WARNINGS'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+
+    // Get voice callsign for display (only if different from contraction/registration)
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
     // Create movement
     const movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
-      callsignVoice: "",
+      callsignVoice: voiceCallsign,
       registration: regValue,
       operator: operator,
       type: document.getElementById("newType")?.value || "",
+      popularName: popularName,
       wtc: "L (ICAO)",
       depAd: document.getElementById("newDepAd")?.value || "",
       depName: "",
@@ -966,10 +972,10 @@ function openNewFlightModal(flightType = "DEP") {
       dof: dof,
       rules: document.getElementById("newRules")?.value || "VFR",
       flightType: document.getElementById("newFlightType")?.value || flightType,
-      isLocal: flightType === "LOC",
+      isLocal: (document.getElementById("newFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
       osCount: 0,
-      fisCount: 0,
+      fisCount: (document.getElementById("newFlightType")?.value || flightType) === "OVR" ? 1 : 0,
       egowCode: egowCode,
       egowDesc: "",
       unitCode: document.getElementById("newUnitCode")?.value || "",
@@ -1255,14 +1261,21 @@ function openNewLocalModal() {
       return;
     }
 
+    // Get voice callsign for display (only if different from contraction/registration)
+    const regValue = document.getElementById("newLocReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+
     // Create movement
     const movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
-      callsignVoice: "",
+      callsignVoice: voiceCallsign,
       registration: document.getElementById("newLocReg")?.value || "",
       type: document.getElementById("newLocType")?.value || "",
+      popularName: popularName,
       wtc: "L (ICAO)",
       depAd: "EGOW",
       depName: "RAF Woodvale",
@@ -1278,7 +1291,7 @@ function openNewLocalModal() {
       isLocal: true,
       tngCount: parseInt(tng, 10),
       osCount: 0,
-      fisCount: 0,
+      fisCount: "LOC" === "OVR" ? 1 : 0,
       egowCode: document.getElementById("newLocEgowCode")?.value || "",
       egowDesc: "",
       unitCode: document.getElementById("newLocUnitCode")?.value || "",
@@ -1861,14 +1874,21 @@ function openDuplicateMovementModal(m) {
       return;
     }
 
+    // Get voice callsign for display (only if different from contraction/registration)
+    const regValue = document.getElementById("dupReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+
     // Create movement
     const movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: m.callsignLabel || "",
-      callsignVoice: m.callsignVoice || "",
+      callsignVoice: voiceCallsign,
       registration: document.getElementById("dupReg")?.value || "",
       type: document.getElementById("dupType")?.value || "",
+      popularName: popularName,
       wtc: m.wtc || "L (ICAO)",
       depAd: document.getElementById("dupDepAd")?.value || "",
       depName: m.depName || "",
@@ -1884,7 +1904,7 @@ function openDuplicateMovementModal(m) {
       isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
       osCount: m.osCount || 0,
-      fisCount: m.fisCount || 0,
+      fisCount: (document.getElementById("dupFlightType")?.value || m.flightType) === "OVR" ? 1 : 0,
       egowCode: m.egowCode || "",
       egowDesc: m.egowDesc || "",
       unitCode: m.unitCode || "",
@@ -2110,10 +2130,10 @@ export function renderHistoryBoard() {
       <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
       <td>
         <div class="call-main">${escapeHtml(m.callsignCode)}</div>
-        <div class="call-sub">${m.callsignLabel ? escapeHtml(m.callsignLabel) : "&nbsp;"}</div>
+        <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? " · " + escapeHtml(m.type) : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
@@ -2803,9 +2823,14 @@ function createAutocomplete(input, fieldType) {
     } else if (e.key === 'Enter' && selectedIndex >= 0) {
       e.preventDefault();
       if (currentSuggestions[selectedIndex]) {
-        input.value = currentSuggestions[selectedIndex];
+        const suggestion = currentSuggestions[selectedIndex];
+        const value = typeof suggestion === 'object' ? suggestion.primary : suggestion;
+        input.value = value;
         suggestionsDiv.classList.remove('active');
         selectedIndex = -1;
+
+        // Auto-focus Flight Number field if this is a Callsign Code field
+        focusFlightNumberIfCallsignCode(input);
       }
     } else if (e.key === 'Escape') {
       suggestionsDiv.classList.remove('active');
@@ -2823,6 +2848,19 @@ function createAutocomplete(input, fieldType) {
     }
   }
 
+  // Helper: Focus Flight Number field if input is Callsign Code
+  function focusFlightNumberIfCallsignCode(inputEl) {
+    const inputId = inputEl.id || '';
+    if (inputId.includes('CallsignCode') || inputId.includes('Callsign')) {
+      // Find corresponding Flight Number field
+      const flightNumberId = inputId.replace('CallsignCode', 'FlightNumber').replace('Callsign', 'FlightNumber');
+      const flightNumberField = document.getElementById(flightNumberId);
+      if (flightNumberField) {
+        setTimeout(() => flightNumberField.focus(), 50);
+      }
+    }
+  }
+
   // Click on suggestion
   suggestionsDiv.addEventListener('click', (e) => {
     const item = e.target.closest('.autocomplete-item');
@@ -2831,6 +2869,9 @@ function createAutocomplete(input, fieldType) {
       input.value = value;
       suggestionsDiv.classList.remove('active');
       selectedIndex = -1;
+
+      // Auto-focus Flight Number field if this is a Callsign Code field
+      focusFlightNumberIfCallsignCode(input);
     }
   });
 
