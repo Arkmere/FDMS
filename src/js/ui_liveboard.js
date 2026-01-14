@@ -414,6 +414,8 @@ function renderExpandedRow(tbody, m) {
           <div class="kv-label">Callsign (voice)</div><div class="kv-value">${escapeHtml(m.callsignVoice || "—")}</div>
           <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
           <div class="kv-label">Remarks</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
+          ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">Warnings</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
+          ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">Notes</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
         </div>
       </div>
 
@@ -643,12 +645,16 @@ function openNewFlightModal(flightType = "DEP") {
     </div>
     <div class="modal-body">
       <div class="modal-field">
-        <label class="modal-label">Callsign</label>
-        <input id="newCallsign" class="modal-input" placeholder="e.g. CONNECT or CNNCT22" />
+        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
+        <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
+        <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123, 01" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
-        <input id="newReg" class="modal-input" placeholder="e.g. ZM300" />
+        <input id="newReg" class="modal-input" placeholder="e.g. ZM300, G-BYUN" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Aircraft Type</label>
@@ -672,14 +678,6 @@ function openNewFlightModal(flightType = "DEP") {
           <option>Y</option>
           <option>Z</option>
         </select>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
-        <input id="newEgowCode" class="modal-input" placeholder="e.g. VM, BC" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
-        <input id="newUnitCode" class="modal-input" placeholder="e.g. L, M" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Departure AD</label>
@@ -729,6 +727,14 @@ function openNewFlightModal(flightType = "DEP") {
         <label class="modal-label">Remarks</label>
         <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
       </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
+        <input id="newEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
+        <input id="newUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
@@ -737,26 +743,43 @@ function openNewFlightModal(flightType = "DEP") {
   `);
 
   // Bind registration and callsign field interactions with VKB
-  const callsignInput = document.getElementById("newCallsign");
+  const callsignCodeInput = document.getElementById("newCallsignCode");
+  const flightNumberInput = document.getElementById("newFlightNumber");
   const regInput = document.getElementById("newReg");
   const typeInput = document.getElementById("newType");
   const pobInput = document.getElementById("newPob");
+  const egowCodeInput = document.getElementById("newEgowCode");
+  const unitCodeInput = document.getElementById("newUnitCode");
 
-  // When registration is entered, auto-fill type and callsign (if fixed)
+  // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
         // Auto-fill aircraft type from VKB
         const vkbType = regData['TYPE'];
-        if (vkbType && vkbType !== '-') {
+        if (vkbType && vkbType !== '-' && vkbType !== '') {
           typeInput.value = vkbType;
         }
 
-        // Auto-fill callsign if fixed
+        // Auto-fill EGOW Code from registration
+        const egowFlightType = regData['EGOW FLIGHT TYPE'];
+        if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput) {
+          egowCodeInput.value = egowFlightType;
+        }
+
+        // Auto-fill fixed callsign and flight number if available
         const fixedCallsign = regData['FIXED C/S'];
-        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
-          callsignInput.value = fixedCallsign;
+        if (fixedCallsign && fixedCallsign !== '-' && fixedCallsign !== '') {
+          // Try to split into callsign code and flight number
+          // e.g., "UAM01" → "UAM" + "01"
+          const match = fixedCallsign.match(/^([A-Z]+)(\d+.*)?$/);
+          if (match && callsignCodeInput && (!callsignCodeInput.value || callsignCodeInput.value === '')) {
+            callsignCodeInput.value = match[1]; // Code part
+            if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
+              flightNumberInput.value = match[2]; // Number part
+            }
+          }
         }
       } else {
         // Fallback to hardcoded lookup if not in VKB
@@ -768,14 +791,31 @@ function openNewFlightModal(flightType = "DEP") {
     });
   }
 
-  // When callsign is entered, check for default POB pattern (UAM* = 2)
-  if (callsignInput && pobInput) {
-    callsignInput.addEventListener("input", () => {
-      const cs = callsignInput.value.toUpperCase().trim();
-      if (cs.startsWith('UAM') && (pobInput.value === '0' || !pobInput.value)) {
-        pobInput.value = '2';
+  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  const updateCallsignDerivedFields = () => {
+    const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+    const number = flightNumberInput?.value?.trim() || '';
+    const fullCallsign = code + number;
+
+    // UAM* pattern → POB = 2
+    if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
+      pobInput.value = '2';
+    }
+
+    // Lookup unit code from full callsign
+    if (fullCallsign && unitCodeInput) {
+      const unitData = lookupCallsign(fullCallsign);
+      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
+        unitCodeInput.value = unitData['UC'];
       }
-    });
+    }
+  };
+
+  if (callsignCodeInput) {
+    callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+  }
+  if (flightNumberInput) {
+    flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
   // Bind local time display handlers
@@ -821,7 +861,9 @@ function openNewFlightModal(flightType = "DEP") {
     const arrPlanned = document.getElementById("newArrPlanned")?.value || "";
     const pob = document.getElementById("newPob")?.value || "0";
     const tng = document.getElementById("newTng")?.value || "0";
-    const callsign = document.getElementById("newCallsign")?.value || "";
+    const callsignCode = document.getElementById("newCallsignCode")?.value || "";
+    const flightNumber = document.getElementById("newFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber; // Combine for full callsign
 
     // Validate inputs
     const dofValidation = validateDate(dof);
@@ -854,11 +896,17 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
-    const callsignValidation = validateRequired(callsign, "Callsign");
+    const callsignValidation = validateRequired(callsignCode, "Callsign Code");
     if (!callsignValidation.valid) {
       showToast(callsignValidation.error, 'error');
       return;
     }
+
+    // Get warnings and notes from VKB registration data
+    const regValue = document.getElementById("newReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const warnings = regData ? (regData['WARNINGS'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
 
     // Create movement
     const movement = {
@@ -866,7 +914,7 @@ function openNewFlightModal(flightType = "DEP") {
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: "",
-      registration: document.getElementById("newReg")?.value || "",
+      registration: regValue,
       type: document.getElementById("newType")?.value || "",
       wtc: "L (ICAO)",
       depAd: document.getElementById("newDepAd")?.value || "",
@@ -891,6 +939,8 @@ function openNewFlightModal(flightType = "DEP") {
       captain: "",
       pob: parseInt(pob, 10),
       remarks: document.getElementById("newRemarks")?.value || "",
+      warnings: warnings,
+      notes: notes,
       formation: null
     };
 
@@ -916,8 +966,12 @@ function openNewLocalModal() {
     </div>
     <div class="modal-body">
       <div class="modal-field">
-        <label class="modal-label">Callsign</label>
-        <input id="newLocCallsign" class="modal-input" placeholder="e.g. UAM11 or WOODVALE 11" />
+        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
+        <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
+        <input id="newLocFlightNumber" class="modal-input" placeholder="e.g. 11, 01" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
@@ -972,16 +1026,16 @@ function openNewLocalModal() {
         <input id="newLocPob" class="modal-input" type="number" value="0" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
-        <input id="newLocEgowCode" class="modal-input" placeholder="e.g. VM, BC" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
-        <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M" />
-      </div>
-      <div class="modal-field">
         <label class="modal-label">Remarks</label>
         <textarea id="newLocRemarks" class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
+        <input id="newLocEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
+        <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
       </div>
     </div>
     <div class="modal-footer">
@@ -991,26 +1045,43 @@ function openNewLocalModal() {
   `);
 
   // Bind registration and callsign field interactions with VKB
-  const callsignInput = document.getElementById("newLocCallsign");
+  const callsignCodeInput = document.getElementById("newLocCallsignCode");
+  const flightNumberInput = document.getElementById("newLocFlightNumber");
   const regInput = document.getElementById("newLocReg");
   const typeInput = document.getElementById("newLocType");
   const pobInput = document.getElementById("newLocPob");
+  const egowCodeInput = document.getElementById("newLocEgowCode");
+  const unitCodeInput = document.getElementById("newLocUnitCode");
 
-  // When registration is entered, auto-fill type and callsign (if fixed)
+  // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
         // Auto-fill aircraft type from VKB
         const vkbType = regData['TYPE'];
-        if (vkbType && vkbType !== '-') {
+        if (vkbType && vkbType !== '-' && vkbType !== '') {
           typeInput.value = vkbType;
         }
 
-        // Auto-fill callsign if fixed
+        // Auto-fill EGOW Code from registration
+        const egowFlightType = regData['EGOW FLIGHT TYPE'];
+        if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput) {
+          egowCodeInput.value = egowFlightType;
+        }
+
+        // Auto-fill fixed callsign and flight number if available
         const fixedCallsign = regData['FIXED C/S'];
-        if (fixedCallsign && fixedCallsign !== '-' && callsignInput && !callsignInput.value) {
-          callsignInput.value = fixedCallsign;
+        if (fixedCallsign && fixedCallsign !== '-' && fixedCallsign !== '') {
+          // Try to split into callsign code and flight number
+          // e.g., "UAM01" → "UAM" + "01"
+          const match = fixedCallsign.match(/^([A-Z]+)(\d+.*)?$/);
+          if (match && callsignCodeInput && (!callsignCodeInput.value || callsignCodeInput.value === '')) {
+            callsignCodeInput.value = match[1]; // Code part
+            if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
+              flightNumberInput.value = match[2]; // Number part
+            }
+          }
         }
       } else {
         // Fallback to hardcoded lookup if not in VKB
@@ -1022,14 +1093,31 @@ function openNewLocalModal() {
     });
   }
 
-  // When callsign is entered, check for default POB pattern (UAM* = 2)
-  if (callsignInput && pobInput) {
-    callsignInput.addEventListener("input", () => {
-      const cs = callsignInput.value.toUpperCase().trim();
-      if (cs.startsWith('UAM') && pobInput.value === '0') {
-        pobInput.value = '2';
+  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  const updateCallsignDerivedFields = () => {
+    const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+    const number = flightNumberInput?.value?.trim() || '';
+    const fullCallsign = code + number;
+
+    // UAM* pattern → POB = 2
+    if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
+      pobInput.value = '2';
+    }
+
+    // Lookup unit code from full callsign
+    if (fullCallsign && unitCodeInput) {
+      const unitData = lookupCallsign(fullCallsign);
+      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
+        unitCodeInput.value = unitData['UC'];
       }
-    });
+    }
+  };
+
+  if (callsignCodeInput) {
+    callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+  }
+  if (flightNumberInput) {
+    flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
   // Bind local time display handlers
@@ -1075,7 +1163,9 @@ function openNewLocalModal() {
     const arrPlanned = document.getElementById("newLocEnd")?.value || "";
     const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
-    const callsign = document.getElementById("newLocCallsign")?.value || "";
+    const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
+    const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber; // Combine for full callsign
 
     // Validate inputs
     const dofValidation = validateDate(dof);
@@ -1166,6 +1256,11 @@ function openNewLocalModal() {
 function openEditMovementModal(m) {
   const flightType = m.flightType || "DEP";
 
+  // Split callsign into code and number parts for editing
+  const callsignMatch = (m.callsignCode || "").match(/^([A-Z]+)(\d+.*)?$/);
+  const callsignCode = callsignMatch ? callsignMatch[1] : (m.callsignCode || "");
+  const flightNumber = callsignMatch && callsignMatch[2] ? callsignMatch[2] : "";
+
   openModal(`
     <div class="modal-header">
       <div>
@@ -1176,8 +1271,12 @@ function openEditMovementModal(m) {
     </div>
     <div class="modal-body">
       <div class="modal-field">
-        <label class="modal-label">Callsign</label>
-        <input id="editCallsign" class="modal-input" value="${escapeHtml(m.callsignCode || "")}" />
+        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
+        <input id="editCallsignCode" class="modal-input" value="${escapeHtml(callsignCode)}" placeholder="e.g. BAW, CONNECT, G-BYUN" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
+        <input id="editFlightNumber" class="modal-input" value="${escapeHtml(flightNumber)}" placeholder="e.g. 123, 01" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Registration</label>
@@ -1275,16 +1374,16 @@ function openEditMovementModal(m) {
         <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
-        <input id="editEgowCode" class="modal-input" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. VM, BC" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
-        <input id="editUnitCode" class="modal-input" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M" />
-      </div>
-      <div class="modal-field">
         <label class="modal-label">Remarks</label>
         <textarea id="editRemarks" class="modal-textarea">${escapeHtml(m.remarks || "")}</textarea>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
+        <input id="editEgowCode" class="modal-input" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
+        <input id="editUnitCode" class="modal-input" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
       </div>
     </div>
     <div class="modal-footer">
@@ -1293,16 +1392,80 @@ function openEditMovementModal(m) {
     </div>
   `);
 
-  // Bind type inference
+  // Bind registration and callsign field interactions with VKB
+  const callsignCodeInput = document.getElementById("editCallsignCode");
+  const flightNumberInput = document.getElementById("editFlightNumber");
   const regInput = document.getElementById("editReg");
   const typeInput = document.getElementById("editType");
+  const pobInput = document.getElementById("editPob");
+  const egowCodeInput = document.getElementById("editEgowCode");
+  const unitCodeInput = document.getElementById("editUnitCode");
+
+  // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
-      const inferredType = inferTypeFromReg(regInput.value);
-      if (inferredType) {
-        typeInput.value = inferredType;
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill aircraft type from VKB
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-' && vkbType !== '') {
+          typeInput.value = vkbType;
+        }
+
+        // Auto-fill EGOW Code from registration
+        const egowFlightType = regData['EGOW FLIGHT TYPE'];
+        if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput) {
+          egowCodeInput.value = egowFlightType;
+        }
+
+        // Auto-fill fixed callsign and flight number if available
+        const fixedCallsign = regData['FIXED C/S'];
+        if (fixedCallsign && fixedCallsign !== '-' && fixedCallsign !== '') {
+          // Try to split into callsign code and flight number
+          // e.g., "UAM01" → "UAM" + "01"
+          const match = fixedCallsign.match(/^([A-Z]+)(\d+.*)?$/);
+          if (match && callsignCodeInput && (!callsignCodeInput.value || callsignCodeInput.value === '')) {
+            callsignCodeInput.value = match[1]; // Code part
+            if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
+              flightNumberInput.value = match[2]; // Number part
+            }
+          }
+        }
+      } else {
+        // Fallback to hardcoded lookup if not in VKB
+        const inferredType = inferTypeFromReg(regInput.value);
+        if (inferredType) {
+          typeInput.value = inferredType;
+        }
       }
     });
+  }
+
+  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  const updateCallsignDerivedFields = () => {
+    const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
+    const number = flightNumberInput?.value?.trim() || '';
+    const fullCallsign = code + number;
+
+    // UAM* pattern → POB = 2
+    if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
+      pobInput.value = '2';
+    }
+
+    // Lookup unit code from full callsign
+    if (fullCallsign && unitCodeInput) {
+      const unitData = lookupCallsign(fullCallsign);
+      if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
+        unitCodeInput.value = unitData['UC'];
+      }
+    }
+  };
+
+  if (callsignCodeInput) {
+    callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+  }
+  if (flightNumberInput) {
+    flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
   // Bind local time display handlers for all time fields
@@ -1378,6 +1541,9 @@ function openEditMovementModal(m) {
     const arrActual = document.getElementById("editArrActual")?.value || "";
     const pob = document.getElementById("editPob")?.value || "0";
     const tng = document.getElementById("editTng")?.value || "0";
+    const callsignCode = document.getElementById("editCallsignCode")?.value || "";
+    const flightNumber = document.getElementById("editFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber; // Combine for full callsign
 
     // Validate inputs
     const dofValidation = validateDate(dof);
@@ -1405,7 +1571,7 @@ function openEditMovementModal(m) {
 
     // Update movement
     const updates = {
-      callsignCode: document.getElementById("editCallsign")?.value || "",
+      callsignCode: callsign,
       registration: document.getElementById("editReg")?.value || "",
       type: document.getElementById("editType")?.value || "",
       flightType: document.getElementById("editFlightType")?.value || flightType,
@@ -2625,10 +2791,10 @@ function createAutocomplete(input, fieldType) {
 export function initModalAutocomplete(modal) {
   if (!modal) return;
 
-  // Find autocomplete fields
-  const callsignInputs = modal.querySelectorAll('#newCallsign, #editCallsign, #dupCallsign');
-  const typeInputs = modal.querySelectorAll('#newType, #editType, #dupType');
-  const regInputs = modal.querySelectorAll('#newReg, #editReg, #dupReg');
+  // Find autocomplete fields (updated for split callsign fields)
+  const callsignInputs = modal.querySelectorAll('#newCallsignCode, #newLocCallsignCode, #editCallsignCode, #dupCallsignCode, #newCallsign, #editCallsign, #dupCallsign');
+  const typeInputs = modal.querySelectorAll('#newType, #newLocType, #editType, #dupType');
+  const regInputs = modal.querySelectorAll('#newReg, #newLocReg, #editReg, #dupReg');
   const depAdInputs = modal.querySelectorAll('#newDepAd, #editDepAd, #dupDepAd');
   const arrAdInputs = modal.querySelectorAll('#newArrAd, #editArrAd, #dupArrAd');
 

@@ -439,19 +439,28 @@ export function lookupRegistration(registration) {
  */
 export function lookupCallsign(callsign) {
   if (!vkbData.loaded || !callsign) return null;
-  
+
   const normalized = callsign.toUpperCase().trim();
-  
+
+  // First check EGOW codes (for unit code lookup)
+  const egowResult = vkbData.egowCodes.find(ec =>
+    (ec['Callsign'] || '').toUpperCase() === normalized
+  );
+
+  if (egowResult) {
+    return egowResult;
+  }
+
   // Search both standard and nonstandard callsigns
-  let result = vkbData.callsignsStandard.find(cs => 
+  let result = vkbData.callsignsStandard.find(cs =>
     (cs['CALLSIGN'] || '').toUpperCase() === normalized
   );
-  
+
   if (!result) {
-    result = vkbData.callsignsNonstandard.find(cs => 
+    result = vkbData.callsignsNonstandard.find(cs =>
       (cs['CALLSIGN'] || '').toUpperCase() === normalized
     );
   }
-  
+
   return result || null;
 }
