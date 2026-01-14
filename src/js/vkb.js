@@ -482,6 +482,38 @@ export function lookupCallsign(callsign) {
 }
 
 /**
+ * Look up location by ICAO code
+ * @param {string} icaoCode - ICAO airport code (e.g., "EGOW", "EGCC")
+ * @returns {Object|null} Location data or null if not found
+ */
+export function lookupLocation(icaoCode) {
+  if (!vkbData.loaded || !icaoCode) return null;
+
+  const normalized = icaoCode.toUpperCase().trim();
+
+  return vkbData.locations.find(loc => {
+    const icao = (loc['ICAO CODE'] || '').toUpperCase().trim();
+    return icao === normalized;
+  }) || null;
+}
+
+/**
+ * Get location name for display
+ * @param {string} icaoCode - ICAO airport code
+ * @returns {string} Location name (AIRPORT or LOCATION SERVED)
+ */
+export function getLocationName(icaoCode) {
+  const locationData = lookupLocation(icaoCode);
+  if (!locationData) return '';
+
+  // Prefer AIRPORT, fall back to LOCATION SERVED
+  const airport = (locationData['AIRPORT'] || '').trim();
+  const locationServed = (locationData['LOCATION SERVED'] || '').trim();
+
+  return airport || locationServed || '';
+}
+
+/**
  * Look up aircraft type data by ICAO Type Designator
  * @param {string} icaoType - ICAO Type Designator (e.g., "A400", "G115")
  * @returns {Object|null} Aircraft type data or null if not found

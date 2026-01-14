@@ -33,6 +33,8 @@ import {
   lookupRegistration,
   lookupRegistrationByFixedCallsign,
   lookupCallsign,
+  lookupLocation,
+  getLocationName,
   lookupAircraftType,
   getWTC,
   getVoiceCallsignForDisplay
@@ -484,11 +486,11 @@ export function renderLiveBoard() {
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span${m.popularName && m.popularName !== '' ? ` title="${m.popularName}"` : ''}>${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.depAd)} → ${escapeHtml(m.arrAd)}</div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
         <div class="cell-muted">${escapeHtml(m.depName)} → ${escapeHtml(m.arrName)}</div>
       </td>
       <td>
@@ -957,6 +959,12 @@ function openNewFlightModal(flightType = "DEP") {
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, "UK"); // TODO: Make "UK" configurable in admin
 
+    // Get departure and arrival location names
+    const depAd = document.getElementById("newDepAd")?.value || "";
+    const arrAd = document.getElementById("newArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -968,10 +976,10 @@ function openNewFlightModal(flightType = "DEP") {
       type: aircraftType,
       popularName: popularName,
       wtc: wtc,
-      depAd: document.getElementById("newDepAd")?.value || "",
-      depName: "",
-      arrAd: document.getElementById("newArrAd")?.value || "",
-      arrName: "",
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: "",
       arrPlanned: arrPlanned,
@@ -1668,6 +1676,12 @@ function openEditMovementModal(m) {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get departure and arrival location names
+    const depAd = document.getElementById("editDepAd")?.value || "";
+    const arrAd = document.getElementById("editArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Update movement
     const updates = {
       callsignCode: callsign,
@@ -1678,8 +1692,10 @@ function openEditMovementModal(m) {
       wtc: wtc,
       flightType: selectedFlightType,
       rules: document.getElementById("editRules")?.value || "VFR",
-      depAd: document.getElementById("editDepAd")?.value || "",
-      arrAd: document.getElementById("editArrAd")?.value || "",
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: depActual,
       arrPlanned: arrPlanned,
@@ -1910,6 +1926,12 @@ function openDuplicateMovementModal(m) {
     const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
     const wtc = getWTC(aircraftType, selectedFlightType, "UK");
 
+    // Get departure and arrival location names
+    const depAd = document.getElementById("dupDepAd")?.value || "";
+    const arrAd = document.getElementById("dupArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -1920,10 +1942,10 @@ function openDuplicateMovementModal(m) {
       type: aircraftType,
       popularName: popularName,
       wtc: wtc,
-      depAd: document.getElementById("dupDepAd")?.value || "",
-      depName: m.depName || "",
-      arrAd: document.getElementById("dupArrAd")?.value || "",
-      arrName: m.arrName || "",
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: "",
       arrPlanned: arrPlanned,
@@ -2163,11 +2185,11 @@ export function renderHistoryBoard() {
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span${m.popularName && m.popularName !== '' ? ` title="${m.popularName}"` : ''}>${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.depAd)} → ${escapeHtml(m.arrAd)}</div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
         <div class="cell-muted">${escapeHtml(m.depName || m.depAd)} → ${escapeHtml(m.arrName || m.arrAd)}</div>
       </td>
       <td>
