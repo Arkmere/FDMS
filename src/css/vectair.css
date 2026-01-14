@@ -791,6 +791,20 @@ tr.strip.ft-ovr > td {
   background: #e8f4f8;
 }
 
+.autocomplete-item-primary {
+  font-weight: 600;
+  color: var(--va-text-main);
+  font-size: 13px;
+}
+
+.autocomplete-item-secondary {
+  color: #666;
+  font-size: 11px;
+  margin-left: 8px;
+  font-weight: normal;
+}
+
+/* Legacy support for old code/label classes */
 .autocomplete-item-code {
   font-family: monospace;
   font-weight: 600;

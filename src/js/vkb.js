@@ -222,8 +222,9 @@ export function searchCallsigns(query, limit = 50) {
   if (!q) return [...vkbData.callsignsStandard, ...vkbData.callsignsNonstandard].slice(0, limit);
 
   const results = [];
+  const seen = new Set(); // Track unique contractions to avoid duplicates
 
-  // Search standard callsigns
+  // Search standard callsigns first (higher priority)
   for (const cs of vkbData.callsignsStandard) {
     if (results.length >= limit) break;
 
@@ -232,20 +233,44 @@ export function searchCallsigns(query, limit = 50) {
     const commonName = (cs['COMMON NAME'] || '').toLowerCase();
 
     if (callsign.includes(q) || tricode.includes(q) || commonName.includes(q)) {
-      results.push({ ...cs, _source: 'standard' });
+      const record = { ...cs, _source: 'standard' };
+      const contraction = getCallsignContraction(record);
+      if (!seen.has(contraction)) {
+        results.push(record);
+        seen.add(contraction);
+      }
     }
   }
 
-  // Search nonstandard callsigns
-  for (const cs of vkbData.callsignsNonstandard) {
-    if (results.length >= limit) break;
+  // Search nonstandard callsigns - prioritize approved contractions
+  const approved = [];
+  const other = [];
 
+  for (const cs of vkbData.callsignsNonstandard) {
     const callsign = (cs['CALLSIGN'] || '').toLowerCase();
-    const tricode = (cs['TRICODE'] || '').toLowerCase();
+    const icao3ld = (cs['ICAO 3LD'] || '').toLowerCase();
+    const ssrIndication = (cs['SSR INDICATION'] || '').toLowerCase();
     const commonName = (cs['COMMON NAME'] || '').toLowerCase();
 
-    if (callsign.includes(q) || tricode.includes(q) || commonName.includes(q)) {
-      results.push({ ...cs, _source: 'nonstandard' });
+    if (callsign.includes(q) || icao3ld.includes(q) || ssrIndication.includes(q) || commonName.includes(q)) {
+      const record = { ...cs, _source: 'nonstandard' };
+      const isApproved = cs['APPROVED CONTRACTION'] === 'Y';
+
+      if (isApproved) {
+        approved.push(record);
+      } else {
+        other.push(record);
+      }
+    }
+  }
+
+  // Add approved contractions first, then others
+  for (const record of [...approved, ...other]) {
+    if (results.length >= limit) break;
+    const contraction = getCallsignContraction(record);
+    if (!seen.has(contraction)) {
+      results.push(record);
+      seen.add(contraction);
     }
   }
 
@@ -320,11 +345,41 @@ export function searchAll(query, limit = 10) {
 }
 
 /**
+ * Extract the contraction from a callsign record
+ * Priority: TRICODE (standard) > ICAO 3LD (nonstandard) > SSR INDICATION (nonstandard)
+ * For nonstandard, prioritize entries where APPROVED CONTRACTION = 'Y'
+ * @param {Object} callsignRecord - Callsign record from VKB
+ * @returns {string} Contraction to display
+ */
+function getCallsignContraction(callsignRecord) {
+  // Standard callsigns: Use TRICODE
+  if (callsignRecord._source === 'standard') {
+    const tricode = callsignRecord['TRICODE'];
+    return tricode && tricode !== '-' ? tricode : callsignRecord['CALLSIGN'] || '';
+  }
+
+  // Nonstandard callsigns: Use ICAO 3LD > SSR INDICATION
+  const icao3ld = callsignRecord['ICAO 3LD'];
+  const ssrIndication = callsignRecord['SSR INDICATION'];
+
+  if (icao3ld && icao3ld !== '-' && icao3ld !== 'N/A') {
+    return icao3ld;
+  }
+
+  if (ssrIndication && ssrIndication !== '-' && ssrIndication !== 'N/A') {
+    return ssrIndication;
+  }
+
+  // Fallback to voice callsign
+  return callsignRecord['CALLSIGN'] || '';
+}
+
+/**
  * Get autocomplete suggestions for a field
  * @param {string} fieldType - 'type', 'callsign', 'location', 'registration'
  * @param {string} query - Partial input
  * @param {number} limit - Max suggestions (default 10)
- * @returns {Array} Suggestion strings
+ * @returns {Array} Suggestion objects with primary and secondary text
  */
 export function getAutocompleteSuggestions(fieldType, query, limit = 10) {
   if (!vkbData.loaded || !query) return [];
@@ -333,16 +388,28 @@ export function getAutocompleteSuggestions(fieldType, query, limit = 10) {
 
   switch (fieldType) {
     case 'type':
-      return searchAircraftTypes(q, limit).map(t => t['ICAO Type Designator'] || '');
+      return searchAircraftTypes(q, limit).map(t => ({
+        primary: t['ICAO Type Designator'] || '',
+        secondary: t['Common Name'] || t['Model'] || ''
+      }));
 
     case 'callsign':
-      return searchCallsigns(q, limit).map(c => c['CALLSIGN'] || '');
+      return searchCallsigns(q, limit).map(c => ({
+        primary: getCallsignContraction(c),
+        secondary: c['CALLSIGN'] || ''
+      }));
 
     case 'location':
-      return searchLocations(q, limit).map(l => l['ICAO CODE'] || '');
+      return searchLocations(q, limit).map(l => ({
+        primary: l['ICAO CODE'] || '',
+        secondary: l['AIRPORT'] || l['LOCATION SERVED'] || ''
+      }));
 
     case 'registration':
-      return searchRegistrations(q, limit).map(r => r['REGISTRATION'] || '');
+      return searchRegistrations(q, limit).map(r => ({
+        primary: r['REGISTRATION'] || '',
+        secondary: r['OPERATOR'] || ''
+      }));
 
     default:
       return [];
