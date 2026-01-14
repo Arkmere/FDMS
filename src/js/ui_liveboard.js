@@ -33,6 +33,8 @@ import {
   lookupRegistration,
   lookupRegistrationByFixedCallsign,
   lookupCallsign,
+  lookupAircraftType,
+  getWTC,
   getVoiceCallsignForDisplay
 } from "./vkb.js";
 
@@ -482,7 +484,7 @@ export function renderLiveBoard() {
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span${m.popularName && m.popularName !== '' ? ` title="${m.popularName}"` : ''}>${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
@@ -950,6 +952,11 @@ function openNewFlightModal(flightType = "DEP") {
     // Get voice callsign for display (only if different from contraction/registration)
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("newType")?.value || "";
+    const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK"); // TODO: Make "UK" configurable in admin
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -958,9 +965,9 @@ function openNewFlightModal(flightType = "DEP") {
       callsignVoice: voiceCallsign,
       registration: regValue,
       operator: operator,
-      type: document.getElementById("newType")?.value || "",
+      type: aircraftType,
       popularName: popularName,
-      wtc: "L (ICAO)",
+      wtc: wtc,
       depAd: document.getElementById("newDepAd")?.value || "",
       depName: "",
       arrAd: document.getElementById("newArrAd")?.value || "",
@@ -1267,16 +1274,20 @@ function openNewLocalModal() {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type (Local flights are always LOC)
+    const aircraftType = document.getElementById("newLocType")?.value || "";
+    const wtc = getWTC(aircraftType, "LOC", "UK");
+
     // Create movement
     const movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: voiceCallsign,
-      registration: document.getElementById("newLocReg")?.value || "",
-      type: document.getElementById("newLocType")?.value || "",
+      registration: regValue,
+      type: aircraftType,
       popularName: popularName,
-      wtc: "L (ICAO)",
+      wtc: wtc,
       depAd: "EGOW",
       depName: "RAF Woodvale",
       arrAd: "EGOW",
@@ -1646,12 +1657,26 @@ function openEditMovementModal(m) {
       }
     }
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("editType")?.value || "";
+    const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+
+    // Get voice callsign for display
+    const regValue = document.getElementById("editReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+
     // Update movement
     const updates = {
       callsignCode: callsign,
-      registration: document.getElementById("editReg")?.value || "",
-      type: document.getElementById("editType")?.value || "",
-      flightType: document.getElementById("editFlightType")?.value || flightType,
+      callsignVoice: voiceCallsign,
+      registration: regValue,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      flightType: selectedFlightType,
       rules: document.getElementById("editRules")?.value || "VFR",
       depAd: document.getElementById("editDepAd")?.value || "",
       arrAd: document.getElementById("editArrAd")?.value || "",
@@ -1880,6 +1905,11 @@ function openDuplicateMovementModal(m) {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("dupType")?.value || "";
+    const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -1887,9 +1917,9 @@ function openDuplicateMovementModal(m) {
       callsignLabel: m.callsignLabel || "",
       callsignVoice: voiceCallsign,
       registration: document.getElementById("dupReg")?.value || "",
-      type: document.getElementById("dupType")?.value || "",
+      type: aircraftType,
       popularName: popularName,
-      wtc: m.wtc || "L (ICAO)",
+      wtc: wtc,
       depAd: document.getElementById("dupDepAd")?.value || "",
       depName: m.depName || "",
       arrAd: document.getElementById("dupArrAd")?.value || "",
@@ -2133,7 +2163,7 @@ export function renderHistoryBoard() {
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span${m.popularName && m.popularName !== '' ? ` title="${m.popularName}"` : ''}>${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
