@@ -423,12 +423,28 @@ export function getAutocompleteSuggestions(fieldType, query, limit = 10) {
  */
 export function lookupRegistration(registration) {
   if (!vkbData.loaded || !registration) return null;
-  
+
   const normalized = registration.toUpperCase().trim().replace(/-/g, '');
-  
+
   return vkbData.registrations.find(reg => {
     const regNormalized = (reg['REGISTRATION'] || '').toUpperCase().replace(/-/g, '');
     return regNormalized === normalized;
+  }) || null;
+}
+
+/**
+ * Look up a registration by its fixed callsign
+ * @param {string} callsign - Fixed callsign to look up (e.g., "GCLBT")
+ * @returns {Object|null} Registration data or null if not found
+ */
+export function lookupRegistrationByFixedCallsign(callsign) {
+  if (!vkbData.loaded || !callsign) return null;
+
+  const normalized = callsign.toUpperCase().trim();
+
+  return vkbData.registrations.find(reg => {
+    const fixedCs = (reg['FIXED C/S'] || '').toUpperCase().trim();
+    return fixedCs && fixedCs !== '-' && fixedCs === normalized;
   }) || null;
 }
 

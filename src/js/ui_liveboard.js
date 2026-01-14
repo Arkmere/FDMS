@@ -31,6 +31,7 @@ import {
   getVKBStatus,
   getAutocompleteSuggestions,
   lookupRegistration,
+  lookupRegistrationByFixedCallsign,
   lookupCallsign
 } from "./vkb.js";
 
@@ -412,6 +413,7 @@ function renderExpandedRow(tbody, m) {
           <div class="kv-label">EGOW code</div><div class="kv-value">${escapeHtml(m.egowCode || "—")} – ${escapeHtml(m.egowDesc || "")}</div>
           <div class="kv-label">Unit</div><div class="kv-value">${escapeHtml(m.unitCode || "—")}${m.unitDesc ? " · " + escapeHtml(m.unitDesc) : ""}</div>
           <div class="kv-label">Callsign (voice)</div><div class="kv-value">${escapeHtml(m.callsignVoice || "—")}</div>
+          ${m.operator && m.operator !== '' && m.operator !== '-' ? `<div class="kv-label">Operator</div><div class="kv-value">${escapeHtml(m.operator)}</div>` : ''}
           <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
           <div class="kv-label">Remarks</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
           ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">Warnings</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
@@ -672,11 +674,11 @@ function openNewFlightModal(flightType = "DEP") {
       <div class="modal-field">
         <label class="modal-label">Flight Rules</label>
         <select id="newRules" class="modal-select">
-          <option>VFR</option>
-          <option>IFR</option>
-          <option>SVFR</option>
-          <option>Y</option>
-          <option>Z</option>
+          <option value="VFR" selected>VFR</option>
+          <option value="IFR">IFR</option>
+          <option value="Y">Y (IFR to VFR)</option>
+          <option value="Z">Z (VFR to IFR)</option>
+          <option value="SVFR">SVFR</option>
         </select>
       </div>
       <div class="modal-field">
@@ -728,8 +730,17 @@ function openNewFlightModal(flightType = "DEP") {
         <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
       </div>
       <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
-        <input id="newEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" />
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal; color: #d32f2f;">*Required</span> <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
+        <input id="newEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" list="egowCodeOptions" />
+        <datalist id="egowCodeOptions">
+          <option value="VC">VC</option>
+          <option value="VM">VM</option>
+          <option value="BC">BC</option>
+          <option value="BM">BM</option>
+          <option value="VCH">VCH</option>
+          <option value="VMH">VMH</option>
+          <option value="VNH">VNH</option>
+        </datalist>
       </div>
       <div class="modal-field">
         <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
@@ -791,7 +802,7 @@ function openNewFlightModal(flightType = "DEP") {
     });
   }
 
-  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
   const updateCallsignDerivedFields = () => {
     const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
     const number = flightNumberInput?.value?.trim() || '';
@@ -807,6 +818,19 @@ function openNewFlightModal(flightType = "DEP") {
       const unitData = lookupCallsign(fullCallsign);
       if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
         unitCodeInput.value = unitData['UC'];
+      }
+    }
+
+    // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
+    if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
+      const regData = lookupRegistrationByFixedCallsign(fullCallsign);
+      if (regData) {
+        const registration = regData['REGISTRATION'] || '';
+        if (registration && registration !== '-') {
+          regInput.value = registration;
+          // Trigger registration input event to update dependent fields
+          regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       }
     }
   };
@@ -902,11 +926,24 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
-    // Get warnings and notes from VKB registration data
+    // Validate EGOW Code (mandatory with 7 valid options)
+    const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
+    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (!egowCode) {
+      showToast("EGOW Code is required", 'error');
+      return;
+    }
+    if (!validEgowCodes.includes(egowCode)) {
+      showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error');
+      return;
+    }
+
+    // Get warnings, notes, and operator from VKB registration data
     const regValue = document.getElementById("newReg")?.value || "";
     const regData = lookupRegistration(regValue);
     const warnings = regData ? (regData['WARNINGS'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
 
     // Create movement
     const movement = {
@@ -915,6 +952,7 @@ function openNewFlightModal(flightType = "DEP") {
       callsignLabel: "",
       callsignVoice: "",
       registration: regValue,
+      operator: operator,
       type: document.getElementById("newType")?.value || "",
       wtc: "L (ICAO)",
       depAd: document.getElementById("newDepAd")?.value || "",
@@ -932,7 +970,7 @@ function openNewFlightModal(flightType = "DEP") {
       tngCount: parseInt(tng, 10),
       osCount: 0,
       fisCount: 0,
-      egowCode: document.getElementById("newEgowCode")?.value || "",
+      egowCode: egowCode,
       egowDesc: "",
       unitCode: document.getElementById("newUnitCode")?.value || "",
       unitDesc: "",
@@ -1093,7 +1131,7 @@ function openNewLocalModal() {
     });
   }
 
-  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
   const updateCallsignDerivedFields = () => {
     const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
     const number = flightNumberInput?.value?.trim() || '';
@@ -1109,6 +1147,19 @@ function openNewLocalModal() {
       const unitData = lookupCallsign(fullCallsign);
       if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
         unitCodeInput.value = unitData['UC'];
+      }
+    }
+
+    // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
+    if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
+      const regData = lookupRegistrationByFixedCallsign(fullCallsign);
+      if (regData) {
+        const registration = regData['REGISTRATION'] || '';
+        if (registration && registration !== '-') {
+          regInput.value = registration;
+          // Trigger registration input event to update dependent fields
+          regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       }
     }
   };
@@ -1298,11 +1349,11 @@ function openEditMovementModal(m) {
       <div class="modal-field">
         <label class="modal-label">Flight Rules</label>
         <select id="editRules" class="modal-select">
-          <option ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
-          <option ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
-          <option ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
-          <option ${m.rules === "Y" ? "selected" : ""}>Y</option>
-          <option ${m.rules === "Z" ? "selected" : ""}>Z</option>
+          <option value="VFR" ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
+          <option value="IFR" ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
+          <option value="Y" ${m.rules === "Y" ? "selected" : ""}>Y (IFR to VFR)</option>
+          <option value="Z" ${m.rules === "Z" ? "selected" : ""}>Z (VFR to IFR)</option>
+          <option value="SVFR" ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
         </select>
       </div>
       <div class="modal-field">
@@ -1441,7 +1492,7 @@ function openEditMovementModal(m) {
     });
   }
 
-  // When callsign code or flight number changes, check for UAM pattern and lookup unit code
+  // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
   const updateCallsignDerivedFields = () => {
     const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
     const number = flightNumberInput?.value?.trim() || '';
@@ -1457,6 +1508,19 @@ function openEditMovementModal(m) {
       const unitData = lookupCallsign(fullCallsign);
       if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
         unitCodeInput.value = unitData['UC'];
+      }
+    }
+
+    // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
+    if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
+      const regData = lookupRegistrationByFixedCallsign(fullCallsign);
+      if (regData) {
+        const registration = regData['REGISTRATION'] || '';
+        if (registration && registration !== '-') {
+          regInput.value = registration;
+          // Trigger registration input event to update dependent fields
+          regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       }
     }
   };
@@ -1641,9 +1705,11 @@ function openDuplicateMovementModal(m) {
       <div class="modal-field">
         <label class="modal-label">Flight Rules</label>
         <select id="dupRules" class="modal-select">
-          <option ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
-          <option ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
-          <option ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
+          <option value="VFR" ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
+          <option value="IFR" ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
+          <option value="Y" ${m.rules === "Y" ? "selected" : ""}>Y (IFR to VFR)</option>
+          <option value="Z" ${m.rules === "Z" ? "selected" : ""}>Z (VFR to IFR)</option>
+          <option value="SVFR" ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
         </select>
       </div>
       <div class="modal-field">
