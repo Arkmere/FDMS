@@ -669,7 +669,17 @@ function openNewFlightModal(flightType = "DEP") {
           <option>VFR</option>
           <option>IFR</option>
           <option>SVFR</option>
+          <option>Y</option>
+          <option>Z</option>
         </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
+        <input id="newEgowCode" class="modal-input" placeholder="e.g. VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
+        <input id="newUnitCode" class="modal-input" placeholder="e.g. L, M" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Departure AD</label>
@@ -762,7 +772,7 @@ function openNewFlightModal(flightType = "DEP") {
   if (callsignInput && pobInput) {
     callsignInput.addEventListener("input", () => {
       const cs = callsignInput.value.toUpperCase().trim();
-      if (cs.startsWith('UAM') && !pobInput.value) {
+      if (cs.startsWith('UAM') && (pobInput.value === '0' || !pobInput.value)) {
         pobInput.value = '2';
       }
     });
@@ -874,9 +884,9 @@ function openNewFlightModal(flightType = "DEP") {
       tngCount: parseInt(tng, 10),
       osCount: 0,
       fisCount: 0,
-      egowCode: "",
+      egowCode: document.getElementById("newEgowCode")?.value || "",
       egowDesc: "",
-      unitCode: "",
+      unitCode: document.getElementById("newUnitCode")?.value || "",
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
@@ -960,6 +970,14 @@ function openNewLocalModal() {
       <div class="modal-field">
         <label class="modal-label">POB</label>
         <input id="newLocPob" class="modal-input" type="number" value="0" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
+        <input id="newLocEgowCode" class="modal-input" placeholder="e.g. VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
+        <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -1120,9 +1138,9 @@ function openNewLocalModal() {
       tngCount: parseInt(tng, 10),
       osCount: 0,
       fisCount: 0,
-      egowCode: "",
+      egowCode: document.getElementById("newLocEgowCode")?.value || "",
       egowDesc: "",
-      unitCode: "",
+      unitCode: document.getElementById("newLocUnitCode")?.value || "",
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
@@ -1184,6 +1202,8 @@ function openEditMovementModal(m) {
           <option ${m.rules === "VFR" ? "selected" : ""}>VFR</option>
           <option ${m.rules === "IFR" ? "selected" : ""}>IFR</option>
           <option ${m.rules === "SVFR" ? "selected" : ""}>SVFR</option>
+          <option ${m.rules === "Y" ? "selected" : ""}>Y</option>
+          <option ${m.rules === "Z" ? "selected" : ""}>Z</option>
         </select>
       </div>
       <div class="modal-field">
@@ -1253,6 +1273,14 @@ function openEditMovementModal(m) {
       <div class="modal-field">
         <label class="modal-label">Touch &amp; Go count</label>
         <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(BM, VM, BC, VNH, etc.)</span></label>
+        <input id="editEgowCode" class="modal-input" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(L, M, A)</span></label>
+        <input id="editUnitCode" class="modal-input" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Remarks</label>
@@ -1391,6 +1419,8 @@ function openEditMovementModal(m) {
       dof: dof,
       tngCount: parseInt(tng, 10),
       pob: parseInt(pob, 10),
+      egowCode: document.getElementById("editEgowCode")?.value || "",
+      unitCode: document.getElementById("editUnitCode")?.value || "",
       remarks: document.getElementById("editRemarks")?.value || ""
     };
 
@@ -2498,11 +2528,16 @@ function createAutocomplete(input, fieldType) {
     }
 
     suggestionsDiv.innerHTML = suggestions
-      .map((s, idx) => `
-        <div class="autocomplete-item" data-index="${idx}" data-value="${escapeHtml(s)}">
-          <span class="autocomplete-item-code">${escapeHtml(s)}</span>
-        </div>
-      `)
+      .map((s, idx) => {
+        const primary = typeof s === 'object' ? s.primary : s;
+        const secondary = typeof s === 'object' ? s.secondary : '';
+        return `
+          <div class="autocomplete-item" data-index="${idx}" data-value="${escapeHtml(primary)}">
+            <span class="autocomplete-item-primary">${escapeHtml(primary)}</span>
+            ${secondary ? `<span class="autocomplete-item-secondary">${escapeHtml(secondary)}</span>` : ''}
+          </div>
+        `;
+      })
       .join('');
 
     suggestionsDiv.classList.add('active');
