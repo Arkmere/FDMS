@@ -33,6 +33,10 @@ import {
   lookupRegistration,
   lookupRegistrationByFixedCallsign,
   lookupCallsign,
+  lookupLocation,
+  getLocationName,
+  lookupAircraftType,
+  getWTC,
   getVoiceCallsignForDisplay
 } from "./vkb.js";
 
@@ -446,7 +450,7 @@ export function renderLiveBoard() {
       const dividerTr = document.createElement("tr");
       dividerTr.className = "status-divider-row";
       dividerTr.innerHTML = `
-        <td colspan="7" style="padding: 0;">
+        <td colspan="11" style="padding: 0;">
           <div style="height: 2px; background: linear-gradient(to right, transparent, #ccc, transparent); margin: 4px 0;"></div>
         </td>
       `;
@@ -475,6 +479,17 @@ export function renderLiveBoard() {
       arrDisplay = "-";
     }
 
+    // Format date (DD/MM/YYYY)
+    const dofFormatted = m.dof ? m.dof.split('-').reverse().join('/') : '';
+
+    // Get rules display (single letter)
+    let rulesDisplay = '';
+    if (m.rules === 'VFR') rulesDisplay = 'V';
+    else if (m.rules === 'IFR') rulesDisplay = 'I';
+    else if (m.rules === 'Y') rulesDisplay = 'Y';
+    else if (m.rules === 'Z') rulesDisplay = 'Z';
+    else if (m.rules === 'SVFR') rulesDisplay = 'S';
+
     tr.innerHTML = `
       <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
       <td>
@@ -486,17 +501,38 @@ export function renderLiveBoard() {
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.depAd)} → ${escapeHtml(m.arrAd)}</div>
-        <div class="cell-muted">${escapeHtml(m.depName)} → ${escapeHtml(m.arrName)}</div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
+      </td>
+      <td style="text-align: center;">
+        <div class="cell-strong">${rulesDisplay}</div>
       </td>
       <td>
         <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
-        <div class="cell-muted">${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
+        <div class="cell-muted">${dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
+      </td>
+      <td style="text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+          <button class="counter-btn js-dec-tng" data-id="${m.id}" type="button" aria-label="Decrease T&G">◄</button>
+          <span style="min-width: 20px; text-align: center;">${m.tngCount || 0}</span>
+          <button class="counter-btn js-inc-tng" data-id="${m.id}" type="button" aria-label="Increase T&G">►</button>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+          <button class="counter-btn js-dec-os" data-id="${m.id}" type="button" aria-label="Decrease O/S">◄</button>
+          <span style="min-width: 20px; text-align: center;">${m.osCount || 0}</span>
+          <button class="counter-btn js-inc-os" data-id="${m.id}" type="button" aria-label="Increase O/S">►</button>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+          <button class="counter-btn js-dec-fis" data-id="${m.id}" type="button" aria-label="Decrease FIS">◄</button>
+          <span style="min-width: 20px; text-align: center;">${m.fisCount || 0}</span>
+          <button class="counter-btn js-inc-fis" data-id="${m.id}" type="button" aria-label="Increase FIS">►</button>
+        </div>
       </td>
       <td>
-        <div class="badge-row">
-          ${renderBadges(m)}
-        </div>
+        <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
         <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
@@ -547,6 +583,55 @@ export function renderLiveBoard() {
       renderLiveBoard();
     });
 
+    // Bind counter increment/decrement buttons
+    const incTng = tr.querySelector(".js-inc-tng");
+    safeOn(incTng, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { tngCount: Math.min((m.tngCount || 0) + 1, 99) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
+    const decTng = tr.querySelector(".js-dec-tng");
+    safeOn(decTng, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { tngCount: Math.max((m.tngCount || 0) - 1, 0) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
+    const incOs = tr.querySelector(".js-inc-os");
+    safeOn(incOs, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { osCount: Math.min((m.osCount || 0) + 1, 99) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
+    const decOs = tr.querySelector(".js-dec-os");
+    safeOn(decOs, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { osCount: Math.max((m.osCount || 0) - 1, 0) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
+    const incFis = tr.querySelector(".js-inc-fis");
+    safeOn(incFis, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { fisCount: Math.min((m.fisCount || 0) + 1, 99) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
+    const decFis = tr.querySelector(".js-dec-fis");
+    safeOn(decFis, "click", (e) => {
+      e.stopPropagation();
+      updateMovement(m.id, { fisCount: Math.max((m.fisCount || 0) - 1, 0) });
+      renderLiveBoard();
+      renderHistoryBoard();
+    });
+
     tbody.appendChild(tr);
 
     if (expandedId === m.id) {
@@ -557,7 +642,7 @@ export function renderLiveBoard() {
   if (!movements.length) {
     const empty = document.createElement("tr");
     empty.innerHTML = `
-      <td colspan="7" style="padding:8px; font-size:12px; color:#777;">
+      <td colspan="11" style="padding:8px; font-size:12px; color:#777;">
         No demo movements match the current filters.
       </td>
     `;
@@ -950,6 +1035,17 @@ function openNewFlightModal(flightType = "DEP") {
     // Get voice callsign for display (only if different from contraction/registration)
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("newType")?.value || "";
+    const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK"); // TODO: Make "UK" configurable in admin
+
+    // Get departure and arrival location names
+    const depAd = document.getElementById("newDepAd")?.value || "";
+    const arrAd = document.getElementById("newArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -958,13 +1054,13 @@ function openNewFlightModal(flightType = "DEP") {
       callsignVoice: voiceCallsign,
       registration: regValue,
       operator: operator,
-      type: document.getElementById("newType")?.value || "",
+      type: aircraftType,
       popularName: popularName,
-      wtc: "L (ICAO)",
-      depAd: document.getElementById("newDepAd")?.value || "",
-      depName: "",
-      arrAd: document.getElementById("newArrAd")?.value || "",
-      arrName: "",
+      wtc: wtc,
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: "",
       arrPlanned: arrPlanned,
@@ -1267,16 +1363,20 @@ function openNewLocalModal() {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type (Local flights are always LOC)
+    const aircraftType = document.getElementById("newLocType")?.value || "";
+    const wtc = getWTC(aircraftType, "LOC", "UK");
+
     // Create movement
     const movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: voiceCallsign,
-      registration: document.getElementById("newLocReg")?.value || "",
-      type: document.getElementById("newLocType")?.value || "",
+      registration: regValue,
+      type: aircraftType,
       popularName: popularName,
-      wtc: "L (ICAO)",
+      wtc: wtc,
       depAd: "EGOW",
       depName: "RAF Woodvale",
       arrAd: "EGOW",
@@ -1646,15 +1746,37 @@ function openEditMovementModal(m) {
       }
     }
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("editType")?.value || "";
+    const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+
+    // Get voice callsign for display
+    const regValue = document.getElementById("editReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+
+    // Get departure and arrival location names
+    const depAd = document.getElementById("editDepAd")?.value || "";
+    const arrAd = document.getElementById("editArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Update movement
     const updates = {
       callsignCode: callsign,
-      registration: document.getElementById("editReg")?.value || "",
-      type: document.getElementById("editType")?.value || "",
-      flightType: document.getElementById("editFlightType")?.value || flightType,
+      callsignVoice: voiceCallsign,
+      registration: regValue,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      flightType: selectedFlightType,
       rules: document.getElementById("editRules")?.value || "VFR",
-      depAd: document.getElementById("editDepAd")?.value || "",
-      arrAd: document.getElementById("editArrAd")?.value || "",
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: depActual,
       arrPlanned: arrPlanned,
@@ -1880,6 +2002,17 @@ function openDuplicateMovementModal(m) {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
+    // Get WTC based on aircraft type and flight type
+    const aircraftType = document.getElementById("dupType")?.value || "";
+    const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+
+    // Get departure and arrival location names
+    const depAd = document.getElementById("dupDepAd")?.value || "";
+    const arrAd = document.getElementById("dupArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
     // Create movement
     const movement = {
       status: "PLANNED",
@@ -1887,13 +2020,13 @@ function openDuplicateMovementModal(m) {
       callsignLabel: m.callsignLabel || "",
       callsignVoice: voiceCallsign,
       registration: document.getElementById("dupReg")?.value || "",
-      type: document.getElementById("dupType")?.value || "",
+      type: aircraftType,
       popularName: popularName,
-      wtc: m.wtc || "L (ICAO)",
-      depAd: document.getElementById("dupDepAd")?.value || "",
-      depName: m.depName || "",
-      arrAd: document.getElementById("dupArrAd")?.value || "",
-      arrName: m.arrName || "",
+      wtc: wtc,
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
       depPlanned: depPlanned,
       depActual: "",
       arrPlanned: arrPlanned,
@@ -2137,7 +2270,7 @@ export function renderHistoryBoard() {
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.depAd)} → ${escapeHtml(m.arrAd)}</div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
         <div class="cell-muted">${escapeHtml(m.depName || m.depAd)} → ${escapeHtml(m.arrName || m.arrAd)}</div>
       </td>
       <td>

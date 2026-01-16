@@ -482,6 +482,113 @@ export function lookupCallsign(callsign) {
 }
 
 /**
+ * Look up location by ICAO code
+ * @param {string} icaoCode - ICAO airport code (e.g., "EGOW", "EGCC")
+ * @returns {Object|null} Location data or null if not found
+ */
+export function lookupLocation(icaoCode) {
+  if (!vkbData.loaded || !icaoCode) return null;
+
+  const normalized = icaoCode.toUpperCase().trim();
+
+  return vkbData.locations.find(loc => {
+    const icao = (loc['ICAO CODE'] || '').toUpperCase().trim();
+    return icao === normalized;
+  }) || null;
+}
+
+/**
+ * Get location name for display
+ * @param {string} icaoCode - ICAO airport code
+ * @returns {string} Location name (AIRPORT or LOCATION SERVED)
+ */
+export function getLocationName(icaoCode) {
+  const locationData = lookupLocation(icaoCode);
+  if (!locationData) return '';
+
+  // Prefer AIRPORT, fall back to LOCATION SERVED
+  const airport = (locationData['AIRPORT'] || '').trim();
+  const locationServed = (locationData['LOCATION SERVED'] || '').trim();
+
+  return airport || locationServed || '';
+}
+
+/**
+ * Look up aircraft type data by ICAO Type Designator
+ * @param {string} icaoType - ICAO Type Designator (e.g., "A400", "G115")
+ * @returns {Object|null} Aircraft type data or null if not found
+ */
+export function lookupAircraftType(icaoType) {
+  if (!vkbData.loaded || !icaoType) return null;
+
+  const normalized = icaoType.toUpperCase().trim();
+
+  return vkbData.aircraftTypes.find(type => {
+    const typeDesignator = (type['ICAO Type Designator'] || '').toUpperCase().trim();
+    return typeDesignator === normalized;
+  }) || null;
+}
+
+/**
+ * Get Wake Turbulence Category for an aircraft type and movement
+ * @param {string} icaoType - ICAO Type Designator (e.g., "A400")
+ * @param {string} flightType - Flight type: DEP, ARR, LOC, OVR
+ * @param {string} wtcStandard - WTC standard to use: "ICAO" or "UK" (default "UK")
+ * @returns {string} WTC string (e.g., "H (UK)" or "M (ICAO)")
+ */
+export function getWTC(icaoType, flightType, wtcStandard = "UK") {
+  const typeData = lookupAircraftType(icaoType);
+  if (!typeData) return "L (ICAO)"; // Default fallback
+
+  let wtc = "";
+
+  if (wtcStandard === "UK") {
+    // Use UK Departure WTC for DEP and OVR
+    // Use UK Arrival WTC for ARR and LOC
+    if (flightType === "DEP" || flightType === "OVR") {
+      wtc = typeData['UK Departure WTC'] || typeData['ICAO WTC'] || "L";
+    } else {
+      wtc = typeData['UK Arrival WTC'] || typeData['ICAO WTC'] || "L";
+    }
+    return `${wtc} (UK)`;
+  } else {
+    // Use ICAO WTC
+    wtc = typeData['ICAO WTC'] || "L";
+    return `${wtc} (ICAO)`;
+  }
+}
+
+/**
+ * Look up a callsign by its contraction (TRICODE, ICAO 3LD, or SSR INDICATION)
+ * @param {string} contraction - Contraction to look up (e.g., "PLMTR", "BAW")
+ * @returns {Object|null} Callsign data or null if not found
+ */
+export function lookupCallsignByContraction(contraction) {
+  if (!vkbData.loaded || !contraction) return null;
+
+  const normalized = contraction.toUpperCase().trim();
+
+  // Search standard callsigns by TRICODE
+  let result = vkbData.callsignsStandard.find(cs => {
+    const tricode = (cs['TRICODE'] || '').toUpperCase().trim();
+    return tricode && tricode !== '-' && tricode === normalized;
+  });
+
+  if (result) return result;
+
+  // Search nonstandard callsigns by ICAO 3LD or SSR INDICATION
+  result = vkbData.callsignsNonstandard.find(cs => {
+    const icao3ld = (cs['ICAO 3LD'] || '').toUpperCase().trim();
+    const ssrIndication = (cs['SSR INDICATION'] || '').toUpperCase().trim();
+
+    return (icao3ld && icao3ld !== '-' && icao3ld !== 'N/A' && icao3ld === normalized) ||
+           (ssrIndication && ssrIndication !== '-' && ssrIndication !== 'N/A' && ssrIndication === normalized);
+  });
+
+  return result || null;
+}
+
+/**
  * Get voice callsign for display on strip (only if different from contraction and registration)
  * @param {string} contraction - The callsign contraction (e.g., "BAW")
  * @param {string} registration - The aircraft registration (e.g., "G-BYUN")
@@ -494,14 +601,14 @@ export function getVoiceCallsignForDisplay(contraction, registration) {
   const baseCallsign = contraction.replace(/\d+$/, '').trim();
   if (!baseCallsign) return '';
 
-  const csData = lookupCallsign(baseCallsign);
+  const csData = lookupCallsignByContraction(baseCallsign);
   if (!csData || !csData['CALLSIGN']) return '';
 
   const voiceCallsign = csData['CALLSIGN'].toUpperCase().trim();
-  const contractionNormalized = contraction.toUpperCase().trim();
+  const contractionNormalized = baseCallsign.toUpperCase().trim();
   const registrationNormalized = (registration || '').toUpperCase().trim().replace(/-/g, '');
 
-  // Don't show if voice callsign is same as contraction
+  // Don't show if voice callsign is same as contraction (base only, without flight number)
   if (voiceCallsign === contractionNormalized) {
     return '';
   }
