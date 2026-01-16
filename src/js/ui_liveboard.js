@@ -521,8 +521,8 @@ export function renderLiveBoard() {
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
       <td>
-        <div class="cell-strong${staleClass}" ${staleWarning ? `title="${staleWarning}"` : ''}>${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
-        <div class="cell-muted${staleClass}">${dofFormatted}${staleWarning ? ` <span style="color: #d32f2f; font-weight: 600;" title="${staleWarning}">⚠</span>` : ''}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
+        <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
+        <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
         <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
