@@ -188,21 +188,21 @@ function getDOFTimestamp(m) {
 
 /**
  * Compare two movements for Live Board sorting
- * Sort order: DOF (nearest first), Status (ACTIVE, PLANNED, others), Time (earliest first), ID
+ * Sort order: Status (ACTIVE, PLANNED, others), DOF (nearest first), Time (earliest first), ID
  * @param {object} a - First movement
  * @param {object} b - Second movement
  * @returns {number} Comparison result (-1, 0, 1)
  */
 function compareForLiveBoard(a, b) {
-  // 1. Sort by DOF (nearest date first)
-  const dofA = getDOFTimestamp(a);
-  const dofB = getDOFTimestamp(b);
-  if (dofA !== dofB) return dofA - dofB;
-
-  // 2. Sort by status (ACTIVE first, then PLANNED)
+  // 1. Sort by status (ACTIVE first, then PLANNED) - prioritize status over date
   const ra = statusRank(a.status);
   const rb = statusRank(b.status);
   if (ra !== rb) return ra - rb;
+
+  // 2. Sort by DOF (nearest date first within same status)
+  const dofA = getDOFTimestamp(a);
+  const dofB = getDOFTimestamp(b);
+  if (dofA !== dofB) return dofA - dofB;
 
   // 3. Sort by time (earliest first within the same date and status)
   const ta = movementSortMinutes(a);
@@ -490,6 +490,20 @@ export function renderLiveBoard() {
     else if (m.rules === 'Z') rulesDisplay = 'Z';
     else if (m.rules === 'SVFR') rulesDisplay = 'S';
 
+    // Check if movement is stale (over 24 hours old)
+    const now = new Date();
+    const todayStr = getTodayDateString();
+    let staleWarning = '';
+    let staleClass = '';
+    if (m.dof && m.dof < todayStr) {
+      const dofDate = new Date(m.dof + "T00:00:00Z");
+      const hoursOld = Math.floor((now - dofDate) / (1000 * 60 * 60));
+      if (hoursOld >= 24) {
+        staleWarning = `⚠ Movement is ${hoursOld} hours old - still relevant?`;
+        staleClass = ' stale-movement';
+      }
+    }
+
     tr.innerHTML = `
       <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
       <td>
@@ -507,8 +521,8 @@ export function renderLiveBoard() {
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
-        <div class="cell-muted">${dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
+        <div class="cell-strong${staleClass}" ${staleWarning ? `title="${staleWarning}"` : ''}>${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
+        <div class="cell-muted${staleClass}">${dofFormatted}${staleWarning ? ` <span style="color: #d32f2f; font-weight: 600;" title="${staleWarning}">⚠</span>` : ''}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
         <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
@@ -540,7 +554,7 @@ export function renderLiveBoard() {
           m.status === "PLANNED"
             ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
             : m.status === "ACTIVE"
-            ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Done</button>'
+            ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
             : ""
         }
         <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
@@ -2062,6 +2076,7 @@ function openDuplicateMovementModal(m) {
 /**
  * Transition a PLANNED movement to ACTIVE
  * Sets ATD/ACT to current time
+ * Auto-updates DOF to today if flight was planned for future date
  */
 function transitionToActive(id) {
   const now = new Date();
@@ -2069,10 +2084,23 @@ function transitionToActive(id) {
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const currentTime = `${hours}:${minutes}`;
 
-  updateMovement(id, {
+  // Get today's date in YYYY-MM-DD format
+  const todayStr = getTodayDateString();
+
+  // Get the movement to check its DOF
+  const movement = getMovements().find(m => m.id === id);
+  const updates = {
     status: "ACTIVE",
     depActual: currentTime
-  });
+  };
+
+  // If DOF is in the future, update it to today
+  if (movement && movement.dof && movement.dof > todayStr) {
+    updates.dof = todayStr;
+    showToast(`Flight activated early - DOF updated from ${movement.dof.split('-').reverse().join('/')} to today`, 'info');
+  }
+
+  updateMovement(id, updates);
 
   renderLiveBoard();
   renderHistoryBoard();
