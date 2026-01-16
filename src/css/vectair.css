@@ -389,6 +389,24 @@ tr.strip.ft-ovr > td {
   background: #e4eaee;
 }
 
+.counter-btn {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--va-border-dark);
+  background: #ffffff;
+  cursor: pointer;
+  color: var(--va-text-main);
+  font-weight: 600;
+}
+.counter-btn:hover {
+  background: #e8eef2;
+  border-color: var(--va-link);
+}
+.counter-btn:active {
+  background: #d8dfe4;
+}
+
 /* Expanded row */
 .expand-row td {
   background: #f4f5f7;
