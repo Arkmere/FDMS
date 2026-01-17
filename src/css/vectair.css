@@ -407,6 +407,13 @@ tr.strip.ft-ovr > td {
   background: #d8dfe4;
 }
 
+/* Stale movement warning - highlighter style */
+.stale-movement {
+  background-color: #ffeb3b;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
 /* Expanded row */
 .expand-row td {
   background: #f4f5f7;
