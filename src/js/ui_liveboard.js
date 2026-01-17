@@ -555,7 +555,7 @@ export function renderLiveBoard() {
         <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
-        <div style="display: flex; gap: 6px;">
+        <div style="display: flex; gap: 6px; justify-content: flex-end;">
           <div style="display: flex; flex-direction: column; gap: 2px;">
             ${
               m.status === "PLANNED"
