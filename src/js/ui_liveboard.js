@@ -396,37 +396,41 @@ function renderExpandedRow(tbody, m) {
 
   expTd.innerHTML = `
     <div class="expand-inner">
-      <div class="expand-section">
-        <div class="expand-title">Movement Summary</div>
-        <div class="kv">
-          <div class="kv-label">Status</div><div class="kv-value">${escapeHtml(statusLabel(m.status))}</div>
-          <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(m.flightType)}</div>
-          <div class="kv-label">Departure</div><div class="kv-value">${escapeHtml(m.depAd)} – ${escapeHtml(m.depName)}</div>
-          <div class="kv-label">Arrival</div><div class="kv-value">${escapeHtml(m.arrAd)} – ${escapeHtml(m.arrName)}</div>
-          <div class="kv-label">ETD / ETA / ECT</div><div class="kv-value">${escapeHtml(getETD(m) || getECT(m) || "—")} → ${escapeHtml(getETA(m) || "—")}</div>
-          <div class="kv-label">ATD / ATA / ACT</div><div class="kv-value">${escapeHtml(getATD(m) || getACT(m) || "—")} → ${escapeHtml(getATA(m) || "—")}</div>
-          <div class="kv-label">T&amp;Gs</div><div class="kv-value">${escapeHtml(m.tngCount ?? 0)}</div>
-          <div class="kv-label">O/S count</div><div class="kv-value">${escapeHtml(m.osCount ?? 0)}</div>
-          <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
-          <div class="kv-label">POB</div><div class="kv-value">${escapeHtml(m.pob ?? 0)}</div>
+      <div class="expand-left">
+        <div class="expand-section">
+          <div class="expand-title">Movement Summary</div>
+          <div class="kv">
+            <div class="kv-label">Status</div><div class="kv-value">${escapeHtml(statusLabel(m.status))}</div>
+            <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(m.flightType)}</div>
+            <div class="kv-label">Departure</div><div class="kv-value">${escapeHtml(m.depAd)} – ${escapeHtml(m.depName)}</div>
+            <div class="kv-label">Arrival</div><div class="kv-value">${escapeHtml(m.arrAd)} – ${escapeHtml(m.arrName)}</div>
+            <div class="kv-label">ETD / ETA / ECT</div><div class="kv-value">${escapeHtml(getETD(m) || getECT(m) || "—")} → ${escapeHtml(getETA(m) || "—")}</div>
+            <div class="kv-label">ATD / ATA / ACT</div><div class="kv-value">${escapeHtml(getATD(m) || getACT(m) || "—")} → ${escapeHtml(getATA(m) || "—")}</div>
+            <div class="kv-label">T&amp;Gs</div><div class="kv-value">${escapeHtml(m.tngCount ?? 0)}</div>
+            <div class="kv-label">O/S count</div><div class="kv-value">${escapeHtml(m.osCount ?? 0)}</div>
+            <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
+            <div class="kv-label">POB</div><div class="kv-value">${escapeHtml(m.pob ?? 0)}</div>
+          </div>
         </div>
+
+        ${renderFormationDetails(m)}
       </div>
 
-      <div class="expand-section">
-        <div class="expand-title">Coding &amp; Classification</div>
-        <div class="kv">
-          <div class="kv-label">EGOW code</div><div class="kv-value">${escapeHtml(m.egowCode || "—")} – ${escapeHtml(m.egowDesc || "")}</div>
-          <div class="kv-label">Unit</div><div class="kv-value">${escapeHtml(m.unitCode || "—")}${m.unitDesc ? " · " + escapeHtml(m.unitDesc) : ""}</div>
-          <div class="kv-label">Callsign (voice)</div><div class="kv-value">${escapeHtml(m.callsignVoice || "—")}</div>
-          ${m.operator && m.operator !== '' && m.operator !== '-' ? `<div class="kv-label">Operator</div><div class="kv-value">${escapeHtml(m.operator)}</div>` : ''}
-          <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
-          <div class="kv-label">Remarks</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
-          ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">Warnings</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
-          ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">Notes</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
+      <div class="expand-right">
+        <div class="expand-section">
+          <div class="expand-title">Coding &amp; Classification</div>
+          <div class="kv">
+            <div class="kv-label">EGOW code</div><div class="kv-value">${escapeHtml(m.egowCode || "—")} – ${escapeHtml(m.egowDesc || "")}</div>
+            <div class="kv-label">Unit</div><div class="kv-value">${escapeHtml(m.unitCode || "—")}${m.unitDesc ? " · " + escapeHtml(m.unitDesc) : ""}</div>
+            <div class="kv-label">Callsign (voice)</div><div class="kv-value">${escapeHtml(m.callsignVoice || "—")}</div>
+            ${m.operator && m.operator !== '' && m.operator !== '-' ? `<div class="kv-label">Operator</div><div class="kv-value">${escapeHtml(m.operator)}</div>` : ''}
+            <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
+            <div class="kv-label">Remarks</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
+            ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">Warnings</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
+            ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">Notes</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
+          </div>
         </div>
       </div>
-
-      ${renderFormationDetails(m)}
     </div>
   `;
 

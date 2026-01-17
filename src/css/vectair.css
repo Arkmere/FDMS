@@ -424,9 +424,17 @@ tr.strip.ft-ovr > td {
 .expand-inner {
   padding: 8px 4px 8px 10px;
   display: flex;
-  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
+}
+.expand-left {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.expand-right {
+  flex: 0 0 280px;
 }
 .expand-section {
   min-width: 220px;
