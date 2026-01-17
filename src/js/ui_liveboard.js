@@ -525,31 +525,36 @@ export function renderLiveBoard() {
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-          <button class="counter-btn js-dec-tng" data-id="${m.id}" type="button" aria-label="Decrease T&G">◄</button>
-          <span style="min-width: 20px; text-align: center;">${m.tngCount || 0}</span>
-          <button class="counter-btn js-inc-tng" data-id="${m.id}" type="button" aria-label="Increase T&G">►</button>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.tngCount || 0}</span>
+          <div style="display: flex; gap: 4px;">
+            <button class="counter-btn js-dec-tng" data-id="${m.id}" type="button" aria-label="Decrease T&G">◄</button>
+            <button class="counter-btn js-inc-tng" data-id="${m.id}" type="button" aria-label="Increase T&G">►</button>
+          </div>
         </div>
       </td>
       <td style="text-align: center;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-          <button class="counter-btn js-dec-os" data-id="${m.id}" type="button" aria-label="Decrease O/S">◄</button>
-          <span style="min-width: 20px; text-align: center;">${m.osCount || 0}</span>
-          <button class="counter-btn js-inc-os" data-id="${m.id}" type="button" aria-label="Increase O/S">►</button>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.osCount || 0}</span>
+          <div style="display: flex; gap: 4px;">
+            <button class="counter-btn js-dec-os" data-id="${m.id}" type="button" aria-label="Decrease O/S">◄</button>
+            <button class="counter-btn js-inc-os" data-id="${m.id}" type="button" aria-label="Increase O/S">►</button>
+          </div>
         </div>
       </td>
       <td style="text-align: center;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-          <button class="counter-btn js-dec-fis" data-id="${m.id}" type="button" aria-label="Decrease FIS">◄</button>
-          <span style="min-width: 20px; text-align: center;">${m.fisCount || 0}</span>
-          <button class="counter-btn js-inc-fis" data-id="${m.id}" type="button" aria-label="Increase FIS">►</button>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.fisCount || 0}</span>
+          <div style="display: flex; gap: 4px;">
+            <button class="counter-btn js-dec-fis" data-id="${m.id}" type="button" aria-label="Decrease FIS">◄</button>
+            <button class="counter-btn js-inc-fis" data-id="${m.id}" type="button" aria-label="Increase FIS">►</button>
+          </div>
         </div>
       </td>
       <td>
         <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
-        <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
         ${
           m.status === "PLANNED"
             ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
@@ -557,6 +562,7 @@ export function renderLiveBoard() {
             ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
             : ""
         }
+        <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
         <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
         <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
       </td>
