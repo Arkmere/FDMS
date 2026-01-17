@@ -515,7 +515,8 @@ export function renderLiveBoard() {
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
+        <div class="cell-strong"><span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
       </td>
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
@@ -2310,8 +2311,8 @@ export function renderHistoryBoard() {
         <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
       </td>
       <td>
-        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span> → <span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
-        <div class="cell-muted">${escapeHtml(m.depName || m.depAd)} → ${escapeHtml(m.arrName || m.arrAd)}</div>
+        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
+        <div class="cell-strong"><span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
       </td>
       <td>
         <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
