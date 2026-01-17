@@ -555,16 +555,22 @@ export function renderLiveBoard() {
         <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
-        ${
-          m.status === "PLANNED"
-            ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
-            : m.status === "ACTIVE"
-            ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
-            : ""
-        }
-        <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
-        <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
-        <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
+        <div style="display: flex; gap: 6px;">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            ${
+              m.status === "PLANNED"
+                ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
+                : m.status === "ACTIVE"
+                ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
+                : ""
+            }
+            <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
+            <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
+          </div>
+        </div>
       </td>
     `;
 

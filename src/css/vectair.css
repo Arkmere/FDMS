@@ -383,7 +383,6 @@ tr.strip.ft-ovr > td {
   border: 1px solid var(--va-border-dark);
   background: #f5f6f7;
   cursor: pointer;
-  margin-left: 6px;
 }
 .small-btn:hover {
   background: #e4eaee;
