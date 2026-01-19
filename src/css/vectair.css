@@ -422,6 +422,7 @@ tr.strip.ft-ovr > td {
   background: #f4f5f7;
 }
 .expand-inner {
+  width: 100%;
   padding: 8px 10px;
   display: flex;
   gap: 16px;
@@ -439,8 +440,8 @@ tr.strip.ft-ovr > td {
   gap: 16px;
 }
 .expand-section {
+  flex: 1 1 300px;
   min-width: 220px;
-  flex: 1;
 }
 .expand-title {
   font-size: 12px;
@@ -450,9 +451,9 @@ tr.strip.ft-ovr > td {
 }
 .kv {
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 150px 1fr;
   row-gap: 2px;
-  column-gap: 8px;
+  column-gap: 12px;
   font-size: 11.5px;
 }
 .kv-label {
