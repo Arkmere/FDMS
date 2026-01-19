@@ -330,17 +330,21 @@ tr.strip.ft-ovr > td {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-size: 12px;
+  line-height: 1.4;
 }
 .call-sub {
   font-size: 11px;
   color: var(--va-text-soft);
+  line-height: 1.4;
 }
 .cell-muted {
   font-size: 11px;
   color: var(--va-text-soft);
+  line-height: 1.4;
 }
 .cell-strong {
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .badge-row {
@@ -383,7 +387,6 @@ tr.strip.ft-ovr > td {
   border: 1px solid var(--va-border-dark);
   background: #f5f6f7;
   cursor: pointer;
-  margin-left: 6px;
 }
 .small-btn:hover {
   background: #e4eaee;
@@ -421,9 +424,26 @@ tr.strip.ft-ovr > td {
 .expand-inner {
   padding: 8px 4px 8px 10px;
   display: flex;
-  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
+  position: relative;
+}
+.expand-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
+}
+.expand-left {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.expand-right {
+  flex: 0 0 280px;
 }
 .expand-section {
   min-width: 220px;
