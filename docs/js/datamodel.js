@@ -1,8 +1,29 @@
 // datamodel.js
-// In-memory demo data + small helpers for statuses and basic querying.
-// This will later be replaced by a richer data model and persistence.
+// Storage-backed demo data + helpers for statuses and basic querying.
+// Movements persist in localStorage between page reloads.
 
-export const demoMovements = [
+const STORAGE_KEY = "vectair_fdms_movements_v3";
+const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
+const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
+const SCHEMA_VERSION = 3;
+const CONFIG_KEY = "vectair_fdms_config";
+
+// Default configuration
+const defaultConfig = {
+  defaultTimeOffsetMinutes: 10, // Legacy - kept for backwards compatibility
+  depOffsetMinutes: 10,   // DEP: ETD = now + this
+  arrOffsetMinutes: 90,   // ARR: ETA = now + this
+  locOffsetMinutes: 10,   // LOC: ETD/ETA = now + this
+  ovrOffsetMinutes: 0,    // OVR: ECT = now + this
+  timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
+  showLocalTime: false    // Show local time conversions alongside UTC
+};
+
+// Configuration state
+let config = { ...defaultConfig };
+
+// The original hard-coded demo data
+const demoMovementsSeed = [
   {
     id: 1,
     status: "ACTIVE",
@@ -20,6 +41,8 @@ export const demoMovements = [
     depActual: "11:39",
     arrPlanned: "12:10",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD
+    rules: "VFR",
     flightType: "ARR",
     isLocal: false,
     tngCount: 0,
@@ -51,6 +74,8 @@ export const demoMovements = [
     depActual: "",
     arrPlanned: "13:30",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "LOC",
     isLocal: true,
     tngCount: 6,
@@ -82,6 +107,8 @@ export const demoMovements = [
     depActual: "13:15",
     arrPlanned: "13:50",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "DEP",
     isLocal: false,
     tngCount: 0,
@@ -146,6 +173,8 @@ export const demoMovements = [
     depActual: "09:26",
     arrPlanned: "19:40",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "IFR",
     flightType: "OVR",
     isLocal: false,
     tngCount: 0,
@@ -177,6 +206,8 @@ export const demoMovements = [
     depActual: "15:05",
     arrPlanned: "15:40",
     arrActual: "",
+    dof: new Date().toISOString().split('T')[0],
+    rules: "VFR",
     flightType: "LOC",
     isLocal: true,
     tngCount: 0,
@@ -226,12 +257,344 @@ export const demoMovements = [
   }
 ];
 
-let nextId = demoMovements.length + 1;
+// Working state (initialised lazily)
+let movements = [];
+let nextId = 1;
+let movementsInitialised = false;
+
+function cloneDemoMovements() {
+  // Shallow clone each object so we don't mutate the seed
+  return demoMovementsSeed.map((m) => ({ ...m }));
+}
+
+/**
+ * Migrate from v1 schema (array) to current schema
+ * @returns {Array|null} Migrated movements array or null
+ */
+function migrateFromV1() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_V1);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    console.log("FDMS: Migrating data from v1 to v3 schema");
+    // Add missing fields to v1 data
+    const migrated = parsed.map(m => ({
+      ...m,
+      dof: m.dof || new Date().toISOString().split('T')[0],
+      rules: m.rules || "VFR"
+    }));
+    // Remove old key after successful migration
+    window.localStorage.removeItem(STORAGE_KEY_V1);
+    return migrated;
+  } catch (e) {
+    console.warn("FDMS: failed to migrate from v1", e);
+    return null;
+  }
+}
+
+/**
+ * Migrate from v2 schema to v3 schema
+ * Adds DOF and rules fields if missing
+ * @returns {Array|null} Migrated movements array or null
+ */
+function migrateFromV2() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_V2);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 2) return null;
+    if (!Array.isArray(parsed.movements)) return null;
+
+    console.log("FDMS: Migrating data from v2 to v3 schema");
+    // Add DOF and rules fields to v2 data
+    const migrated = parsed.movements.map(m => ({
+      ...m,
+      dof: m.dof || new Date().toISOString().split('T')[0],
+      rules: m.rules || "VFR"
+    }));
+    // Remove old key after successful migration
+    window.localStorage.removeItem(STORAGE_KEY_V2);
+    return migrated;
+  } catch (e) {
+    console.warn("FDMS: failed to migrate from v2", e);
+    return null;
+  }
+}
+
+/**
+ * Load movements from localStorage with schema migration support
+ * Tries v3 -> v2 -> v1 in order
+ * @returns {Array|null} Movements array or null
+ */
+function loadFromStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    // Try loading v3 schema first
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // v3 schema: { version, timestamp, movements }
+      if (parsed && typeof parsed === "object" && parsed.version === SCHEMA_VERSION) {
+        return Array.isArray(parsed.movements) ? parsed.movements : null;
+      }
+    }
+
+    // Try v2 migration
+    const v2Data = migrateFromV2();
+    if (v2Data) return v2Data;
+
+    // Fall back to v1 migration
+    return migrateFromV1();
+  } catch (e) {
+    console.warn("FDMS: failed to load movements from storage", e);
+    return null;
+  }
+}
+
+function saveToStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    // v2 schema: wrap movements with version and timestamp
+    const payload = JSON.stringify({
+      version: SCHEMA_VERSION,
+      timestamp: new Date().toISOString(),
+      movements: movements
+    });
+    window.localStorage.setItem(STORAGE_KEY, payload);
+  } catch (e) {
+    console.warn("FDMS: failed to save movements to storage", e);
+  }
+}
+
+function loadConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      config = { ...defaultConfig, ...parsed };
+    } else {
+      config = { ...defaultConfig };
+    }
+  } catch (e) {
+    console.warn("FDMS: failed to load config from storage", e);
+    config = { ...defaultConfig };
+  }
+}
+
+function saveConfig() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn("FDMS: failed to save config to storage", e);
+  }
+}
+
+function computeNextId() {
+  if (!movements.length) return 1;
+  return (
+    movements.reduce((max, m) => {
+      const id = typeof m.id === "number" ? m.id : 0;
+      return id > max ? id : max;
+    }, 0) + 1
+  );
+}
+
+function ensureInitialised() {
+  if (movementsInitialised) return;
+
+  // Load config first
+  loadConfig();
+
+  const loaded = loadFromStorage();
+  if (loaded && loaded.length) {
+    movements = loaded;
+  } else {
+    movements = cloneDemoMovements();
+    saveToStorage();
+  }
+
+  nextId = computeNextId();
+  movementsInitialised = true;
+}
 
 export function getMovements() {
-  // In future this could query by date range / facility.
-  return demoMovements;
+  ensureInitialised();
+  return movements;
 }
+
+/* -----------------------------
+   Registration → Type Inference
+------------------------------ */
+
+// Lightweight lookup table: registration prefix → aircraft type
+// In Phase E, this will be replaced with full VKB integration
+const registrationTypeLookup = {
+  // UK Civil (G- prefix)
+  "G-VAIR": "G115",
+  "G-BYUL": "A109",
+  // UK Military (ZM, ZJ, ZK, etc.)
+  "ZM300": "JUNO",
+  "ZJ": "MERLIN",
+  "ZK": "SEA KING",
+  // Prefix-based inference
+  "G-B": "Various UK Civil",
+  "G-C": "Various UK Civil"
+};
+
+/**
+ * Infer aircraft type from registration.
+ * Returns type if known, null otherwise.
+ * Always allow manual override.
+ */
+export function inferTypeFromReg(registration) {
+  if (!registration) return null;
+  const reg = registration.toUpperCase().trim();
+
+  // Try exact match first
+  if (registrationTypeLookup[reg]) {
+    return registrationTypeLookup[reg];
+  }
+
+  // Try prefix match (first 3-4 chars)
+  for (let len = 4; len >= 2; len--) {
+    const prefix = reg.substring(0, len);
+    if (registrationTypeLookup[prefix]) {
+      return registrationTypeLookup[prefix];
+    }
+  }
+
+  return null;
+}
+
+/* -----------------------------
+   Time Offset Helpers
+------------------------------ */
+
+/**
+ * Get current time plus offset in HH:MM format
+ * @param {number} offsetMinutes - Minutes to add to current time
+ * @returns {string} Time in HH:MM format
+ */
+function getTimeWithOffset(offsetMinutes) {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + offsetMinutes);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Apply default times to a movement based on flight type
+ * @param {object} movement - Movement object (may have blank time fields)
+ * @returns {object} Movement with default times applied
+ */
+function applyDefaultTimes(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+
+  // DEP: default ETD to now + depOffsetMinutes
+  if (ft === "DEP" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(config.depOffsetMinutes);
+  }
+
+  // ARR: default ETA to now + arrOffsetMinutes
+  if (ft === "ARR" && !movement.arrPlanned) {
+    movement.arrPlanned = getTimeWithOffset(config.arrOffsetMinutes);
+  }
+
+  // LOC: default ETD and ETA to now + locOffsetMinutes
+  if (ft === "LOC") {
+    if (!movement.depPlanned) {
+      movement.depPlanned = getTimeWithOffset(config.locOffsetMinutes);
+    }
+    if (!movement.arrPlanned) {
+      movement.arrPlanned = getTimeWithOffset(config.locOffsetMinutes);
+    }
+  }
+
+  // OVR: default ECT to now + ovrOffsetMinutes
+  if (ft === "OVR" && !movement.depPlanned) {
+    movement.depPlanned = getTimeWithOffset(config.ovrOffsetMinutes);
+  }
+
+  return movement;
+}
+
+/* -----------------------------
+   Semantic Time Field Helpers
+------------------------------ */
+
+/**
+ * Get Estimated Time of Departure (ETD)
+ * For DEP/LOC: uses depPlanned
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getETD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Departure (ATD)
+ * For DEP/LOC: uses depActual
+ * For ARR/OVR: not applicable (returns null)
+ */
+export function getATD(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "DEP" || ft === "LOC") return movement.depActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Time of Arrival (ETA)
+ * For ARR/LOC: uses arrPlanned
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getETA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Time of Arrival (ATA)
+ * For ARR/LOC: uses arrActual
+ * For DEP/OVR: not applicable (returns null)
+ */
+export function getATA(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "ARR" || ft === "LOC") return movement.arrActual || null;
+  return null;
+}
+
+/**
+ * Get Estimated Crossing Time (ECT)
+ * For OVR: uses depPlanned as placeholder
+ */
+export function getECT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depPlanned || null;
+  return null;
+}
+
+/**
+ * Get Actual Crossing Time (ACT)
+ * For OVR: uses depActual as placeholder
+ */
+export function getACT(movement) {
+  const ft = (movement.flightType || "").toUpperCase();
+  if (ft === "OVR") return movement.depActual || null;
+  return null;
+}
+
+/* -----------------------------
+   CRUD Operations
+------------------------------ */
 
 export function statusClass(status) {
   switch (status) {
@@ -263,10 +626,317 @@ export function statusLabel(status) {
   }
 }
 
-// Simple placeholder for future creation logic.
-// Currently just pushes into the in-memory array.
 export function createMovement(partial) {
-  const movement = { id: nextId++, ...partial };
-  demoMovements.push(movement);
+  ensureInitialised();
+  const now = new Date().toISOString();
+
+  // Apply default times if not provided
+  const withDefaults = applyDefaultTimes({ ...partial });
+
+  const movement = {
+    id: nextId++,
+    ...withDefaults,
+    createdAtUtc: now,
+    updatedAtUtc: now,
+    updatedBy: "local user",
+    changeLog: [
+      {
+        timestamp: now,
+        user: "local user",
+        action: "created",
+        changes: {}
+      }
+    ]
+  };
+  movements.push(movement);
+  saveToStorage();
   return movement;
+}
+
+export function updateMovement(id, patch) {
+  ensureInitialised();
+  const movement = movements.find((m) => m.id === id);
+  if (!movement) return null;
+
+  // Track what changed
+  const changes = {};
+  for (const key in patch) {
+    if (patch[key] !== movement[key]) {
+      changes[key] = { from: movement[key], to: patch[key] };
+    }
+  }
+
+  // Update movement
+  const now = new Date().toISOString();
+  Object.assign(movement, patch);
+  movement.updatedAtUtc = now;
+  movement.updatedBy = "local user";
+
+  // Append to change log
+  if (!movement.changeLog) movement.changeLog = [];
+  movement.changeLog.push({
+    timestamp: now,
+    user: "local user",
+    action: "updated",
+    changes
+  });
+
+  saveToStorage();
+  return movement;
+}
+
+export function resetMovementsToDemo() {
+  movements = cloneDemoMovements();
+  nextId = computeNextId();
+  movementsInitialised = true;
+  saveToStorage();
+}
+
+export function exportSessionJSON() {
+  ensureInitialised();
+  return {
+    version: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    movements: movements.map(m => ({ ...m }))
+  };
+}
+
+export function importSessionJSON(data) {
+  try {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid import data");
+    }
+
+    // Support both v1 (array) and v2 (object with version) formats
+    let importedMovements;
+    if (Array.isArray(data)) {
+      // v1 format
+      importedMovements = data;
+    } else if (data.version && Array.isArray(data.movements)) {
+      // v2 format
+      importedMovements = data.movements;
+    } else {
+      throw new Error("Unrecognized import format");
+    }
+
+    movements = importedMovements.map(m => ({ ...m }));
+    nextId = computeNextId();
+    movementsInitialised = true;
+    saveToStorage();
+    return { success: true, count: movements.length };
+  } catch (e) {
+    console.error("FDMS: import failed", e);
+    return { success: false, error: e.message };
+  }
+}
+
+export function getStorageInfo() {
+  return {
+    key: STORAGE_KEY,
+    version: SCHEMA_VERSION,
+    movementCount: movementsInitialised ? movements.length : 0
+  };
+}
+
+/* -----------------------------
+   Configuration Management
+------------------------------ */
+
+/**
+ * Get current configuration
+ * @returns {object} Configuration object
+ */
+export function getConfig() {
+  ensureInitialised(); // Ensures config is loaded
+  return { ...config };
+}
+
+/**
+ * Update configuration
+ * @param {object} updates - Partial config updates
+ */
+export function updateConfig(updates) {
+  ensureInitialised();
+  config = { ...config, ...updates };
+  saveConfig();
+}
+
+/**
+ * Convert UTC time to local time based on configured offset
+ * @param {string} utcTime - Time in HH:MM format (UTC)
+ * @returns {string} Time in HH:MM format (Local)
+ */
+export function convertUTCToLocal(utcTime) {
+  if (!utcTime) return "";
+  const match = utcTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return utcTime;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const offsetHours = config.timezoneOffsetHours;
+
+  let localHours = hours + offsetHours;
+
+  // Handle day wraparound
+  if (localHours < 0) localHours += 24;
+  if (localHours >= 24) localHours -= 24;
+
+  return `${String(localHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/**
+ * Get timezone offset label (e.g., "+1", "-5", "UTC")
+ * @returns {string} Offset label
+ */
+export function getTimezoneOffsetLabel() {
+  const offset = config.timezoneOffsetHours;
+  if (offset === 0) return "UTC";
+  const sign = offset > 0 ? "+" : "";
+  return `${sign}${offset}`;
+}
+
+/* -----------------------------
+   Input Validation Utilities
+------------------------------ */
+
+/**
+ * Validate time format (HH:MM)
+ * @param {string} timeStr - Time string to validate
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateTime(timeStr) {
+  if (!timeStr || timeStr.trim() === "") {
+    return { valid: true, error: null }; // Empty is acceptable (optional field)
+  }
+
+  const match = timeStr.match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
+  if (!match) {
+    return { valid: false, error: "Time must be in HH:MM format (e.g., 09:30 or 14:45)" };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate date format (YYYY-MM-DD)
+ * @param {string} dateStr - Date string to validate
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateDate(dateStr) {
+  if (!dateStr || dateStr.trim() === "") {
+    return { valid: true, error: null }; // Empty is acceptable (will default to today)
+  }
+
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return { valid: false, error: "Date must be in YYYY-MM-DD format" };
+  }
+
+  // Check if date is valid
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12) {
+    return { valid: false, error: "Month must be between 01 and 12" };
+  }
+
+  if (day < 1 || day > 31) {
+    return { valid: false, error: "Day must be between 01 and 31" };
+  }
+
+  // Check if date exists
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return { valid: false, error: "Invalid date" };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate number range
+ * @param {string|number} value - Value to validate
+ * @param {number} min - Minimum value (inclusive)
+ * @param {number} max - Maximum value (inclusive)
+ * @param {string} fieldName - Field name for error message
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateNumberRange(value, min, max, fieldName = "Value") {
+  if (value === "" || value === null || value === undefined) {
+    return { valid: true, error: null }; // Empty is acceptable
+  }
+
+  const num = Number(value);
+  if (isNaN(num)) {
+    return { valid: false, error: `${fieldName} must be a number` };
+  }
+
+  if (num < min || num > max) {
+    return { valid: false, error: `${fieldName} must be between ${min} and ${max}` };
+  }
+
+  return { valid: true, error: null };
+}
+
+/**
+ * Validate required field
+ * @param {string} value - Value to validate
+ * @param {string} fieldName - Field name for error message
+ * @returns {{valid: boolean, error: string|null}} Validation result
+ */
+export function validateRequired(value, fieldName = "Field") {
+  if (!value || value.trim() === "") {
+    return { valid: false, error: `${fieldName} is required` };
+  }
+  return { valid: true, error: null };
+}
+
+/* -----------------------------
+   Storage Quota Monitoring
+------------------------------ */
+
+/**
+ * Get localStorage usage information
+ * @returns {{used: number, available: number, percentage: number, quota: number}} Storage info
+ */
+export function getStorageQuota() {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return { used: 0, available: 0, percentage: 0, quota: 0 };
+  }
+
+  try {
+    // Calculate current usage
+    let used = 0;
+    for (let key in window.localStorage) {
+      if (window.localStorage.hasOwnProperty(key)) {
+        used += window.localStorage[key].length + key.length;
+      }
+    }
+
+    // localStorage quota is typically 5-10MB, assume 5MB as conservative estimate
+    const quota = 5 * 1024 * 1024; // 5MB in bytes
+    const available = quota - used;
+    const percentage = (used / quota) * 100;
+
+    return {
+      used,
+      available,
+      percentage: Math.round(percentage * 10) / 10, // Round to 1 decimal
+      quota
+    };
+  } catch (e) {
+    console.warn("FDMS: failed to get storage quota", e);
+    return { used: 0, available: 0, percentage: 0, quota: 0 };
+  }
+}
+
+/**
+ * Check if there's enough space to save data
+ * @param {number} estimatedSize - Estimated size of data to save
+ * @returns {boolean} True if there's enough space
+ */
+export function hasEnoughStorageSpace(estimatedSize = 100000) {
+  const quota = getStorageQuota();
+  return quota.available > estimatedSize;
 }

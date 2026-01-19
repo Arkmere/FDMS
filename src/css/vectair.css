@@ -426,6 +426,15 @@ tr.strip.ft-ovr > td {
   display: flex;
   gap: 16px;
   font-size: 12px;
+  position: relative;
+}
+.expand-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
 }
 .expand-left {
   flex: 1;

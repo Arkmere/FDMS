@@ -37,7 +37,12 @@ import {
   getLocationName,
   lookupAircraftType,
   getWTC,
-  getVoiceCallsignForDisplay
+  getVoiceCallsignForDisplay,
+  lookupCaptainFromEgowCodes,
+  lookupUnitCodeFromEgowCodes,
+  lookupUnitFromCallsign,
+  lookupOperatorFromCallsign,
+  validateSquawkCode
 } from "./vkb.js";
 
 /* -----------------------------
@@ -340,6 +345,66 @@ function renderBadges(m) {
   return parts.join("\n");
 }
 
+/**
+ * Get full flight type name
+ * @param {string} flightType - Flight type abbreviation (DEP, ARR, LOC, OVR)
+ * @returns {string} Full flight type name
+ */
+function getFullFlightType(flightType) {
+  const ft = (flightType || "").toUpperCase();
+  switch (ft) {
+    case "DEP": return "DEPARTURE";
+    case "ARR": return "ARRIVAL";
+    case "LOC": return "LOCAL";
+    case "OVR": return "OVERFLIGHT";
+    default: return flightType || "—";
+  }
+}
+
+/**
+ * Get EGOW code description in plain text
+ * @param {string} egowCode - EGOW code (BM, BC, VM, VC, etc.)
+ * @returns {string} Plain text description
+ */
+function getEgowCodeDescription(egowCode) {
+  const code = (egowCode || "").toUpperCase();
+  switch (code) {
+    case "BM": return "Based Military";
+    case "BC": return "Based Civil";
+    case "VM": return "Visiting Military";
+    case "VMH": return "Visiting Military Helicopter";
+    case "VC": return "Visiting Civil";
+    default: return code || "—";
+  }
+}
+
+/**
+ * Get color for EGOW code indicator bar
+ * @param {string} egowCode - EGOW code
+ * @param {string} unitCode - Unit code (L, M, A)
+ * @returns {string} CSS color value
+ */
+function getEgowIndicatorColor(egowCode, unitCode) {
+  const code = (egowCode || "").toUpperCase();
+  const unit = (unitCode || "").toUpperCase();
+
+  if (code === "BM") {
+    switch (unit) {
+      case "L": return "#2196F3"; // Blue
+      case "M": return "#f44336"; // Red
+      case "A": return "#FFC107"; // Yellow
+      default: return "#9E9E9E"; // Grey fallback
+    }
+  }
+
+  switch (code) {
+    case "BC": return "#000000"; // Black
+    case "VM":
+    case "VMH": return "#4CAF50"; // Green
+    default: return "#9E9E9E"; // Grey fallback
+  }
+}
+
 function renderFormationDetails(m) {
   if (!m.formation || !Array.isArray(m.formation.elements)) return "";
 
@@ -394,22 +459,35 @@ function renderExpandedRow(tbody, m) {
   const expTd = document.createElement("td");
   expTd.colSpan = 7;
 
+  // Get aircraft type info
+  const typeData = lookupAircraftType(m.type);
+  const typeDisplay = m.type ? `${escapeHtml(m.type)}${typeData && typeData['Common Name'] ? ` (${escapeHtml(typeData['Common Name'])})` : ''}` : "—";
+
+  // Format squawk display (always prepend # if not already present)
+  let squawkDisplay = m.squawk || "—";
+  if (m.squawk && m.squawk !== "—") {
+    squawkDisplay = m.squawk.startsWith('#') ? escapeHtml(m.squawk) : `#${escapeHtml(m.squawk)}`;
+  }
+
+  // Get indicator bar color
+  const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
+
   expTd.innerHTML = `
     <div class="expand-inner">
+      <div class="expand-indicator" style="background-color: ${indicatorColor};"></div>
       <div class="expand-left">
         <div class="expand-section">
           <div class="expand-title">Movement Summary</div>
           <div class="kv">
             <div class="kv-label">Status</div><div class="kv-value">${escapeHtml(statusLabel(m.status))}</div>
-            <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(m.flightType)}</div>
+            <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(getFullFlightType(m.flightType))}</div>
             <div class="kv-label">Departure</div><div class="kv-value">${escapeHtml(m.depAd)} – ${escapeHtml(m.depName)}</div>
             <div class="kv-label">Arrival</div><div class="kv-value">${escapeHtml(m.arrAd)} – ${escapeHtml(m.arrName)}</div>
-            <div class="kv-label">ETD / ETA / ECT</div><div class="kv-value">${escapeHtml(getETD(m) || getECT(m) || "—")} → ${escapeHtml(getETA(m) || "—")}</div>
-            <div class="kv-label">ATD / ATA / ACT</div><div class="kv-value">${escapeHtml(getATD(m) || getACT(m) || "—")} → ${escapeHtml(getATA(m) || "—")}</div>
+            <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
+            <div class="kv-label">POB</div><div class="kv-value">${escapeHtml(m.pob ?? "—")}</div>
             <div class="kv-label">T&amp;Gs</div><div class="kv-value">${escapeHtml(m.tngCount ?? 0)}</div>
             <div class="kv-label">O/S count</div><div class="kv-value">${escapeHtml(m.osCount ?? 0)}</div>
             <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
-            <div class="kv-label">POB</div><div class="kv-value">${escapeHtml(m.pob ?? 0)}</div>
           </div>
         </div>
 
@@ -420,14 +498,23 @@ function renderExpandedRow(tbody, m) {
         <div class="expand-section">
           <div class="expand-title">Coding &amp; Classification</div>
           <div class="kv">
-            <div class="kv-label">EGOW code</div><div class="kv-value">${escapeHtml(m.egowCode || "—")} – ${escapeHtml(m.egowDesc || "")}</div>
-            <div class="kv-label">Unit</div><div class="kv-value">${escapeHtml(m.unitCode || "—")}${m.unitDesc ? " · " + escapeHtml(m.unitDesc) : ""}</div>
-            <div class="kv-label">Callsign (voice)</div><div class="kv-value">${escapeHtml(m.callsignVoice || "—")}</div>
-            ${m.operator && m.operator !== '' && m.operator !== '-' ? `<div class="kv-label">Operator</div><div class="kv-value">${escapeHtml(m.operator)}</div>` : ''}
-            <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
-            <div class="kv-label">Remarks</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
-            ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">Warnings</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
-            ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">Notes</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
+            <div class="kv-label">ACFT TYPE</div><div class="kv-value">${typeDisplay}</div>
+            <div class="kv-label">EGOW CODE</div><div class="kv-value">${escapeHtml(getEgowCodeDescription(m.egowCode))}</div>
+            <div class="kv-label">EGOW UNIT</div><div class="kv-value">${escapeHtml(m.unitCode || "—")}</div>
+            <div class="kv-label">UNIT</div><div class="kv-value">${escapeHtml(m.unitDesc || "—")}</div>
+            <div class="kv-label">OPERATOR</div><div class="kv-value">${escapeHtml(m.operator || "—")}</div>
+          </div>
+        </div>
+
+        <div class="expand-section">
+          <div class="expand-title">Additional</div>
+          <div class="kv">
+            <div class="kv-label">REMARKS EXTD</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
+            ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">WARNINGS</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
+            ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">NOTES</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
+            <div class="kv-label">SQUAWK</div><div class="kv-value">${squawkDisplay}</div>
+            <div class="kv-label">ROUTE</div><div class="kv-value">${escapeHtml(m.route || "—")}</div>
+            <div class="kv-label">CLEARANCE</div><div class="kv-value">${escapeHtml(m.clearance || "—")}</div>
           </div>
         </div>
       </div>
@@ -751,6 +838,55 @@ function openModal(contentHtml) {
   // Real save handler is bound after modal opens via specific save functions
 
   document.addEventListener("keydown", keyHandler);
+}
+
+/**
+ * Enrich movement data with auto-populated fields
+ * @param {Object} movement - Movement object to enrich
+ * @returns {Object} Enriched movement object
+ */
+function enrichMovementData(movement) {
+  const callsignCode = movement.callsignCode || '';
+  const aircraftType = movement.type || '';
+
+  // Auto-populate captain from EGOW codes
+  if (!movement.captain || movement.captain === '') {
+    const captain = lookupCaptainFromEgowCodes(callsignCode);
+    if (captain) {
+      movement.captain = captain;
+    }
+  }
+
+  // Auto-populate POB = 2 for UAM callsigns
+  if (callsignCode.toUpperCase().startsWith('UAM') && (movement.pob === undefined || movement.pob === null || movement.pob === 0)) {
+    movement.pob = 2;
+  }
+
+  // Auto-populate unit code from EGOW codes
+  if (!movement.unitCode || movement.unitCode === '') {
+    const unitCode = lookupUnitCodeFromEgowCodes(callsignCode);
+    if (unitCode) {
+      movement.unitCode = unitCode;
+    }
+  }
+
+  // Auto-populate unit description from callsign databases
+  if (!movement.unitDesc || movement.unitDesc === '') {
+    const unitDesc = lookupUnitFromCallsign(callsignCode, aircraftType);
+    if (unitDesc && unitDesc !== '-') {
+      movement.unitDesc = unitDesc;
+    }
+  }
+
+  // Auto-populate operator from callsign databases (only if not already set from registration)
+  if (!movement.operator || movement.operator === '' || movement.operator === '-') {
+    const operator = lookupOperatorFromCallsign(callsignCode, aircraftType);
+    if (operator && operator !== '-') {
+      movement.operator = operator;
+    }
+  }
+
+  return movement;
 }
 
 function openNewFlightModal(flightType = "DEP") {
@@ -1078,7 +1214,7 @@ function openNewFlightModal(flightType = "DEP") {
     const arrName = getLocationName(arrAd);
 
     // Create movement
-    const movement = {
+    let movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
@@ -1112,8 +1248,14 @@ function openNewFlightModal(flightType = "DEP") {
       remarks: document.getElementById("newRemarks")?.value || "",
       warnings: warnings,
       notes: notes,
+      squawk: "",
+      route: "",
+      clearance: "",
       formation: null
     };
+
+    // Enrich with auto-populated fields
+    movement = enrichMovementData(movement);
 
     createMovement(movement);
     renderLiveBoard();
@@ -1398,13 +1540,19 @@ function openNewLocalModal() {
     const aircraftType = document.getElementById("newLocType")?.value || "";
     const wtc = getWTC(aircraftType, "LOC", "UK");
 
+    // Get warnings and notes from registration
+    const warnings = regData ? (regData['WARNINGS'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+
     // Create movement
-    const movement = {
+    let movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: voiceCallsign,
       registration: regValue,
+      operator: operator,
       type: aircraftType,
       popularName: popularName,
       wtc: wtc,
@@ -1430,8 +1578,16 @@ function openNewLocalModal() {
       captain: "",
       pob: parseInt(pob, 10),
       remarks: document.getElementById("newLocRemarks")?.value || "",
+      warnings: warnings,
+      notes: notes,
+      squawk: "",
+      route: "",
+      clearance: "",
       formation: null
     };
+
+    // Enrich with auto-populated fields
+    movement = enrichMovementData(movement);
 
     createMovement(movement);
     renderLiveBoard();
@@ -2044,13 +2200,19 @@ function openDuplicateMovementModal(m) {
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
+    // Get warnings and notes from registration
+    const warnings = regData ? (regData['WARNINGS'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+
     // Create movement
-    const movement = {
+    let movement = {
       status: "PLANNED",
       callsignCode: callsign,
       callsignLabel: m.callsignLabel || "",
       callsignVoice: voiceCallsign,
       registration: document.getElementById("dupReg")?.value || "",
+      operator: operator || m.operator || "",
       type: aircraftType,
       popularName: popularName,
       wtc: wtc,
@@ -2076,8 +2238,16 @@ function openDuplicateMovementModal(m) {
       captain: m.captain || "",
       pob: parseInt(pob, 10),
       remarks: document.getElementById("dupRemarks")?.value || "",
+      warnings: warnings || m.warnings || "",
+      notes: notes || m.notes || "",
+      squawk: m.squawk || "",
+      route: m.route || "",
+      clearance: m.clearance || "",
       formation: null
     };
+
+    // Enrich with auto-populated fields
+    movement = enrichMovementData(movement);
 
     createMovement(movement);
     renderLiveBoard();
