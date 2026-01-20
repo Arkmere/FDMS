@@ -800,21 +800,95 @@ export function getTimezoneOffsetLabel() {
 ------------------------------ */
 
 /**
- * Validate time format (HH:MM)
+ * Validate time format (HH:MM or HHMM)
  * @param {string} timeStr - Time string to validate
- * @returns {{valid: boolean, error: string|null}} Validation result
+ * @returns {{valid: boolean, error: string|null, normalized: string|null}} Validation result
  */
 export function validateTime(timeStr) {
   if (!timeStr || timeStr.trim() === "") {
-    return { valid: true, error: null }; // Empty is acceptable (optional field)
+    return { valid: true, error: null, normalized: null }; // Empty is acceptable (optional field)
   }
 
-  const match = timeStr.match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
+  const trimmed = timeStr.trim();
+
+  // Check if already in HH:MM format
+  let match = trimmed.match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
+  if (match) {
+    const hours = match[1].padStart(2, '0');
+    const minutes = match[2].padStart(2, '0');
+    return { valid: true, error: null, normalized: `${hours}:${minutes}` };
+  }
+
+  // Check if in HHMM format (4 digits without colon)
+  match = trimmed.match(/^([0-2][0-9])([0-5][0-9])$/);
+  if (match) {
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+
+    // Validate hours are 00-23
+    if (hours > 23) {
+      return { valid: false, error: "Hours must be between 00 and 23", normalized: null };
+    }
+
+    return { valid: true, error: null, normalized: `${match[1]}:${match[2]}` };
+  }
+
+  return { valid: false, error: "Time must be in HH:MM or HHMM format (e.g., 09:30, 0930, 14:45, or 1445)", normalized: null };
+}
+
+/**
+ * Check if a time is in the past compared to current UTC time
+ * @param {string} timeStr - Time string in HH:MM format
+ * @param {string} dateStr - Date string in YYYY-MM-DD format (optional, defaults to today)
+ * @returns {{isPast: boolean, warning: string|null}} Check result
+ */
+export function checkPastTime(timeStr, dateStr = null) {
+  if (!timeStr || timeStr.trim() === "") {
+    return { isPast: false, warning: null };
+  }
+
+  const now = new Date();
+  const match = timeStr.match(/^(\d{2}):(\d{2})$/);
   if (!match) {
-    return { valid: false, error: "Time must be in HH:MM format (e.g., 09:30 or 14:45)" };
+    return { isPast: false, warning: null };
   }
 
-  return { valid: true, error: null };
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  // Use provided date or today's date
+  let checkDate;
+  if (dateStr && dateStr.trim() !== "") {
+    const dateMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateMatch) {
+      checkDate = new Date(Date.UTC(
+        parseInt(dateMatch[1], 10),
+        parseInt(dateMatch[2], 10) - 1,
+        parseInt(dateMatch[3], 10),
+        hours,
+        minutes
+      ));
+    } else {
+      return { isPast: false, warning: null };
+    }
+  } else {
+    checkDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      hours,
+      minutes
+    ));
+  }
+
+  if (checkDate < now) {
+    return {
+      isPast: true,
+      warning: "Warning: This time is in the past. Continue if you are backfilling or correcting data."
+    };
+  }
+
+  return { isPast: false, warning: null };
 }
 
 /**

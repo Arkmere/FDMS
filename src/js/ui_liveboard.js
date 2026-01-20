@@ -21,7 +21,8 @@ import {
   validateTime,
   validateDate,
   validateNumberRange,
-  validateRequired
+  validateRequired,
+  checkPastTime
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -469,12 +470,8 @@ function renderExpandedRow(tbody, m) {
     squawkDisplay = m.squawk.startsWith('#') ? escapeHtml(m.squawk) : `#${escapeHtml(m.squawk)}`;
   }
 
-  // Get indicator bar color
-  const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
-
   expTd.innerHTML = `
     <div class="expand-inner">
-      <div class="expand-indicator" style="background-color: ${indicatorColor};"></div>
       <div class="expand-left">
         <div class="expand-section">
           <div class="expand-title">Movement Summary</div>
@@ -509,12 +506,12 @@ function renderExpandedRow(tbody, m) {
         <div class="expand-section">
           <div class="expand-title">Additional</div>
           <div class="kv">
-            <div class="kv-label">REMARKS EXTD</div><div class="kv-value">${escapeHtml(m.remarks || "—")}</div>
+            ${m.remarks && m.remarks !== '' && m.remarks !== '-' ? `<div class="kv-label">REMARKS EXTD</div><div class="kv-value">${escapeHtml(m.remarks)}</div>` : ''}
             ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">WARNINGS</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
             ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">NOTES</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
-            <div class="kv-label">SQUAWK</div><div class="kv-value">${squawkDisplay}</div>
-            <div class="kv-label">ROUTE</div><div class="kv-value">${escapeHtml(m.route || "—")}</div>
-            <div class="kv-label">CLEARANCE</div><div class="kv-value">${escapeHtml(m.clearance || "—")}</div>
+            ${m.squawk && m.squawk !== '' && m.squawk !== '-' && m.squawk !== '—' ? `<div class="kv-label">SQUAWK</div><div class="kv-value">${squawkDisplay}</div>` : ''}
+            ${m.route && m.route !== '' && m.route !== '-' ? `<div class="kv-label">ROUTE</div><div class="kv-value">${escapeHtml(m.route)}</div>` : ''}
+            ${m.clearance && m.clearance !== '' && m.clearance !== '-' ? `<div class="kv-label">CLEARANCE</div><div class="kv-value">${escapeHtml(m.clearance)}</div>` : ''}
           </div>
         </div>
       </div>
@@ -595,8 +592,12 @@ export function renderLiveBoard() {
       }
     }
 
+    // Get indicator bar color
+    const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
+    const indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
+
     tr.innerHTML = `
-      <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
+      <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
         <div class="call-main">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
@@ -1134,8 +1135,8 @@ function openNewFlightModal(flightType = "DEP") {
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     // Get form values
     const dof = document.getElementById("newDOF")?.value || getTodayDateString();
-    const depPlanned = document.getElementById("newDepPlanned")?.value || "";
-    const arrPlanned = document.getElementById("newArrPlanned")?.value || "";
+    let depPlanned = document.getElementById("newDepPlanned")?.value || "";
+    let arrPlanned = document.getElementById("newArrPlanned")?.value || "";
     const pob = document.getElementById("newPob")?.value || "0";
     const tng = document.getElementById("newTng")?.value || "0";
     const callsignCode = document.getElementById("newCallsignCode")?.value || "";
@@ -1155,10 +1156,37 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
+    // Use normalized time if provided
+    if (depValidation.normalized) {
+      depPlanned = depValidation.normalized;
+      document.getElementById("newDepPlanned").value = depPlanned;
+    }
+
     const arrValidation = validateTime(arrPlanned);
     if (!arrValidation.valid) {
       showToast(`Arrival time: ${arrValidation.error}`, 'error');
       return;
+    }
+
+    // Use normalized time if provided
+    if (arrValidation.normalized) {
+      arrPlanned = arrValidation.normalized;
+      document.getElementById("newArrPlanned").value = arrPlanned;
+    }
+
+    // Check for past times and show warning
+    if (depPlanned) {
+      const depPastCheck = checkPastTime(depPlanned, dof);
+      if (depPastCheck.isPast) {
+        showToast(depPastCheck.warning, 'warning');
+      }
+    }
+
+    if (arrPlanned) {
+      const arrPastCheck = checkPastTime(arrPlanned, dof);
+      if (arrPastCheck.isPast) {
+        showToast(arrPastCheck.warning, 'warning');
+      }
     }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
@@ -1899,10 +1927,10 @@ function openEditMovementModal(m) {
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
     // Get form values
     const dof = document.getElementById("editDOF")?.value || getTodayDateString();
-    const depPlanned = document.getElementById("editDepPlanned")?.value || "";
-    const depActual = document.getElementById("editDepActual")?.value || "";
-    const arrPlanned = document.getElementById("editArrPlanned")?.value || "";
-    const arrActual = document.getElementById("editArrActual")?.value || "";
+    let depPlanned = document.getElementById("editDepPlanned")?.value || "";
+    let depActual = document.getElementById("editDepActual")?.value || "";
+    let arrPlanned = document.getElementById("editArrPlanned")?.value || "";
+    let arrActual = document.getElementById("editArrActual")?.value || "";
     const pob = document.getElementById("editPob")?.value || "0";
     const tng = document.getElementById("editTng")?.value || "0";
     const callsignCode = document.getElementById("editCallsignCode")?.value || "";
@@ -1916,11 +1944,16 @@ function openEditMovementModal(m) {
       return;
     }
 
+    const depPlannedValidation = validateTime(depPlanned);
+    const depActualValidation = validateTime(depActual);
+    const arrPlannedValidation = validateTime(arrPlanned);
+    const arrActualValidation = validateTime(arrActual);
+
     const validations = [
-      { result: validateTime(depPlanned), label: "Planned departure time" },
-      { result: validateTime(depActual), label: "Actual departure time" },
-      { result: validateTime(arrPlanned), label: "Planned arrival time" },
-      { result: validateTime(arrActual), label: "Actual arrival time" },
+      { result: depPlannedValidation, label: "Planned departure time" },
+      { result: depActualValidation, label: "Actual departure time" },
+      { result: arrPlannedValidation, label: "Planned arrival time" },
+      { result: arrActualValidation, label: "Actual arrival time" },
       { result: validateNumberRange(pob, 0, 999, "POB"), label: null },
       { result: validateNumberRange(tng, 0, 99, "T&G count"), label: null }
     ];
@@ -1931,6 +1964,42 @@ function openEditMovementModal(m) {
         showToast(msg, 'error');
         return;
       }
+    }
+
+    // Use normalized times if provided
+    if (depPlannedValidation.normalized) {
+      depPlanned = depPlannedValidation.normalized;
+      document.getElementById("editDepPlanned").value = depPlanned;
+    }
+    if (depActualValidation.normalized) {
+      depActual = depActualValidation.normalized;
+      document.getElementById("editDepActual").value = depActual;
+    }
+    if (arrPlannedValidation.normalized) {
+      arrPlanned = arrPlannedValidation.normalized;
+      document.getElementById("editArrPlanned").value = arrPlanned;
+    }
+    if (arrActualValidation.normalized) {
+      arrActual = arrActualValidation.normalized;
+      document.getElementById("editArrActual").value = arrActual;
+    }
+
+    // Check for past times and show warning
+    if (depPlanned) {
+      const depPastCheck = checkPastTime(depPlanned, dof);
+      if (depPastCheck.isPast) showToast(depPastCheck.warning, 'warning');
+    }
+    if (depActual) {
+      const depActualPastCheck = checkPastTime(depActual, dof);
+      if (depActualPastCheck.isPast) showToast(depActualPastCheck.warning, 'warning');
+    }
+    if (arrPlanned) {
+      const arrPastCheck = checkPastTime(arrPlanned, dof);
+      if (arrPastCheck.isPast) showToast(arrPastCheck.warning, 'warning');
+    }
+    if (arrActual) {
+      const arrActualPastCheck = checkPastTime(arrActual, dof);
+      if (arrActualPastCheck.isPast) showToast(arrActualPastCheck.warning, 'warning');
     }
 
     // Get WTC based on aircraft type and flight type
