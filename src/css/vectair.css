@@ -350,12 +350,20 @@ tr.strip.ft-ovr > td {
 /* Priority letter display */
 .priority-cell {
   transition: padding 0.2s, width 0.2s;
+  padding-left: 4px !important;
 }
 .priority-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
   font-size: 14px;
   color: #000000;
-  letter-spacing: 0.05em;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #000000;
+  border-radius: 50%;
+  line-height: 1;
 }
 
 .badge-row {

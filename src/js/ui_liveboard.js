@@ -628,7 +628,7 @@ export function renderLiveBoard() {
         <div class="call-main">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
-      <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 8px;' : 'padding: 0; width: 0;'}">
+      <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 6px 0 4px;' : 'padding: 0; width: 0;'}">
         ${m.priorityLetter ? `<span class="priority-letter" title="Flight Priority ${escapeHtml(m.priorityLetter)}">${escapeHtml(m.priorityLetter)}</span>` : ''}
       </td>
       <td>
