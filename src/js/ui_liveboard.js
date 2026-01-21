@@ -925,20 +925,18 @@ function openNewFlightModal(flightType = "DEP") {
       </div>
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body modal-sectioned">
       <!-- Identity Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Identity</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Identity</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
             <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
-            <span class="help-text">Contraction, tactical, or registration-based</span>
           </div>
           <div class="modal-field">
             <label class="modal-label">Flight Number</label>
             <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123, 01" />
-            <span class="help-text">Optional - for numbered flights</span>
           </div>
           <div class="modal-field">
             <label class="modal-label">Registration</label>
@@ -947,15 +945,14 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
             <input id="newType" class="modal-input is-derived" placeholder="Auto-filled" />
-            <span class="help-text">Auto-filled from registration</span>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- Plan Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Plan</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Plan</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
             <select id="newFlightType" class="modal-select">
@@ -983,52 +980,69 @@ function openNewFlightModal(flightType = "DEP") {
             <label class="modal-label">Arrival AD</label>
             <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
           </div>
+          <div class="modal-field modal-field-priority">
+            <label class="modal-label">
+              <input type="checkbox" id="priorityEnabled" style="margin-right: 6px;" />
+              Priority
+            </label>
+            <select id="priorityLetter" class="modal-select" disabled>
+              <option value="">-</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+              <option value="Z">Z</option>
+            </select>
+          </div>
         </div>
-      </div>
+      </section>
 
       <!-- Times Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Times</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Times</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Date of Flight (DOF)</label>
             <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
-          <div class="modal-field time-toggle-container">
-            <label class="modal-label" style="opacity: 0; pointer-events: none;">Spacer</label>
-            <label class="time-display-toggle">
-              <input type="checkbox" id="showLocalTimeToggle" />
-              <span class="toggle-label">Times shown in: <strong id="timeDisplayMode">UTC</strong></span>
+          <div class="modal-field">
+            <label class="modal-label">
+              <input type="checkbox" id="showLocalTimeToggle" style="margin-right: 4px;" />
+              Times shown in: <strong id="timeDisplayMode">UTC</strong>
             </label>
           </div>
           <div class="modal-field">
             <label class="modal-label">Estimated Departure (ETD)</label>
             <div style="display: flex; gap: 8px; align-items: center;">
               <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
-              <span id="localDepTime" class="local-time-display"></span>
+              <span id="localDepTime" class="time-local"></span>
             </div>
           </div>
           <div class="modal-field">
             <label class="modal-label">Estimated Arrival (ETA)</label>
             <div style="display: flex; gap: 8px; align-items: center;">
               <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
-              <span id="localArrTime" class="local-time-display"></span>
+              <span id="localArrTime" class="time-local"></span>
             </div>
           </div>
         </div>
-        <!-- Hidden checkboxes for backward compatibility -->
+        <!-- Hidden checkboxes for compatibility -->
         <input type="checkbox" id="showLocalTimeDep" style="display: none;" />
         <input type="checkbox" id="showLocalTimeArr" style="display: none;" />
-      </div>
+      </section>
 
-      <!-- Operational / Notes Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Operational / Notes</div>
-        <div class="form-grid">
+      <!-- Operational Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Operational</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
-            <label class="modal-label">EGOW Code <span class="required-mark">*</span></label>
-            <input id="newEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM, BC" list="egowCodeOptions" />
-            <span class="help-text">Auto-filled from registration</span>
+            <label class="modal-label">POB</label>
+            <input id="newPob" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
+            <input id="newEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM" list="egowCodeOptions" />
             <datalist id="egowCodeOptions">
               <option value="VC">VC</option>
               <option value="VM">VM</option>
@@ -1040,25 +1054,69 @@ function openNewFlightModal(flightType = "DEP") {
             </datalist>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Unit Code</label>
+            <label class="modal-label">EGOW Unit</label>
             <input id="newUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
-            <span class="help-text">Auto-filled from callsign</span>
           </div>
           <div class="modal-field">
-            <label class="modal-label">POB</label>
-            <input id="newPob" class="modal-input" type="number" value="0" />
-            <span class="help-text">Persons on board</span>
+            <label class="modal-label">T&amp;G</label>
+            <input id="newTng" class="modal-input" type="number" value="0" min="0" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">Touch &amp; Go Count</label>
-            <input id="newTng" class="modal-input" type="number" value="0" />
+            <label class="modal-label">O/S</label>
+            <input id="newOsCount" class="modal-input" type="number" value="0" min="0" />
           </div>
-          <div class="modal-field span-2">
-            <label class="modal-label">Remarks</label>
-            <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="newFisCount" class="modal-input" type="number" value="${flightType === "OVR" ? "1" : "0"}" min="0" />
           </div>
         </div>
-      </div>
+      </section>
+
+      <!-- Collapsible: Remarks & Warnings -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="remarksWarnings">
+          <span class="expander-icon">▶</span>
+          Remarks &amp; Warnings
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="remarksWarnings" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Remarks</label>
+              <textarea id="rwRemarks" class="modal-textarea" rows="3" placeholder="Optional notes…"></textarea>
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Warnings</label>
+              <textarea id="rwWarnings" class="modal-textarea" rows="3" placeholder="Optional warnings…"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Collapsible: ATC Details -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="atcDetails">
+          <span class="expander-icon">▶</span>
+          ATC Details
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="atcDetails" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Squawk</label>
+              <input id="atcSquawk" class="modal-input" placeholder="e.g. 7000" maxlength="4" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Route</label>
+              <input id="atcRoute" class="modal-input" placeholder="e.g. DCT" />
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Clearance</label>
+              <textarea id="atcClearance" class="modal-textarea" rows="2" placeholder="Optional clearance details…"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
@@ -1167,6 +1225,66 @@ function openNewFlightModal(flightType = "DEP") {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
+  // Wire collapsible sections
+  document.querySelectorAll('.modal-expander').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const panel = document.getElementById(targetId);
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+
+      btn.setAttribute('aria-expanded', !isExpanded);
+      panel.hidden = isExpanded;
+      btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
+    });
+  });
+
+  // Wire Priority checkbox/dropdown
+  const priorityEnabled = document.getElementById('priorityEnabled');
+  const priorityLetter = document.getElementById('priorityLetter');
+  if (priorityEnabled && priorityLetter) {
+    priorityEnabled.addEventListener('change', () => {
+      priorityLetter.disabled = !priorityEnabled.checked;
+      if (!priorityEnabled.checked) {
+        priorityLetter.value = '';
+      }
+    });
+  }
+
+  // Auto-fill Remarks and Warnings from registration data (FDMS_REGISTRATIONS.csv col 15 & 16)
+  const remarksInput = document.getElementById('rwRemarks');
+  const warningsInput = document.getElementById('rwWarnings');
+
+  if (regInput && remarksInput && warningsInput) {
+    regInput.addEventListener("input", () => {
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill Warnings (column 15)
+        const warningsText = regData['WARNINGS'] || '';
+        if (warningsText && warningsText !== '-') {
+          // Only auto-fill if field is empty OR still shows previous autofill
+          const currentWarnings = warningsInput.value.trim();
+          const lastAutofill = warningsInput.dataset.autofillValue || '';
+          if (!currentWarnings || currentWarnings === lastAutofill) {
+            warningsInput.value = warningsText;
+            warningsInput.dataset.autofillValue = warningsText;
+          }
+        }
+
+        // Auto-fill Remarks/Notes (column 16)
+        const notesText = regData['NOTES'] || '';
+        if (notesText && notesText !== '-') {
+          // Only auto-fill if field is empty OR still shows previous autofill
+          const currentRemarks = remarksInput.value.trim();
+          const lastAutofill = remarksInput.dataset.autofillValue || '';
+          if (!currentRemarks || currentRemarks === lastAutofill) {
+            remarksInput.value = notesText;
+            remarksInput.dataset.autofillValue = notesText;
+          }
+        }
+      }
+    });
+  }
+
   // Bind local time display handlers
   const depTimeInput = document.getElementById("newDepPlanned");
   const arrTimeInput = document.getElementById("newArrPlanned");
@@ -1182,7 +1300,7 @@ function openNewFlightModal(flightType = "DEP") {
       const utcTime = depTimeInput.value;
       const localTime = convertUTCToLocal(utcTime);
       const offset = getTimezoneOffsetLabel();
-      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+      localDepSpan.textContent = localTime ? `${localTime} (${offset})` : "";
     } else if (localDepSpan) {
       localDepSpan.textContent = "";
     }
@@ -1193,19 +1311,19 @@ function openNewFlightModal(flightType = "DEP") {
       const utcTime = arrTimeInput.value;
       const localTime = convertUTCToLocal(utcTime);
       const offset = getTimezoneOffsetLabel();
-      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+      localArrSpan.textContent = localTime ? `${localTime} (${offset})` : "";
     } else if (localArrSpan) {
       localArrSpan.textContent = "";
     }
   }
 
-  // Wire the single toggle to control both hidden checkboxes
+  // Wire single toggle to both hidden checkboxes
   if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
-    showLocalToggle.addEventListener("change", () => {
+    showLocalToggle.addEventListener('change', () => {
       const isChecked = showLocalToggle.checked;
       showLocalDepCheck.checked = isChecked;
       showLocalArrCheck.checked = isChecked;
-      timeDisplayMode.textContent = isChecked ? "Local" : "UTC";
+      timeDisplayMode.textContent = isChecked ? 'Local' : 'UTC';
       updateLocalDepTime();
       updateLocalArrTime();
     });
@@ -1304,11 +1422,9 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
-    // Get warnings, notes, operator, and popular name from VKB registration data
+    // Get operator and popular name from VKB registration data
     const regValue = document.getElementById("newReg")?.value || "";
     const regData = lookupRegistration(regValue);
-    const warnings = regData ? (regData['WARNINGS'] || "") : "";
-    const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
 
@@ -1325,6 +1441,18 @@ function openNewFlightModal(flightType = "DEP") {
     const arrAd = document.getElementById("newArrAd")?.value || "";
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
+
+    // Get new optional fields
+    const priorityEnabledCheck = document.getElementById("priorityEnabled")?.checked || false;
+    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("priorityLetter")?.value || "") : "";
+    const remarksValue = document.getElementById("rwRemarks")?.value || "";
+    const warningsValue = document.getElementById("rwWarnings")?.value || "";
+    const notesValue = regData ? (regData['NOTES'] || "") : ""; // Keep notes from VKB for backward compatibility
+    const osCountValue = parseInt(document.getElementById("newOsCount")?.value || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newFisCount")?.value || ((document.getElementById("newFlightType")?.value || flightType) === "OVR" ? "1" : "0"), 10);
+    const squawkValue = document.getElementById("atcSquawk")?.value || "";
+    const routeValue = document.getElementById("atcRoute")?.value || "";
+    const clearanceValue = document.getElementById("atcClearance")?.value || "";
 
     // Create movement
     let movement = {
@@ -1350,20 +1478,21 @@ function openNewFlightModal(flightType = "DEP") {
       flightType: document.getElementById("newFlightType")?.value || flightType,
       isLocal: (document.getElementById("newFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
-      osCount: 0,
-      fisCount: (document.getElementById("newFlightType")?.value || flightType) === "OVR" ? 1 : 0,
+      osCount: osCountValue,
+      fisCount: fisCountValue,
       egowCode: egowCode,
       egowDesc: "",
       unitCode: document.getElementById("newUnitCode")?.value || "",
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
-      remarks: document.getElementById("newRemarks")?.value || "",
-      warnings: warnings,
-      notes: notes,
-      squawk: "",
-      route: "",
-      clearance: "",
+      priorityLetter: priorityLetterValue,
+      remarks: remarksValue,
+      warnings: warningsValue,
+      notes: notesValue,
+      squawk: squawkValue,
+      route: routeValue,
+      clearance: clearanceValue,
       formation: null
     };
 
@@ -1391,110 +1520,77 @@ function openNewLocalModal() {
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
     <div class="modal-body">
-      <!-- Identity Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Identity</div>
-        <div class="form-grid">
-          <div class="modal-field">
-            <label class="modal-label">Callsign Code</label>
-            <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
-            <span class="help-text">Contraction, tactical, or registration-based</span>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Flight Number</label>
-            <input id="newLocFlightNumber" class="modal-input" placeholder="e.g. 11, 01" />
-            <span class="help-text">Optional - for numbered flights</span>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Registration</label>
-            <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Aircraft Type</label>
-            <input id="newLocType" class="modal-input is-derived" placeholder="Auto-filled" />
-            <span class="help-text">Auto-filled from registration</span>
-          </div>
+      <div class="modal-field">
+        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
+        <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
+        <input id="newLocFlightNumber" class="modal-input" placeholder="e.g. 11, 01" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Registration</label>
+        <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Aircraft Type</label>
+        <input id="newLocType" class="modal-input" placeholder="e.g. G115 (auto-filled from registration)" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Flight Type</label>
+        <input class="modal-input" value="LOC (Local)" disabled />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Departure / Arrival AD</label>
+        <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Date of Flight (DOF)</label>
+        <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Departure (ETD) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocDep" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
+          <span id="localLocDepTime" style="font-size: 12px; color: #666;"></span>
         </div>
       </div>
-
-      <!-- Plan Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Plan</div>
-        <div class="form-grid">
-          <div class="modal-field">
-            <label class="modal-label">Flight Type</label>
-            <input class="modal-input" value="LOC (Local)" disabled />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Departure / Arrival AD</label>
-            <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
-          </div>
+      <div class="modal-field">
+        <label class="modal-label">
+          Estimated Arrival (ETA) - UTC
+          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
+            <input type="checkbox" id="showLocalTimeLocArr" style="margin: 0 4px;"/>Show Local Time
+          </span>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
+          <span id="localLocArrTime" style="font-size: 12px; color: #666;"></span>
         </div>
       </div>
-
-      <!-- Times Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Times</div>
-        <div class="form-grid">
-          <div class="modal-field">
-            <label class="modal-label">Date of Flight (DOF)</label>
-            <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
-          </div>
-          <div class="modal-field time-toggle-container">
-            <label class="modal-label" style="opacity: 0; pointer-events: none;">Spacer</label>
-            <label class="time-display-toggle">
-              <input type="checkbox" id="showLocalTimeLocToggle" />
-              <span class="toggle-label">Times shown in: <strong id="timeDisplayModeLocal">UTC</strong></span>
-            </label>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Estimated Departure (ETD)</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
-              <span id="localLocDepTime" class="local-time-display"></span>
-            </div>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Estimated Arrival (ETA)</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
-              <span id="localLocArrTime" class="local-time-display"></span>
-            </div>
-          </div>
-        </div>
-        <!-- Hidden checkboxes for backward compatibility -->
-        <input type="checkbox" id="showLocalTimeLocDep" style="display: none;" />
-        <input type="checkbox" id="showLocalTimeLocArr" style="display: none;" />
+      <div class="modal-field">
+        <label class="modal-label">Touch &amp; Go count</label>
+        <input id="newLocTng" class="modal-input" type="number" value="0" />
       </div>
-
-      <!-- Operational / Notes Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Operational / Notes</div>
-        <div class="form-grid">
-          <div class="modal-field">
-            <label class="modal-label">EGOW Code</label>
-            <input id="newLocEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM, BC" />
-            <span class="help-text">Auto-filled from registration</span>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Unit Code</label>
-            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
-            <span class="help-text">Auto-filled from callsign</span>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Touch &amp; Go Count</label>
-            <input id="newLocTng" class="modal-input" type="number" value="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">POB</label>
-            <input id="newLocPob" class="modal-input" type="number" value="0" />
-            <span class="help-text">Persons on board</span>
-          </div>
-          <div class="modal-field span-2">
-            <label class="modal-label">Remarks</label>
-            <textarea id="newLocRemarks" class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
-          </div>
-        </div>
+      <div class="modal-field">
+        <label class="modal-label">POB</label>
+        <input id="newLocPob" class="modal-input" type="number" value="0" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Remarks</label>
+        <textarea id="newLocRemarks" class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
+        <input id="newLocEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
+        <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
       </div>
     </div>
     <div class="modal-footer">
@@ -1605,8 +1701,6 @@ function openNewLocalModal() {
   const arrTimeInput = document.getElementById("newLocEnd");
   const showLocalDepCheck = document.getElementById("showLocalTimeLocDep");
   const showLocalArrCheck = document.getElementById("showLocalTimeLocArr");
-  const showLocalToggle = document.getElementById("showLocalTimeLocToggle");
-  const timeDisplayMode = document.getElementById("timeDisplayModeLocal");
   const localDepSpan = document.getElementById("localLocDepTime");
   const localArrSpan = document.getElementById("localLocArrTime");
 
@@ -1630,18 +1724,6 @@ function openNewLocalModal() {
     } else if (localArrSpan) {
       localArrSpan.textContent = "";
     }
-  }
-
-  // Wire the single toggle to control both hidden checkboxes
-  if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
-    showLocalToggle.addEventListener("change", () => {
-      const isChecked = showLocalToggle.checked;
-      showLocalDepCheck.checked = isChecked;
-      showLocalArrCheck.checked = isChecked;
-      timeDisplayMode.textContent = isChecked ? "Local" : "UTC";
-      updateLocalLocDepTime();
-      updateLocalLocArrTime();
-    });
   }
 
   if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalLocDepTime);
@@ -1780,6 +1862,9 @@ function openEditMovementModal(m) {
   const callsignCode = callsignMatch ? callsignMatch[1] : (m.callsignCode || "");
   const flightNumber = callsignMatch && callsignMatch[2] ? callsignMatch[2] : "";
 
+  // Check if priority is enabled
+  const hasPriority = m.priorityLetter && m.priorityLetter.length > 0;
+
   openModal(`
     <div class="modal-header">
       <div>
@@ -1788,20 +1873,18 @@ function openEditMovementModal(m) {
       </div>
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body modal-sectioned">
       <!-- Identity Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Identity</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Identity</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
             <input id="editCallsignCode" class="modal-input" value="${escapeHtml(callsignCode)}" placeholder="e.g. BAW, CONNECT, G-BYUN" />
-            <span class="help-text">Contraction, tactical, or registration-based</span>
           </div>
           <div class="modal-field">
             <label class="modal-label">Flight Number</label>
             <input id="editFlightNumber" class="modal-input" value="${escapeHtml(flightNumber)}" placeholder="e.g. 123, 01" />
-            <span class="help-text">Optional - for numbered flights</span>
           </div>
           <div class="modal-field">
             <label class="modal-label">Registration</label>
@@ -1810,15 +1893,14 @@ function openEditMovementModal(m) {
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
             <input id="editType" class="modal-input is-derived" value="${escapeHtml(m.type || "")}" />
-            <span class="help-text">Auto-filled from registration</span>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- Plan Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Plan</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Plan</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
             <select id="editFlightType" class="modal-select">
@@ -1846,90 +1928,152 @@ function openEditMovementModal(m) {
             <label class="modal-label">Arrival AD</label>
             <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" />
           </div>
+          <div class="modal-field modal-field-priority">
+            <label class="modal-label">
+              <input type="checkbox" id="editPriorityEnabled" ${hasPriority ? "checked" : ""} style="margin-right: 6px;" />
+              Priority
+            </label>
+            <select id="editPriorityLetter" class="modal-select" ${hasPriority ? "" : "disabled"}>
+              <option value="">-</option>
+              <option value="A" ${m.priorityLetter === "A" ? "selected" : ""}>A</option>
+              <option value="B" ${m.priorityLetter === "B" ? "selected" : ""}>B</option>
+              <option value="C" ${m.priorityLetter === "C" ? "selected" : ""}>C</option>
+              <option value="D" ${m.priorityLetter === "D" ? "selected" : ""}>D</option>
+              <option value="E" ${m.priorityLetter === "E" ? "selected" : ""}>E</option>
+              <option value="Z" ${m.priorityLetter === "Z" ? "selected" : ""}>Z</option>
+            </select>
+          </div>
         </div>
-      </div>
+      </section>
 
       <!-- Times Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Times</div>
-        <div class="form-grid">
+      <section class="modal-section">
+        <h3 class="modal-section-title">Times</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Date of Flight (DOF)</label>
             <input id="editDOF" type="date" class="modal-input" value="${m.dof || getTodayDateString()}" />
           </div>
           <div class="modal-field"></div>
           <div class="modal-field">
-            <label class="modal-label">Estimated Departure (ETD)</label>
+            <label class="modal-label">ETD</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editDepPlanned" class="modal-input" value="${m.depPlanned || ""}" placeholder="12:30" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" id="showLocalTimeEditDep" style="margin: 0;" />
-                <span id="localEditDepTime" class="local-time-display"></span>
+              <input id="editDepPlanned" class="modal-input" value="${m.depPlanned || ""}" style="width: 80px;" />
+              <label style="font-size: 10px; color: #666; cursor: pointer;">
+                <input type="checkbox" id="showLocalTimeEditDep" style="margin: 0 4px;" />
+                <span id="localEditDepTime" class="time-local"></span>
               </label>
             </div>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Actual Departure (ATD)</label>
+            <label class="modal-label">ATD</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editDepActual" class="modal-input" value="${m.depActual || ""}" placeholder="12:35" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" id="showLocalTimeEditDepActual" style="margin: 0;" />
-                <span id="localEditDepActualTime" class="local-time-display"></span>
+              <input id="editDepActual" class="modal-input" value="${m.depActual || ""}" style="width: 80px;" />
+              <label style="font-size: 10px; color: #666; cursor: pointer;">
+                <input type="checkbox" id="showLocalTimeEditDepActual" style="margin: 0 4px;" />
+                <span id="localEditDepActualTime" class="time-local"></span>
               </label>
             </div>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Estimated Arrival (ETA)</label>
+            <label class="modal-label">ETA</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" placeholder="13:05" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" id="showLocalTimeEditArr" style="margin: 0;" />
-                <span id="localEditArrTime" class="local-time-display"></span>
+              <input id="editArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" style="width: 80px;" />
+              <label style="font-size: 10px; color: #666; cursor: pointer;">
+                <input type="checkbox" id="showLocalTimeEditArr" style="margin: 0 4px;" />
+                <span id="localEditArrTime" class="time-local"></span>
               </label>
             </div>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Actual Arrival (ATA)</label>
+            <label class="modal-label">ATA</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editArrActual" class="modal-input" value="${m.arrActual || ""}" placeholder="13:10" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" id="showLocalTimeEditArrActual" style="margin: 0;" />
-                <span id="localEditArrActualTime" class="local-time-display"></span>
+              <input id="editArrActual" class="modal-input" value="${m.arrActual || ""}" style="width: 80px;" />
+              <label style="font-size: 10px; color: #666; cursor: pointer;">
+                <input type="checkbox" id="showLocalTimeEditArrActual" style="margin: 0 4px;" />
+                <span id="localEditArrActualTime" class="time-local"></span>
               </label>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Operational / Notes Section -->
-      <div class="modal-section">
-        <div class="modal-section-title">Operational / Notes</div>
-        <div class="form-grid">
-          <div class="modal-field">
-            <label class="modal-label">EGOW Code</label>
-            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM, BC" />
-            <span class="help-text">Auto-filled from registration</span>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Unit Code</label>
-            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
-            <span class="help-text">Auto-filled from callsign</span>
-          </div>
+      <!-- Operational Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Operational</h3>
+        <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">POB</label>
-            <input id="editPob" class="modal-input" type="number" value="${m.pob || 0}" />
-            <span class="help-text">Persons on board</span>
+            <input id="editPob" class="modal-input" type="number" value="${m.pob || 0}" min="0" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">Touch &amp; Go Count</label>
-            <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" />
+            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
+            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" />
           </div>
-          <div class="modal-field span-2">
-            <label class="modal-label">Remarks</label>
-            <textarea id="editRemarks" class="modal-textarea">${escapeHtml(m.remarks || "")}</textarea>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Unit</label>
+            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">T&amp;G</label>
+            <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">O/S</label>
+            <input id="editOsCount" class="modal-input" type="number" value="${m.osCount || 0}" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="editFisCount" class="modal-input" type="number" value="${m.fisCount || 0}" min="0" />
           </div>
         </div>
-      </div>
+      </section>
+
+      <!-- Collapsible: Remarks & Warnings -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="editRemarksWarnings">
+          <span class="expander-icon">▶</span>
+          Remarks &amp; Warnings
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="editRemarksWarnings" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Remarks</label>
+              <textarea id="editRwRemarks" class="modal-textarea" rows="3">${escapeHtml(m.remarks || "")}</textarea>
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Warnings</label>
+              <textarea id="editRwWarnings" class="modal-textarea" rows="3">${escapeHtml(m.warnings || "")}</textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Collapsible: ATC Details -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="editAtcDetails">
+          <span class="expander-icon">▶</span>
+          ATC Details
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="editAtcDetails" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Squawk</label>
+              <input id="editAtcSquawk" class="modal-input" value="${escapeHtml(m.squawk || "")}" placeholder="e.g. 7000" maxlength="4" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Route</label>
+              <input id="editAtcRoute" class="modal-input" value="${escapeHtml(m.route || "")}" placeholder="e.g. DCT" />
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Clearance</label>
+              <textarea id="editAtcClearance" class="modal-textarea" rows="2">${escapeHtml(m.clearance || "")}</textarea>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
@@ -2036,6 +2180,64 @@ function openEditMovementModal(m) {
   }
   if (flightNumberInput) {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+  }
+
+  // Wire collapsible sections
+  document.querySelectorAll('.modal-expander').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const panel = document.getElementById(targetId);
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+
+      btn.setAttribute('aria-expanded', !isExpanded);
+      panel.hidden = isExpanded;
+      btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
+    });
+  });
+
+  // Wire Priority checkbox/dropdown
+  const editPriorityEnabled = document.getElementById('editPriorityEnabled');
+  const editPriorityLetter = document.getElementById('editPriorityLetter');
+  if (editPriorityEnabled && editPriorityLetter) {
+    editPriorityEnabled.addEventListener('change', () => {
+      editPriorityLetter.disabled = !editPriorityEnabled.checked;
+      if (!editPriorityEnabled.checked) {
+        editPriorityLetter.value = '';
+      }
+    });
+  }
+
+  // Auto-fill Remarks and Warnings from registration data
+  const editRemarksInput = document.getElementById('editRwRemarks');
+  const editWarningsInput = document.getElementById('editRwWarnings');
+
+  if (regInput && editRemarksInput && editWarningsInput) {
+    regInput.addEventListener("input", () => {
+      const regData = lookupRegistration(regInput.value);
+      if (regData) {
+        // Auto-fill Warnings (column 15)
+        const warningsText = regData['WARNINGS'] || '';
+        if (warningsText && warningsText !== '-') {
+          const currentWarnings = editWarningsInput.value.trim();
+          const lastAutofill = editWarningsInput.dataset.autofillValue || '';
+          if (!currentWarnings || currentWarnings === lastAutofill) {
+            editWarningsInput.value = warningsText;
+            editWarningsInput.dataset.autofillValue = warningsText;
+          }
+        }
+
+        // Auto-fill Remarks/Notes (column 16)
+        const notesText = regData['NOTES'] || '';
+        if (notesText && notesText !== '-') {
+          const currentRemarks = editRemarksInput.value.trim();
+          const lastAutofill = editRemarksInput.dataset.autofillValue || '';
+          if (!currentRemarks || currentRemarks === lastAutofill) {
+            editRemarksInput.value = notesText;
+            editRemarksInput.dataset.autofillValue = notesText;
+          }
+        }
+      }
+    });
   }
 
   // Bind local time display handlers for all time fields
@@ -2197,6 +2399,17 @@ function openEditMovementModal(m) {
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
+    // Get new optional fields
+    const editPriorityEnabledCheck = document.getElementById("editPriorityEnabled")?.checked || false;
+    const editPriorityLetterValue = editPriorityEnabledCheck ? (document.getElementById("editPriorityLetter")?.value || "") : "";
+    const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
+    const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
+    const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
+    const editFisCountValue = parseInt(document.getElementById("editFisCount")?.value || "0", 10);
+    const editSquawkValue = document.getElementById("editAtcSquawk")?.value || "";
+    const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
+    const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
+
     // Update movement
     const updates = {
       callsignCode: callsign,
@@ -2218,9 +2431,16 @@ function openEditMovementModal(m) {
       dof: dof,
       tngCount: parseInt(tng, 10),
       pob: parseInt(pob, 10),
+      osCount: editOsCountValue,
+      fisCount: editFisCountValue,
       egowCode: document.getElementById("editEgowCode")?.value || "",
       unitCode: document.getElementById("editUnitCode")?.value || "",
-      remarks: document.getElementById("editRemarks")?.value || ""
+      priorityLetter: editPriorityLetterValue,
+      remarks: editRemarksValue,
+      warnings: editWarningsValue,
+      squawk: editSquawkValue,
+      route: editRouteValue,
+      clearance: editClearanceValue
     };
 
     updateMovement(m.id, updates);
