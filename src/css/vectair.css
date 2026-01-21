@@ -428,20 +428,15 @@ tr.strip.ft-ovr > td {
   gap: 16px;
   font-size: 12px;
 }
-.expand-left {
-  flex: 0 0 280px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-.expand-right {
-  flex: 1;
-  display: flex;
-  gap: 16px;
-}
 .expand-section {
-  flex: 1 1 300px;
-  min-width: 220px;
+  flex: 1;
+  min-width: 0;
+}
+.expand-section .expand-subsection {
+  margin-bottom: 16px;
+}
+.expand-section .expand-subsection:last-child {
+  margin-bottom: 0;
 }
 .expand-title {
   font-size: 12px;
