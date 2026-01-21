@@ -475,7 +475,15 @@ function renderExpandedRow(tbody, m) {
   expTr.className = "expand-row";
 
   const expTd = document.createElement("td");
-  expTd.colSpan = 7;
+
+  // Dynamically calculate colspan to span the full table width
+  const table = tbody.closest("table");
+  const colCount =
+    table?.querySelector("thead tr")?.children?.length ||
+    table?.querySelector("tbody tr")?.children?.length ||
+    11; // fallback
+
+  expTd.colSpan = colCount;
 
   // Get aircraft type info
   const typeData = lookupAircraftType(m.type);
