@@ -614,6 +614,52 @@ tr.strip.ft-ovr > td {
 .modal-body:not(:has(.modal-section)) .modal-textarea {
   grid-column: 1 / -1;
 }
+
+/* Sectioned modal layout */
+.modal-sectioned {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.modal-section {
+  padding: 14px 0;
+  border-bottom: 1px solid #e8e8e8;
+}
+.modal-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.modal-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-accent-brown);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.modal-section-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+@media (max-width: 640px) {
+  .modal-section-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.modal-field-full {
+  grid-column: 1 / -1;
+}
+.modal-field-priority {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.time-local {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
 .local-time-display {
   font-size: 11px;
   color: #666;
@@ -641,6 +687,49 @@ tr.strip.ft-ovr > td {
 .time-display-toggle strong {
   color: var(--va-text-main);
   font-weight: 600;
+}
+
+/* Collapsible sections */
+.modal-collapsible {
+  border-bottom: none;
+  padding: 8px 0;
+}
+.modal-expander {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--va-text-main);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s;
+}
+.modal-expander:hover {
+  color: var(--va-accent-brown);
+}
+.expander-icon {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.modal-expander[aria-expanded="true"] .expander-icon {
+  transform: rotate(90deg);
+}
+.expander-hint {
+  font-size: 10px;
+  font-weight: normal;
+  color: #999;
+  margin-left: auto;
+}
+.modal-expander-panel {
+  padding: 8px 0 4px;
+}
+.modal-expander-panel[hidden] {
+  display: none;
 }
 .modal-footer {
   margin-top: 10px;
