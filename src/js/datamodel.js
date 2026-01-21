@@ -13,7 +13,8 @@ const defaultConfig = {
   defaultTimeOffsetMinutes: 10, // Legacy - kept for backwards compatibility
   depOffsetMinutes: 10,   // DEP: ETD = now + this
   arrOffsetMinutes: 90,   // ARR: ETA = now + this
-  locOffsetMinutes: 10,   // LOC: ETD/ETA = now + this
+  locOffsetMinutes: 10,   // LOC: ETD = now + this
+  locFlightDurationMinutes: 40, // LOC: ETA = ETD + this
   ovrOffsetMinutes: 0,    // OVR: ECT = now + this
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
   showLocalTime: false    // Show local time conversions alongside UTC
@@ -489,6 +490,32 @@ function getTimeWithOffset(offsetMinutes) {
 }
 
 /**
+ * Add minutes to a time string (HH:MM)
+ * @param {string} timeStr - Time string in HH:MM format
+ * @param {number} minutesToAdd - Minutes to add
+ * @returns {string} New time string in HH:MM format
+ */
+function addMinutesToTime(timeStr, minutesToAdd) {
+  if (!timeStr) return getTimeWithOffset(minutesToAdd);
+
+  const [hoursStr, minutesStr] = timeStr.split(':');
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+
+  if (isNaN(hours) || isNaN(minutes)) {
+    return getTimeWithOffset(minutesToAdd);
+  }
+
+  const date = new Date();
+  date.setHours(hours);
+  date.setMinutes(minutes + minutesToAdd);
+
+  const newHours = String(date.getHours()).padStart(2, '0');
+  const newMinutes = String(date.getMinutes()).padStart(2, '0');
+  return `${newHours}:${newMinutes}`;
+}
+
+/**
  * Apply default times to a movement based on flight type
  * @param {object} movement - Movement object (may have blank time fields)
  * @returns {object} Movement with default times applied
@@ -506,13 +533,15 @@ function applyDefaultTimes(movement) {
     movement.arrPlanned = getTimeWithOffset(config.arrOffsetMinutes);
   }
 
-  // LOC: default ETD and ETA to now + locOffsetMinutes
+  // LOC: default ETD to now + locOffsetMinutes, ETA to ETD + locFlightDurationMinutes
   if (ft === "LOC") {
     if (!movement.depPlanned) {
       movement.depPlanned = getTimeWithOffset(config.locOffsetMinutes);
     }
     if (!movement.arrPlanned) {
-      movement.arrPlanned = getTimeWithOffset(config.locOffsetMinutes);
+      // ETA = ETD + flight duration
+      const etd = movement.depPlanned || getTimeWithOffset(config.locOffsetMinutes);
+      movement.arrPlanned = addMinutesToTime(etd, config.locFlightDurationMinutes);
     }
   }
 

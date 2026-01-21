@@ -485,14 +485,14 @@ tr.strip.ft-ovr > td {
   z-index: 999;
 }
 .modal {
-  width: min(560px, 96vw);
+  width: min(640px, 96vw);
   max-height: 90vh;
   overflow: auto;
   background: #ffffff;
   border-radius: 4px;
   border: 1px solid var(--va-border-dark);
   box-shadow: 0 0 18px rgba(0, 0, 0, 0.3);
-  padding: 10px 14px 12px;
+  padding: 12px 16px 14px;
 }
 .modal-header {
   display: flex;
@@ -511,26 +511,72 @@ tr.strip.ft-ovr > td {
   color: var(--va-text-soft);
 }
 .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 12px;
+}
+/* Legacy modal-body without sections uses grid */
+.modal-body:not(:has(.modal-section)) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px 10px;
-  font-size: 12px;
 }
 @media (max-width: 640px) {
-  .modal-body {
+  .modal-body:not(:has(.modal-section)) {
+    grid-template-columns: 1fr;
+  }
+}
+.modal-section {
+  padding: 12px 0;
+  border-bottom: 1px solid #e8e8e8;
+}
+.modal-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.modal-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-accent-brown);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+@media (max-width: 640px) {
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }
 .modal-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+}
+.modal-field.span-2 {
+  grid-column: 1 / -1;
 }
 .modal-label {
   font-size: 11px;
   color: var(--va-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.help-text {
+  font-size: 10px;
+  color: #999;
+  font-style: italic;
+  margin-top: -2px;
+}
+.required-mark {
+  color: #d32f2f;
+  font-weight: bold;
 }
 .modal-input,
 .modal-select,
@@ -539,19 +585,62 @@ tr.strip.ft-ovr > td {
   border: 1px solid var(--va-border-dark);
   background: #ffffff;
   color: var(--va-text-main);
-  padding: 4px 6px;
+  padding: 5px 7px;
   font-size: 12px;
   outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 .modal-input:focus,
 .modal-select:focus,
 .modal-textarea:focus {
   border-color: var(--va-link);
 }
+.modal-input.is-derived,
+.modal-select.is-derived {
+  background: #f9fafb;
+  border-color: #d5d9dd;
+}
+.modal-input.is-derived:focus,
+.modal-select.is-derived:focus {
+  background: #ffffff;
+  border-color: var(--va-link);
+}
 .modal-textarea {
   resize: vertical;
   min-height: 60px;
+  font-family: inherit;
+}
+/* Legacy modals: textarea spans full width */
+.modal-body:not(:has(.modal-section)) .modal-textarea {
   grid-column: 1 / -1;
+}
+.local-time-display {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
+.time-display-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.time-display-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+.time-display-toggle .toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.time-display-toggle strong {
+  color: var(--va-text-main);
+  font-weight: 600;
 }
 .modal-footer {
   margin-top: 10px;

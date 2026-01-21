@@ -926,105 +926,138 @@ function openNewFlightModal(flightType = "DEP") {
       <button class="btn btn-ghost js-close-modal" type="button">✕</button>
     </div>
     <div class="modal-body">
-      <div class="modal-field">
-        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
-        <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
-        <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123, 01" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Registration</label>
-        <input id="newReg" class="modal-input" placeholder="e.g. ZM300, G-BYUN" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Aircraft Type</label>
-        <input id="newType" class="modal-input" placeholder="e.g. JUNO (auto-filled from registration)" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Flight Type</label>
-        <select id="newFlightType" class="modal-select">
-          <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
-          <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
-          <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
-          <option ${flightType === "OVR" ? "selected" : ""}>OVR</option>
-        </select>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Flight Rules</label>
-        <select id="newRules" class="modal-select">
-          <option value="VFR" selected>VFR</option>
-          <option value="IFR">IFR</option>
-          <option value="Y">Y (IFR to VFR)</option>
-          <option value="Z">Z (VFR to IFR)</option>
-          <option value="SVFR">SVFR</option>
-        </select>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Departure AD</label>
-        <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Arrival AD</label>
-        <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Date of Flight (DOF)</label>
-        <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Departure (ETD / ECT) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeDep" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
-          <span id="localDepTime" style="font-size: 12px; color: #666;"></span>
+      <!-- Identity Section -->
+      <div class="modal-section">
+        <div class="modal-section-title">Identity</div>
+        <div class="form-grid">
+          <div class="modal-field">
+            <label class="modal-label">Callsign Code</label>
+            <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
+            <span class="help-text">Contraction, tactical, or registration-based</span>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Number</label>
+            <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123, 01" />
+            <span class="help-text">Optional - for numbered flights</span>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input id="newReg" class="modal-input" placeholder="e.g. ZM300, G-BYUN" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Aircraft Type</label>
+            <input id="newType" class="modal-input is-derived" placeholder="Auto-filled" />
+            <span class="help-text">Auto-filled from registration</span>
+          </div>
         </div>
       </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Arrival (ETA) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeArr" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
-          <span id="localArrTime" style="font-size: 12px; color: #666;"></span>
+
+      <!-- Plan Section -->
+      <div class="modal-section">
+        <div class="modal-section-title">Plan</div>
+        <div class="form-grid">
+          <div class="modal-field">
+            <label class="modal-label">Flight Type</label>
+            <select id="newFlightType" class="modal-select">
+              <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
+              <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
+              <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
+              <option ${flightType === "OVR" ? "selected" : ""}>OVR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Rules</label>
+            <select id="newRules" class="modal-select">
+              <option value="VFR" selected>VFR</option>
+              <option value="IFR">IFR</option>
+              <option value="Y">Y (IFR to VFR)</option>
+              <option value="Z">Z (VFR to IFR)</option>
+              <option value="SVFR">SVFR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Arrival AD</label>
+            <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
+          </div>
         </div>
       </div>
-      <div class="modal-field">
-        <label class="modal-label">POB</label>
-        <input id="newPob" class="modal-input" type="number" value="0" />
+
+      <!-- Times Section -->
+      <div class="modal-section">
+        <div class="modal-section-title">Times</div>
+        <div class="form-grid">
+          <div class="modal-field">
+            <label class="modal-label">Date of Flight (DOF)</label>
+            <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
+          </div>
+          <div class="modal-field time-toggle-container">
+            <label class="modal-label" style="opacity: 0; pointer-events: none;">Spacer</label>
+            <label class="time-display-toggle">
+              <input type="checkbox" id="showLocalTimeToggle" />
+              <span class="toggle-label">Times shown in: <strong id="timeDisplayMode">UTC</strong></span>
+            </label>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Estimated Departure (ETD)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
+              <span id="localDepTime" class="local-time-display"></span>
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Estimated Arrival (ETA)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
+              <span id="localArrTime" class="local-time-display"></span>
+            </div>
+          </div>
+        </div>
+        <!-- Hidden checkboxes for backward compatibility -->
+        <input type="checkbox" id="showLocalTimeDep" style="display: none;" />
+        <input type="checkbox" id="showLocalTimeArr" style="display: none;" />
       </div>
-      <div class="modal-field">
-        <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newTng" class="modal-input" type="number" value="0" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Remarks</label>
-        <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal; color: #d32f2f;">*Required</span> <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
-        <input id="newEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" list="egowCodeOptions" />
-        <datalist id="egowCodeOptions">
-          <option value="VC">VC</option>
-          <option value="VM">VM</option>
-          <option value="BC">BC</option>
-          <option value="BM">BM</option>
-          <option value="VCH">VCH</option>
-          <option value="VMH">VMH</option>
-          <option value="VNH">VNH</option>
-        </datalist>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
-        <input id="newUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
+
+      <!-- Operational / Notes Section -->
+      <div class="modal-section">
+        <div class="modal-section-title">Operational / Notes</div>
+        <div class="form-grid">
+          <div class="modal-field">
+            <label class="modal-label">EGOW Code <span class="required-mark">*</span></label>
+            <input id="newEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM, BC" list="egowCodeOptions" />
+            <span class="help-text">Auto-filled from registration</span>
+            <datalist id="egowCodeOptions">
+              <option value="VC">VC</option>
+              <option value="VM">VM</option>
+              <option value="BC">BC</option>
+              <option value="BM">BM</option>
+              <option value="VCH">VCH</option>
+              <option value="VMH">VMH</option>
+              <option value="VNH">VNH</option>
+            </datalist>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Unit Code</label>
+            <input id="newUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
+            <span class="help-text">Auto-filled from callsign</span>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="newPob" class="modal-input" type="number" value="0" />
+            <span class="help-text">Persons on board</span>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Touch &amp; Go Count</label>
+            <input id="newTng" class="modal-input" type="number" value="0" />
+          </div>
+          <div class="modal-field span-2">
+            <label class="modal-label">Remarks</label>
+            <textarea id="newRemarks" class="modal-textarea" placeholder="Any extra notes…"></textarea>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1139,6 +1172,8 @@ function openNewFlightModal(flightType = "DEP") {
   const arrTimeInput = document.getElementById("newArrPlanned");
   const showLocalDepCheck = document.getElementById("showLocalTimeDep");
   const showLocalArrCheck = document.getElementById("showLocalTimeArr");
+  const showLocalToggle = document.getElementById("showLocalTimeToggle");
+  const timeDisplayMode = document.getElementById("timeDisplayMode");
   const localDepSpan = document.getElementById("localDepTime");
   const localArrSpan = document.getElementById("localArrTime");
 
@@ -1162,6 +1197,18 @@ function openNewFlightModal(flightType = "DEP") {
     } else if (localArrSpan) {
       localArrSpan.textContent = "";
     }
+  }
+
+  // Wire the single toggle to control both hidden checkboxes
+  if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
+    showLocalToggle.addEventListener("change", () => {
+      const isChecked = showLocalToggle.checked;
+      showLocalDepCheck.checked = isChecked;
+      showLocalArrCheck.checked = isChecked;
+      timeDisplayMode.textContent = isChecked ? "Local" : "UTC";
+      updateLocalDepTime();
+      updateLocalArrTime();
+    });
   }
 
   if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
