@@ -397,6 +397,7 @@ function initAdminPanelHandlers() {
   const configDepOffset = document.getElementById("configDepOffset");
   const configArrOffset = document.getElementById("configArrOffset");
   const configLocOffset = document.getElementById("configLocOffset");
+  const configLocDuration = document.getElementById("configLocDuration");
   const configOvrOffset = document.getElementById("configOvrOffset");
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
@@ -406,6 +407,7 @@ function initAdminPanelHandlers() {
   if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
   if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
   if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
+  if (configLocDuration) configLocDuration.value = currentConfig.locFlightDurationMinutes || 40;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
 
@@ -414,6 +416,7 @@ function initAdminPanelHandlers() {
       const depOffset = parseInt(configDepOffset?.value || "10", 10);
       const arrOffset = parseInt(configArrOffset?.value || "90", 10);
       const locOffset = parseInt(configLocOffset?.value || "10", 10);
+      const locDuration = parseInt(configLocDuration?.value || "40", 10);
       const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
       const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
 
@@ -421,6 +424,7 @@ function initAdminPanelHandlers() {
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
           isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
+          isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
           isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
           isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12) {
         showToast("Please enter valid configuration values", 'error');
@@ -431,6 +435,7 @@ function initAdminPanelHandlers() {
         depOffsetMinutes: depOffset,
         arrOffsetMinutes: arrOffset,
         locOffsetMinutes: locOffset,
+        locFlightDurationMinutes: locDuration,
         ovrOffsetMinutes: ovrOffset,
         timezoneOffsetHours: timezoneOffset
       });
