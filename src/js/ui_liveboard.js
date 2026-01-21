@@ -95,6 +95,23 @@ function escapeHtml(s) {
 }
 
 /**
+ * Convert text input to uppercase on input event
+ * Applies to aviation-related fields that should always be uppercase
+ * @param {HTMLInputElement} inputElement - Input element to make uppercase
+ */
+function makeInputUppercase(inputElement) {
+  if (!inputElement) return;
+
+  inputElement.addEventListener("input", (e) => {
+    const start = e.target.selectionStart;
+    const end = e.target.selectionEnd;
+    e.target.value = e.target.value.toUpperCase();
+    // Restore cursor position after transformation
+    e.target.setSelectionRange(start, end);
+  });
+}
+
+/**
  * Debounce a function call
  * @param {Function} func - Function to debounce
  * @param {number} wait - Wait time in milliseconds
@@ -426,7 +443,7 @@ function renderFormationDetails(m) {
     .join("");
 
   return `
-    <div class="expand-section">
+    <div class="expand-subsection">
       <div class="expand-title">Formation</div>
       <div class="kv">
         <div class="kv-label">Label</div><div class="kv-value">${escapeHtml(m.formation.label)}</div>
@@ -458,7 +475,15 @@ function renderExpandedRow(tbody, m) {
   expTr.className = "expand-row";
 
   const expTd = document.createElement("td");
-  expTd.colSpan = 7;
+
+  // Dynamically calculate colspan to span the full table width
+  const table = tbody.closest("table");
+  const colCount =
+    table?.querySelector("thead tr")?.children?.length ||
+    table?.querySelector("tbody tr")?.children?.length ||
+    11; // fallback
+
+  expTd.colSpan = colCount;
 
   // Get aircraft type info
   const typeData = lookupAircraftType(m.type);
@@ -472,8 +497,8 @@ function renderExpandedRow(tbody, m) {
 
   expTd.innerHTML = `
     <div class="expand-inner">
-      <div class="expand-left">
-        <div class="expand-section">
+      <div class="expand-section">
+        <div class="expand-subsection">
           <div class="expand-title">Movement Summary</div>
           <div class="kv">
             <div class="kv-label">Status</div><div class="kv-value">${escapeHtml(statusLabel(m.status))}</div>
@@ -487,12 +512,11 @@ function renderExpandedRow(tbody, m) {
             <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
           </div>
         </div>
-
         ${renderFormationDetails(m)}
       </div>
 
-      <div class="expand-right">
-        <div class="expand-section">
+      <div class="expand-section">
+        <div class="expand-subsection">
           <div class="expand-title">Coding &amp; Classification</div>
           <div class="kv">
             <div class="kv-label">ACFT TYPE</div><div class="kv-value">${typeDisplay}</div>
@@ -502,8 +526,10 @@ function renderExpandedRow(tbody, m) {
             <div class="kv-label">OPERATOR</div><div class="kv-value">${escapeHtml(m.operator || "—")}</div>
           </div>
         </div>
+      </div>
 
-        <div class="expand-section">
+      <div class="expand-section">
+        <div class="expand-subsection">
           <div class="expand-title">Additional</div>
           <div class="kv">
             ${m.remarks && m.remarks !== '' && m.remarks !== '-' ? `<div class="kv-label">REMARKS EXTD</div><div class="kv-value">${escapeHtml(m.remarks)}</div>` : ''}
@@ -1015,6 +1041,18 @@ function openNewFlightModal(flightType = "DEP") {
   const pobInput = document.getElementById("newPob");
   const egowCodeInput = document.getElementById("newEgowCode");
   const unitCodeInput = document.getElementById("newUnitCode");
+  const depAdInput = document.getElementById("newDepAd");
+  const arrAdInput = document.getElementById("newArrAd");
+
+  // Apply automatic uppercase conversion to aviation-related fields
+  makeInputUppercase(callsignCodeInput);
+  makeInputUppercase(flightNumberInput);
+  makeInputUppercase(regInput);
+  makeInputUppercase(typeInput);
+  makeInputUppercase(egowCodeInput);
+  makeInputUppercase(unitCodeInput);
+  makeInputUppercase(depAdInput);
+  makeInputUppercase(arrAdInput);
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -1393,6 +1431,14 @@ function openNewLocalModal() {
   const pobInput = document.getElementById("newLocPob");
   const egowCodeInput = document.getElementById("newLocEgowCode");
   const unitCodeInput = document.getElementById("newLocUnitCode");
+
+  // Apply automatic uppercase conversion to aviation-related fields
+  makeInputUppercase(callsignCodeInput);
+  makeInputUppercase(flightNumberInput);
+  makeInputUppercase(regInput);
+  makeInputUppercase(typeInput);
+  makeInputUppercase(egowCodeInput);
+  makeInputUppercase(unitCodeInput);
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -1779,6 +1825,18 @@ function openEditMovementModal(m) {
   const pobInput = document.getElementById("editPob");
   const egowCodeInput = document.getElementById("editEgowCode");
   const unitCodeInput = document.getElementById("editUnitCode");
+  const depAdInput = document.getElementById("editDepAd");
+  const arrAdInput = document.getElementById("editArrAd");
+
+  // Apply automatic uppercase conversion to aviation-related fields
+  makeInputUppercase(callsignCodeInput);
+  makeInputUppercase(flightNumberInput);
+  makeInputUppercase(regInput);
+  makeInputUppercase(typeInput);
+  makeInputUppercase(egowCodeInput);
+  makeInputUppercase(unitCodeInput);
+  makeInputUppercase(depAdInput);
+  makeInputUppercase(arrAdInput);
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
