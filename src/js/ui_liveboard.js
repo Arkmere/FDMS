@@ -740,7 +740,7 @@ function renderExpandedRow(tbody, m) {
   const colCount =
     table?.querySelector("thead tr")?.children?.length ||
     table?.querySelector("tbody tr")?.children?.length ||
-    11; // fallback
+    12; // fallback
 
   expTd.colSpan = colCount;
 
@@ -854,7 +854,7 @@ export function renderLiveBoard() {
       const dividerTr = document.createElement("tr");
       dividerTr.className = "status-divider-row";
       dividerTr.innerHTML = `
-        <td colspan="11" style="padding: 0;">
+        <td colspan="12" style="padding: 0;">
           <div style="height: 2px; background: linear-gradient(to right, transparent, #ccc, transparent); margin: 4px 0;"></div>
         </td>
       `;
@@ -1120,7 +1120,7 @@ export function renderLiveBoard() {
   if (!movements.length) {
     const empty = document.createElement("tr");
     empty.innerHTML = `
-      <td colspan="11" style="padding:8px; font-size:12px; color:#777;">
+      <td colspan="12" style="padding:8px; font-size:12px; color:#777;">
         No demo movements match the current filters.
       </td>
     `;
