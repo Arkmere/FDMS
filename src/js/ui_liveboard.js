@@ -470,6 +470,221 @@ function renderFormationDetails(m) {
   `;
 }
 
+/**
+ * Generate all active alerts for a movement
+ * @param {Object} m - Movement object
+ * @returns {Array} Array of alert objects {type, severity, message}
+ */
+function generateMovementAlerts(m) {
+  const alerts = [];
+  const now = new Date();
+  const todayStr = getTodayDateString();
+  const ft = (m.flightType || "").toUpperCase();
+
+  // Check for stale movement (24+ hours old)
+  if (m.dof && m.dof < todayStr) {
+    const dofDate = new Date(m.dof + "T00:00:00Z");
+    const hoursOld = Math.floor((now - dofDate) / (1000 * 60 * 60));
+    if (hoursOld >= 24) {
+      alerts.push({
+        type: 'stale',
+        severity: 'warning',
+        message: `Movement is ${hoursOld} hours old - still relevant?`
+      });
+    }
+  }
+
+  // Check for overdue arrival (CAA 493 - ARR only)
+  if (ft === "ARR" && m.status === "ACTIVE") {
+    const eta = getETA(m);
+    if (eta && eta !== "-" && m.dof) {
+      const etaParts = eta.split(':');
+      if (etaParts.length === 2) {
+        const etaHours = parseInt(etaParts[0], 10);
+        const etaMinutes = parseInt(etaParts[1], 10);
+
+        const etaDate = new Date(m.dof + "T00:00:00Z");
+        etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
+
+        const minutesPastEta = Math.floor((now - etaDate) / (1000 * 60));
+
+        if (minutesPastEta >= 60) {
+          alerts.push({
+            type: 'overdue_full',
+            severity: 'critical',
+            message: `FULL OVERDUE ACTION: Aircraft is ${minutesPastEta} minutes past ETA`
+          });
+        } else if (minutesPastEta >= 30) {
+          alerts.push({
+            type: 'overdue_preliminary',
+            severity: 'warning',
+            message: `PRELIMINARY OVERDUE ACTION: Aircraft is ${minutesPastEta} minutes past ETA`
+          });
+        }
+      }
+    }
+  }
+
+  // Check for emergency squawks (7500, 7600, 7700)
+  const squawkCode = (m.squawk || '').replace('#', '');
+  if (squawkCode === '7500') {
+    alerts.push({
+      type: 'emergency_hijack',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7500 - Unlawful interference / Hijacking'
+    });
+  } else if (squawkCode === '7600') {
+    alerts.push({
+      type: 'emergency_radio',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7600 - Radio failure / Lost communications'
+    });
+  } else if (squawkCode === '7700') {
+    alerts.push({
+      type: 'emergency_general',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7700 - General emergency'
+    });
+  }
+
+  // Check for wake turbulence category alert
+  const config = getConfig();
+  const wtcThreshold = config.wtcAlertThreshold || "off";
+  if (wtcThreshold !== "off" && m.wtc) {
+    const wtcValue = (m.wtc || "").toUpperCase();
+    const wtcHierarchy = { "L": 1, "M": 2, "H": 3, "J": 4 };
+    const threshold = wtcHierarchy[wtcThreshold];
+    const current = wtcHierarchy[wtcValue];
+
+    if (threshold && current && current >= threshold) {
+      const categoryNames = { "L": "Light", "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+      alerts.push({
+        type: 'wtc_alert',
+        severity: 'warning',
+        message: `Wake turbulence category ${categoryNames[wtcValue]} (${wtcValue}) - Be aware of separation requirements`
+      });
+    }
+  }
+
+  // Check for callsign confusion risks
+  const allMovements = getMovements();
+  const activeOrPlannedMovements = allMovements.filter(mov =>
+    (mov.status === 'ACTIVE' || mov.status === 'PLANNED') && mov.id !== m.id
+  );
+
+  const thisCallsign = (m.callsignCode || '').toUpperCase().trim();
+  const thisReg = (m.registration || '').toUpperCase().replace(/-/g, '').trim();
+
+  // 1. British G-reg abbreviated callsign confusion
+  // If callsign equals registration (without hyphen), check for similar G-regs
+  if (thisReg.startsWith('G') && thisCallsign === thisReg) {
+    // Extract first letter + last 2 letters (e.g., G-SHWK -> GWK)
+    if (thisReg.length >= 3) {
+      const thisAbbrev = thisReg[0] + thisReg.slice(-2);
+
+      const conflictingGregs = activeOrPlannedMovements.filter(mov => {
+        const otherReg = (mov.registration || '').toUpperCase().replace(/-/g, '').trim();
+        const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+
+        if (otherReg.startsWith('G') && otherCallsign === otherReg && otherReg.length >= 3) {
+          const otherAbbrev = otherReg[0] + otherReg.slice(-2);
+          return thisAbbrev === otherAbbrev && thisReg !== otherReg;
+        }
+        return false;
+      });
+
+      if (conflictingGregs.length > 0) {
+        const otherRegs = conflictingGregs.map(mov => mov.registration).join(', ');
+        alerts.push({
+          type: 'callsign_confusion_greg',
+          severity: 'warning',
+          message: `G-reg abbreviation conflict: Both ${m.registration} and ${otherRegs} abbreviate to "${thisAbbrev}"`
+        });
+      }
+    }
+  }
+
+  // 2. University Air Squadron (UA_) abbreviated callsign confusion
+  const uaCodes = ['UAA', 'UAD', 'UAF', 'UAH', 'UAI', 'UAJ', 'UAM', 'UAO', 'UAQ', 'UAS', 'UAT', 'UAU', 'UAV', 'UAW', 'UAX', 'UAY'];
+  let thisUaCode = null;
+  let thisUaNumber = null;
+
+  for (const code of uaCodes) {
+    if (thisCallsign.startsWith(code)) {
+      thisUaCode = code;
+      thisUaNumber = thisCallsign.substring(code.length);
+      break;
+    }
+  }
+
+  if (thisUaCode && thisUaNumber) {
+    const conflictingUa = activeOrPlannedMovements.filter(mov => {
+      const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+      for (const code of uaCodes) {
+        if (code !== thisUaCode && otherCallsign.startsWith(code)) {
+          const otherNumber = otherCallsign.substring(code.length);
+          return otherNumber === thisUaNumber;
+        }
+      }
+      return false;
+    });
+
+    if (conflictingUa.length > 0) {
+      const otherCallsigns = conflictingUa.map(mov => mov.callsignCode).join(', ');
+      alerts.push({
+        type: 'callsign_confusion_ua',
+        severity: 'warning',
+        message: `UAS callsign conflict: ${m.callsignCode} and ${otherCallsigns} both abbreviate to "UNIFORM${thisUaNumber}"`
+      });
+    }
+  }
+
+  // 3. Military non-standard vs ICAO abbreviation confusion
+  // This is a complex database lookup - for now, implement a basic check
+  // You can expand this with a full database of known conflicts
+  const knownConflicts = [
+    { military: 'CRMSN', icao: 'OUA', phonetic: 'CRIMSON' }
+    // Add more known conflicts here as needed
+  ];
+
+  for (const conflict of knownConflicts) {
+    const conflictingMilitary = activeOrPlannedMovements.filter(mov => {
+      const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+      return (thisCallsign.startsWith(conflict.military) && otherCallsign.startsWith(conflict.icao)) ||
+             (thisCallsign.startsWith(conflict.icao) && otherCallsign.startsWith(conflict.military));
+    });
+
+    if (conflictingMilitary.length > 0) {
+      const otherCallsigns = conflictingMilitary.map(mov => mov.callsignCode).join(', ');
+      alerts.push({
+        type: 'callsign_confusion_military',
+        severity: 'warning',
+        message: `Military/ICAO callsign conflict: ${m.callsignCode} and ${otherCallsigns} may both use "${conflict.phonetic}"`
+      });
+    }
+  }
+
+  // 4. General abbreviated callsign confusion (original simple check)
+  const similarCallsigns = activeOrPlannedMovements.filter(mov => {
+    const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+    // Check for abbreviated callsigns that could be confused (e.g., ASCOT vs ASCOT1)
+    return thisCallsign && otherCallsign &&
+           thisCallsign !== otherCallsign &&
+           (thisCallsign.startsWith(otherCallsign) || otherCallsign.startsWith(thisCallsign));
+  });
+
+  if (similarCallsigns.length > 0) {
+    const otherCallsigns = similarCallsigns.map(mov => mov.callsignCode).join(', ');
+    alerts.push({
+      type: 'callsign_confusion_general',
+      severity: 'info',
+      message: `Similar callsign(s) active: ${otherCallsigns}`
+    });
+  }
+
+  return alerts;
+}
+
 function renderExpandedRow(tbody, m) {
   const expTr = document.createElement("tr");
   expTr.className = "expand-row";
@@ -494,6 +709,35 @@ function renderExpandedRow(tbody, m) {
   if (m.squawk && m.squawk !== "—") {
     squawkDisplay = m.squawk.startsWith('#') ? escapeHtml(m.squawk) : `#${escapeHtml(m.squawk)}`;
   }
+
+  // Generate alerts for this movement
+  const alerts = generateMovementAlerts(m);
+
+  // Render alerts section
+  const alertsSection = alerts.length > 0 ? `
+    <div class="expand-section expand-section-alerts">
+      <div class="expand-subsection">
+        <div class="expand-title">Alerts</div>
+        <div class="alerts-list">
+          ${alerts.map(alert => {
+            let iconClass = '';
+            let alertClass = '';
+            if (alert.severity === 'critical') {
+              iconClass = '🔴';
+              alertClass = 'alert-critical';
+            } else if (alert.severity === 'warning') {
+              iconClass = '⚠️';
+              alertClass = 'alert-warning';
+            } else {
+              iconClass = 'ℹ️';
+              alertClass = 'alert-info';
+            }
+            return `<div class="alert-item ${alertClass}"><span class="alert-icon">${iconClass}</span> ${escapeHtml(alert.message)}</div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  ` : '';
 
   expTd.innerHTML = `
     <div class="expand-inner">
@@ -541,6 +785,8 @@ function renderExpandedRow(tbody, m) {
           </div>
         </div>
       </div>
+
+      ${alertsSection}
     </div>
   `;
 
@@ -604,60 +850,67 @@ export function renderLiveBoard() {
     else if (m.rules === 'Z') rulesDisplay = 'Z';
     else if (m.rules === 'SVFR') rulesDisplay = 'S';
 
-    // Check if movement is stale (over 24 hours old)
-    const now = new Date();
-    const todayStr = getTodayDateString();
-    let staleWarning = '';
-    let staleClass = '';
-    if (m.dof && m.dof < todayStr) {
-      const dofDate = new Date(m.dof + "T00:00:00Z");
-      const hoursOld = Math.floor((now - dofDate) / (1000 * 60 * 60));
-      if (hoursOld >= 24) {
-        staleWarning = `⚠ Movement is ${hoursOld} hours old - still relevant?`;
-        staleClass = ' stale-movement';
+    // Generate all alerts for this movement
+    const alerts = generateMovementAlerts(m);
+    const config = getConfig();
+    const enableTooltips = config.enableAlertTooltips !== false;
+
+    // Determine highlighting and tooltips based on alerts
+    let overdueStyle = '';
+    let tooltipTitle = '';
+    const staleAlert = alerts.find(a => a.type === 'stale');
+    const overdueFullAlert = alerts.find(a => a.type === 'overdue_full');
+    const overduePrelimAlert = alerts.find(a => a.type === 'overdue_preliminary');
+    const emergencyAlert = alerts.find(a => a.type === 'emergency_hijack' || a.type === 'emergency_radio' || a.type === 'emergency_general');
+
+    // Emergency squawks take priority - red highlight
+    if (emergencyAlert) {
+      overdueStyle = 'background-color: #ffcccc;';
+      if (enableTooltips) {
+        tooltipTitle = ` title="${escapeHtml(emergencyAlert.message)}"`;
+      }
+    } else if (overdueFullAlert) {
+      overdueStyle = 'background-color: #ffcccc;';
+      if (enableTooltips) {
+        tooltipTitle = ` title="${escapeHtml(overdueFullAlert.message)}"`;
+      }
+    } else if (overduePrelimAlert) {
+      overdueStyle = 'background-color: #ffeb3b;';
+      if (enableTooltips) {
+        tooltipTitle = ` title="${escapeHtml(overduePrelimAlert.message)}"`;
       }
     }
 
-    // Check for overdue arrival (CAA 493 - ARR only)
-    let overdueStyle = '';
-    let overdueTitle = '';
-    if (ft === "ARR" && m.status === "ACTIVE") {
-      const eta = getETA(m);
-      if (eta && eta !== "-" && m.dof) {
-        // Parse ETA time (HH:MM format)
-        const etaParts = eta.split(':');
-        if (etaParts.length === 2) {
-          const etaHours = parseInt(etaParts[0], 10);
-          const etaMinutes = parseInt(etaParts[1], 10);
-
-          // Create ETA datetime from DOF and ETA time
-          const etaDate = new Date(m.dof + "T00:00:00Z");
-          etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
-
-          // Calculate minutes past ETA
-          const minutesPastEta = Math.floor((now - etaDate) / (1000 * 60));
-
-          if (minutesPastEta >= 60) {
-            // Full overdue action - Red (60+ minutes past ETA)
-            overdueStyle = 'background-color: #ffcccc;';
-            overdueTitle = ` title="FULL OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
-          } else if (minutesPastEta >= 30) {
-            // Preliminary overdue action - Yellow (30-59 minutes past ETA)
-            overdueStyle = 'background-color: #ffeb3b;';
-            overdueTitle = ` title="PRELIMINARY OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
-          }
-        }
-      }
+    // Keep stale warning for date display
+    const now = new Date();
+    const todayStr = getTodayDateString();
+    let staleWarning = '';
+    if (staleAlert) {
+      staleWarning = `⚠ ${staleAlert.message}`;
     }
 
     // Get indicator bar color
     const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
     const indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
 
+    // Check for callsign confusion alerts
+    const hasCallsignConfusion = alerts.some(a =>
+      a.type === 'callsign_confusion_greg' ||
+      a.type === 'callsign_confusion_ua' ||
+      a.type === 'callsign_confusion_military'
+    );
+    const callsignClass = hasCallsignConfusion ? 'call-main callsign-confusion' : 'call-main';
+
+    // Check for WTC alert
+    const hasWtcAlert = alerts.some(a => a.type === 'wtc_alert');
+    const wtcDisplay = hasWtcAlert
+      ? `<span class="wtc-alert">${escapeHtml(m.wtc || "—")}</span>`
+      : escapeHtml(m.wtc || "—");
+
     tr.innerHTML = `
       <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
-        <div class="call-main">${escapeHtml(m.callsignCode)}</div>
+        <div class="${callsignClass}">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 6px 0 4px;' : 'padding: 0; width: 0;'}">
@@ -665,7 +918,7 @@ export function renderLiveBoard() {
       </td>
       <td>
         <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
-        <div class="cell-muted">WTC: ${escapeHtml(m.wtc || "—")}</div>
+        <div class="cell-muted">WTC: ${wtcDisplay}</div>
       </td>
       <td>
         <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
@@ -674,7 +927,7 @@ export function renderLiveBoard() {
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
-      <td style="${overdueStyle}"${overdueTitle}>
+      <td style="${overdueStyle}"${tooltipTitle}>
         <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
