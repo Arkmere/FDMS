@@ -964,17 +964,17 @@ export function renderLiveBoard() {
 
     // Emergency squawks take priority - red highlight
     if (emergencyAlert) {
-      overdueStyle = 'background-color: #ffcccc;';
+      overdueStyle = 'background-color: #ffcccc !important;';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(emergencyAlert.message)}"`;
       }
     } else if (overdueFullAlert) {
-      overdueStyle = 'background-color: #ffcccc;';
+      overdueStyle = 'background-color: #ffcccc !important;';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(overdueFullAlert.message)}"`;
       }
     } else if (overduePrelimAlert) {
-      overdueStyle = 'background-color: #ffeb3b;';
+      overdueStyle = 'background-color: #ffeb3b !important;';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(overduePrelimAlert.message)}"`;
       }
