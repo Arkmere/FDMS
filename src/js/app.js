@@ -438,6 +438,7 @@ function initAdminPanelHandlers() {
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
+  const configWtcThreshold = document.getElementById("configWtcThreshold");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Load current config values
@@ -451,6 +452,7 @@ function initAdminPanelHandlers() {
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
+  if (configWtcThreshold) configWtcThreshold.value = currentConfig.wtcAlertThreshold || "off";
 
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
@@ -463,6 +465,7 @@ function initAdminPanelHandlers() {
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
       const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+      const wtcThreshold = configWtcThreshold?.value || "off";
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -484,7 +487,8 @@ function initAdminPanelHandlers() {
         timezoneOffsetHours: timezoneOffset,
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
-        enableAlertTooltips: enableAlertTooltips
+        enableAlertTooltips: enableAlertTooltips,
+        wtcAlertThreshold: wtcThreshold
       });
       showToast("Configuration saved successfully", 'success');
     });

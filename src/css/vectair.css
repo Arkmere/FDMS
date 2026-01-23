@@ -343,6 +343,18 @@ tr.strip.ft-ovr > td {
   font-size: 12px;
   line-height: 1.4;
 }
+.call-main.callsign-confusion {
+  text-decoration: underline;
+  text-decoration-color: #d32f2f;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+.wtc-alert {
+  background-color: #ffeb3b;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-weight: 700;
+}
 .call-sub {
   font-size: 11px;
   color: var(--va-text-soft);

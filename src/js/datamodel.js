@@ -20,7 +20,8 @@ const defaultConfig = {
   showLocalTime: false,   // Show local time conversions alongside UTC
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
   alwaysHideLocalTimeInBanner: false, // Never show local time in banner
-  enableAlertTooltips: true // Show alert tooltips on hover over highlighted strips
+  enableAlertTooltips: true, // Show alert tooltips on hover over highlighted strips
+  wtcAlertThreshold: "off"   // Wake turbulence category alert: "off", "L", "M", "H", "J"
 };
 
 // Configuration state

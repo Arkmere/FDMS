@@ -474,6 +474,25 @@
               </div>
             </div>
 
+            <div style="margin-top: 16px; margin-bottom: 12px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                Wake Turbulence Category Alert
+              </label>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <label style="font-size: 12px;">Alert if WTC is:</label>
+                <select id="configWtcThreshold" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                  <option value="off">Off (No alerts)</option>
+                  <option value="L">Light (L) or higher</option>
+                  <option value="M">Medium (M) or higher</option>
+                  <option value="H">Heavy (H) or higher</option>
+                  <option value="J">Super/Jumbo (J) only</option>
+                </select>
+              </div>
+              <div style="font-size: 11px; color: #666;">
+                Highlights WTC field in yellow and shows warning in Alerts section for aircraft meeting or exceeding the selected category.
+              </div>
+            </div>
+
             <button class="btn btn-primary" id="btnSaveConfig" type="button">Save Configuration</button>
           </div>
         </section>
