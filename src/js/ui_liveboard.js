@@ -1208,11 +1208,25 @@ function openModal(contentHtml) {
       <div class="modal">
         ${contentHtml}
       </div>
+      <div class="modal-minimized-bar">
+        <button class="js-restore-modal" type="button">
+          <span class="modal-minimized-title"></span>
+          <span class="modal-minimized-icon">▲</span>
+        </button>
+      </div>
     </div>
   `;
 
   const backdrop = root.querySelector(".modal-backdrop");
   const modal = root.querySelector(".modal");
+  const minimizedBar = root.querySelector(".modal-minimized-bar");
+  const minimizedTitle = root.querySelector(".modal-minimized-title");
+
+  // Set minimized bar title from modal header
+  const modalTitleEl = modal.querySelector(".modal-title");
+  if (modalTitleEl && minimizedTitle) {
+    minimizedTitle.textContent = modalTitleEl.textContent;
+  }
 
   // Initialize autocomplete for modal inputs
   initModalAutocomplete(modal);
@@ -1242,13 +1256,27 @@ function openModal(contentHtml) {
     }
   };
 
-  safeOn(backdrop, "click", (e) => {
-    if (e.target === backdrop) closeModal();
-  });
+  // Click-outside-to-close removed - modal only closes via X button or Cancel button
+
+  const minimizeModal = () => {
+    backdrop.classList.add("minimized");
+  };
+
+  const restoreModal = () => {
+    backdrop.classList.remove("minimized");
+  };
 
   backdrop
     ?.querySelectorAll(".js-close-modal")
     .forEach((btn) => safeOn(btn, "click", closeModal));
+
+  backdrop
+    ?.querySelectorAll(".js-minimize-modal")
+    .forEach((btn) => safeOn(btn, "click", minimizeModal));
+
+  backdrop
+    ?.querySelectorAll(".js-restore-modal")
+    .forEach((btn) => safeOn(btn, "click", restoreModal));
 
   // Real save handler is bound after modal opens via specific save functions
 
@@ -1311,7 +1339,10 @@ function openNewFlightModal(flightType = "DEP") {
         <div class="modal-title">New ${flightType} Flight</div>
         <div class="modal-subtitle">Create a new movement</div>
       </div>
-      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+      </div>
     </div>
     <div class="modal-body modal-sectioned">
       <!-- Identity Section -->
@@ -1905,7 +1936,10 @@ function openNewLocalModal() {
         <div class="modal-title">New Local Flight</div>
         <div class="modal-subtitle">Pre-configured for EGOW → EGOW VFR circuits</div>
       </div>
-      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+      </div>
     </div>
     <div class="modal-body">
       <div class="modal-field">
@@ -2259,7 +2293,10 @@ function openEditMovementModal(m) {
         <div class="modal-title">Edit ${flightType} Flight</div>
         <div class="modal-subtitle">Movement ID: ${m.id}</div>
       </div>
-      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+      </div>
     </div>
     <div class="modal-body modal-sectioned">
       <!-- Identity Section -->
@@ -2855,7 +2892,10 @@ function openDuplicateMovementModal(m) {
         <div class="modal-title">Duplicate ${flightType} Flight</div>
         <div class="modal-subtitle">Creating copy of Movement ID: ${m.id}</div>
       </div>
-      <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+      </div>
     </div>
     <div class="modal-body">
       <div class="modal-field">
