@@ -43,7 +43,8 @@ import {
   lookupUnitCodeFromEgowCodes,
   lookupUnitFromCallsign,
   lookupOperatorFromCallsign,
-  validateSquawkCode
+  validateSquawkCode,
+  isKnownContraction
 } from "./vkb.js";
 
 /* -----------------------------
@@ -549,58 +550,117 @@ function generateMovementAlerts(m) {
 
   // Check for wake turbulence category alert
   const config = getConfig();
+  const wtcSystem = config.wtcSystem || "ICAO";
   const wtcThreshold = config.wtcAlertThreshold || "off";
+
   if (wtcThreshold !== "off" && m.wtc) {
     const wtcValue = (m.wtc || "").toUpperCase();
-    const wtcHierarchy = { "L": 1, "M": 2, "H": 3, "J": 4 };
-    const threshold = wtcHierarchy[wtcThreshold];
-    const current = wtcHierarchy[wtcValue];
+    let shouldAlert = false;
+    let categoryName = "";
 
-    if (threshold && current && current >= threshold) {
-      const categoryNames = { "L": "Light", "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+    if (wtcSystem === "ICAO") {
+      // ICAO hierarchy: M=1, H=2, J=3 (L removed)
+      const wtcHierarchy = { "M": 1, "H": 2, "J": 3 };
+      const categoryNames = { "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    } else if (wtcSystem === "UK") {
+      // UK RECAT-EU hierarchy: B=1, C=2, D=3, E=4, F=5 (A is largest, F is smallest, but we alert from threshold up)
+      // Actually for UK RECAT: A is highest wake, F is lowest. Hierarchy should be A=6, B=5, C=4, D=3, E=2, F=1
+      const wtcHierarchy = { "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1 };
+      const categoryNames = { "A": "Cat A", "B": "Cat B", "C": "Cat C", "D": "Cat D", "E": "Cat E", "F": "Cat F" };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    }
+
+    if (shouldAlert) {
       alerts.push({
         type: 'wtc_alert',
         severity: 'warning',
-        message: `Wake turbulence category ${categoryNames[wtcValue]} (${wtcValue}) - Be aware of separation requirements`
+        message: `Wake turbulence category ${categoryName} (${wtcValue}) - Be aware of separation requirements`
       });
     }
   }
 
   // Check for callsign confusion risks
+  // Self-exclusion helper
+  const isSameMovement = (a, b) => {
+    if (a === b) return true;
+    if (a?.id != null && b?.id != null) return a.id === b.id;
+    return false;
+  };
+
   const allMovements = getMovements();
   const activeOrPlannedMovements = allMovements.filter(mov =>
-    (mov.status === 'ACTIVE' || mov.status === 'PLANNED') && mov.id !== m.id
+    (mov.status === 'ACTIVE' || mov.status === 'PLANNED') && !isSameMovement(mov, m)
   );
 
-  const thisCallsign = (m.callsignCode || '').toUpperCase().trim();
-  const thisReg = (m.registration || '').toUpperCase().replace(/-/g, '').trim();
+  // Normalize callsign and registration
+  const thisCallsignRaw = (m.callsignCode || '').toUpperCase().trim();
+  const thisRegRaw = (m.registration || '').toUpperCase().trim();
+  const thisCallsignNorm = thisCallsignRaw.replace(/[-\s]/g, '');
+  const thisRegNorm = thisRegRaw.replace(/[-\s]/g, '');
 
-  // 1. British G-reg abbreviated callsign confusion
-  // If callsign equals registration (without hyphen), check for similar G-regs
-  if (thisReg.startsWith('G') && thisCallsign === thisReg) {
-    // Extract first letter + last 2 letters (e.g., G-SHWK -> GWK)
-    if (thisReg.length >= 3) {
-      const thisAbbrev = thisReg[0] + thisReg.slice(-2);
+  // Helper: compute registration abbreviation key using UK CAP 413 logic
+  function getRegAbbrevKey(regNorm) {
+    if (!regNorm) return '';
+    // US N-number special case: N + last 3
+    if (/^N[0-9A-Z]+$/.test(regNorm) && regNorm.length >= 4) {
+      return 'N' + regNorm.slice(-3);
+    }
+    // Default: first + last 2
+    if (regNorm.length >= 3) {
+      return regNorm[0] + regNorm.slice(-2);
+    }
+    return regNorm; // fallback
+  }
 
-      const conflictingGregs = activeOrPlannedMovements.filter(mov => {
-        const otherReg = (mov.registration || '').toUpperCase().replace(/-/g, '').trim();
-        const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+  // 1. Registration-based callsign confusion (UK CAP 413-aligned)
+  if (thisRegNorm && thisCallsignNorm === thisRegNorm) {
+    const thisKey = getRegAbbrevKey(thisRegNorm);
 
-        if (otherReg.startsWith('G') && otherCallsign === otherReg && otherReg.length >= 3) {
-          const otherAbbrev = otherReg[0] + otherReg.slice(-2);
-          return thisAbbrev === otherAbbrev && thisReg !== otherReg;
-        }
-        return false;
-      });
+    // Check for conflicts with other registration-based callsigns
+    const conflictingRegs = activeOrPlannedMovements.filter(mov => {
+      const otherCallsignRaw = (mov.callsignCode || '').toUpperCase().trim();
+      const otherRegRaw = (mov.registration || '').toUpperCase().trim();
+      const otherCallsignNorm = otherCallsignRaw.replace(/[-\s]/g, '');
+      const otherRegNorm = otherRegRaw.replace(/[-\s]/g, '');
 
-      if (conflictingGregs.length > 0) {
-        const otherRegs = conflictingGregs.map(mov => mov.registration).join(', ');
-        alerts.push({
-          type: 'callsign_confusion_greg',
-          severity: 'warning',
-          message: `G-reg abbreviation conflict: Both ${m.registration} and ${otherRegs} abbreviate to "${thisAbbrev}"`
-        });
+      // Only consider if other also uses registration as callsign
+      if (otherRegNorm && otherCallsignNorm === otherRegNorm) {
+        const otherKey = getRegAbbrevKey(otherRegNorm);
+        // Conflict if same abbreviation key but different registrations
+        return thisKey === otherKey && thisRegNorm !== otherRegNorm;
       }
+      return false;
+    });
+
+    if (conflictingRegs.length > 0) {
+      const otherCallsigns = conflictingRegs.map(mov => mov.callsignCode).join(', ');
+      alerts.push({
+        type: 'callsign_confusion_reg',
+        severity: 'warning',
+        message: `Registration callsign conflict: ${m.callsignCode} and ${otherCallsigns} both abbreviate to "${thisKey}"`
+      });
+    }
+
+    // Guardrail: check if abbreviation key collides with known VKB contractions
+    if (thisKey.length === 3 && isKnownContraction(thisKey)) {
+      alerts.push({
+        type: 'callsign_confusion_contraction',
+        severity: 'warning',
+        message: `Abbrev collision: "${thisKey}" matches a callsign contraction. Avoid abbreviated registration callsign.`
+      });
     }
   }
 
@@ -610,19 +670,21 @@ function generateMovementAlerts(m) {
   let thisUaNumber = null;
 
   for (const code of uaCodes) {
-    if (thisCallsign.startsWith(code)) {
+    if (thisCallsignNorm.startsWith(code)) {
       thisUaCode = code;
-      thisUaNumber = thisCallsign.substring(code.length);
+      thisUaNumber = thisCallsignNorm.substring(code.length);
       break;
     }
   }
 
   if (thisUaCode && thisUaNumber) {
     const conflictingUa = activeOrPlannedMovements.filter(mov => {
-      const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
+      if (isSameMovement(mov, m)) return false;
+      const otherCallsignRaw = (mov.callsignCode || '').toUpperCase().trim();
+      const otherCallsignNorm = otherCallsignRaw.replace(/[-\s]/g, '');
       for (const code of uaCodes) {
-        if (code !== thisUaCode && otherCallsign.startsWith(code)) {
-          const otherNumber = otherCallsign.substring(code.length);
+        if (code !== thisUaCode && otherCallsignNorm.startsWith(code)) {
+          const otherNumber = otherCallsignNorm.substring(code.length);
           return otherNumber === thisUaNumber;
         }
       }
@@ -640,8 +702,6 @@ function generateMovementAlerts(m) {
   }
 
   // 3. Military non-standard vs ICAO abbreviation confusion
-  // This is a complex database lookup - for now, implement a basic check
-  // You can expand this with a full database of known conflicts
   const knownConflicts = [
     { military: 'CRMSN', icao: 'OUA', phonetic: 'CRIMSON' }
     // Add more known conflicts here as needed
@@ -649,9 +709,11 @@ function generateMovementAlerts(m) {
 
   for (const conflict of knownConflicts) {
     const conflictingMilitary = activeOrPlannedMovements.filter(mov => {
-      const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
-      return (thisCallsign.startsWith(conflict.military) && otherCallsign.startsWith(conflict.icao)) ||
-             (thisCallsign.startsWith(conflict.icao) && otherCallsign.startsWith(conflict.military));
+      if (isSameMovement(mov, m)) return false;
+      const otherCallsignRaw = (mov.callsignCode || '').toUpperCase().trim();
+      const otherCallsignNorm = otherCallsignRaw.replace(/[-\s]/g, '');
+      return (thisCallsignNorm.startsWith(conflict.military) && otherCallsignNorm.startsWith(conflict.icao)) ||
+             (thisCallsignNorm.startsWith(conflict.icao) && otherCallsignNorm.startsWith(conflict.military));
     });
 
     if (conflictingMilitary.length > 0) {
@@ -662,24 +724,6 @@ function generateMovementAlerts(m) {
         message: `Military/ICAO callsign conflict: ${m.callsignCode} and ${otherCallsigns} may both use "${conflict.phonetic}"`
       });
     }
-  }
-
-  // 4. General abbreviated callsign confusion (original simple check)
-  const similarCallsigns = activeOrPlannedMovements.filter(mov => {
-    const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
-    // Check for abbreviated callsigns that could be confused (e.g., ASCOT vs ASCOT1)
-    return thisCallsign && otherCallsign &&
-           thisCallsign !== otherCallsign &&
-           (thisCallsign.startsWith(otherCallsign) || otherCallsign.startsWith(thisCallsign));
-  });
-
-  if (similarCallsigns.length > 0) {
-    const otherCallsigns = similarCallsigns.map(mov => mov.callsignCode).join(', ');
-    alerts.push({
-      type: 'callsign_confusion_general',
-      severity: 'info',
-      message: `Similar callsign(s) active: ${otherCallsigns}`
-    });
   }
 
   return alerts;
@@ -895,7 +939,8 @@ export function renderLiveBoard() {
 
     // Check for callsign confusion alerts
     const hasCallsignConfusion = alerts.some(a =>
-      a.type === 'callsign_confusion_greg' ||
+      a.type === 'callsign_confusion_reg' ||
+      a.type === 'callsign_confusion_contraction' ||
       a.type === 'callsign_confusion_ua' ||
       a.type === 'callsign_confusion_military'
     );

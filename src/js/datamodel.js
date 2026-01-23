@@ -21,7 +21,8 @@ const defaultConfig = {
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
   alwaysHideLocalTimeInBanner: false, // Never show local time in banner
   enableAlertTooltips: true, // Show alert tooltips on hover over highlighted strips
-  wtcAlertThreshold: "off"   // Wake turbulence category alert: "off", "L", "M", "H", "J"
+  wtcSystem: "ICAO",        // Wake turbulence system: "ICAO" or "UK"
+  wtcAlertThreshold: "off"  // ICAO: "off", "M", "H", "J" | UK: "off", "B", "C", "D", "E", "F"
 };
 
 // Configuration state

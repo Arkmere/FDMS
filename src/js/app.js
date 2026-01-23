@@ -438,8 +438,55 @@ function initAdminPanelHandlers() {
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
+  const configWtcSystem = document.getElementById("configWtcSystem");
   const configWtcThreshold = document.getElementById("configWtcThreshold");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
+
+  // Helper to populate WTC threshold options based on system
+  const populateWtcThresholdOptions = (system) => {
+    if (!configWtcThreshold) return;
+
+    const currentValue = configWtcThreshold.value;
+    configWtcThreshold.innerHTML = '';
+
+    const offOption = document.createElement('option');
+    offOption.value = 'off';
+    offOption.textContent = 'Off (No alerts)';
+    configWtcThreshold.appendChild(offOption);
+
+    if (system === 'ICAO') {
+      const options = [
+        { value: 'M', label: 'Medium (M) or higher' },
+        { value: 'H', label: 'Heavy (H) or higher' },
+        { value: 'J', label: 'Super/Jumbo (J) only' }
+      ];
+      options.forEach(opt => {
+        const el = document.createElement('option');
+        el.value = opt.value;
+        el.textContent = opt.label;
+        configWtcThreshold.appendChild(el);
+      });
+    } else if (system === 'UK') {
+      const options = [
+        { value: 'B', label: 'Cat B or higher' },
+        { value: 'C', label: 'Cat C or higher' },
+        { value: 'D', label: 'Cat D or higher' },
+        { value: 'E', label: 'Cat E or higher' },
+        { value: 'F', label: 'Cat F only' }
+      ];
+      options.forEach(opt => {
+        const el = document.createElement('option');
+        el.value = opt.value;
+        el.textContent = opt.label;
+        configWtcThreshold.appendChild(el);
+      });
+    }
+
+    // Restore previous value if it's still valid
+    if (currentValue && Array.from(configWtcThreshold.options).some(opt => opt.value === currentValue)) {
+      configWtcThreshold.value = currentValue;
+    }
+  };
 
   // Load current config values
   const currentConfig = getConfig();
@@ -452,6 +499,17 @@ function initAdminPanelHandlers() {
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
+
+  // Initialize WTC system and threshold
+  if (configWtcSystem) {
+    configWtcSystem.value = currentConfig.wtcSystem || "ICAO";
+    populateWtcThresholdOptions(configWtcSystem.value);
+
+    // Add change listener to repopulate threshold options
+    configWtcSystem.addEventListener('change', () => {
+      populateWtcThresholdOptions(configWtcSystem.value);
+    });
+  }
   if (configWtcThreshold) configWtcThreshold.value = currentConfig.wtcAlertThreshold || "off";
 
   if (btnSaveConfig) {
@@ -465,6 +523,7 @@ function initAdminPanelHandlers() {
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
       const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+      const wtcSystem = configWtcSystem?.value || "ICAO";
       const wtcThreshold = configWtcThreshold?.value || "off";
 
       // Validate all offsets
@@ -488,6 +547,7 @@ function initAdminPanelHandlers() {
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
         enableAlertTooltips: enableAlertTooltips,
+        wtcSystem: wtcSystem,
         wtcAlertThreshold: wtcThreshold
       });
       showToast("Configuration saved successfully", 'success');
