@@ -467,6 +467,7 @@ tr.strip.ft-ovr > td {
   width: 100%;
   padding: 8px 10px;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
 }
