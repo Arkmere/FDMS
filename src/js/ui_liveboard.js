@@ -549,19 +549,44 @@ function generateMovementAlerts(m) {
 
   // Check for wake turbulence category alert
   const config = getConfig();
+  const wtcSystem = config.wtcSystem || "ICAO";
   const wtcThreshold = config.wtcAlertThreshold || "off";
+
   if (wtcThreshold !== "off" && m.wtc) {
     const wtcValue = (m.wtc || "").toUpperCase();
-    const wtcHierarchy = { "L": 1, "M": 2, "H": 3, "J": 4 };
-    const threshold = wtcHierarchy[wtcThreshold];
-    const current = wtcHierarchy[wtcValue];
+    let shouldAlert = false;
+    let categoryName = "";
 
-    if (threshold && current && current >= threshold) {
-      const categoryNames = { "L": "Light", "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+    if (wtcSystem === "ICAO") {
+      // ICAO hierarchy: M=1, H=2, J=3 (L removed)
+      const wtcHierarchy = { "M": 1, "H": 2, "J": 3 };
+      const categoryNames = { "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    } else if (wtcSystem === "UK") {
+      // UK RECAT-EU hierarchy: B=1, C=2, D=3, E=4, F=5 (A is largest, F is smallest, but we alert from threshold up)
+      // Actually for UK RECAT: A is highest wake, F is lowest. Hierarchy should be A=6, B=5, C=4, D=3, E=2, F=1
+      const wtcHierarchy = { "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1 };
+      const categoryNames = { "A": "Cat A", "B": "Cat B", "C": "Cat C", "D": "Cat D", "E": "Cat E", "F": "Cat F" };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    }
+
+    if (shouldAlert) {
       alerts.push({
         type: 'wtc_alert',
         severity: 'warning',
-        message: `Wake turbulence category ${categoryNames[wtcValue]} (${wtcValue}) - Be aware of separation requirements`
+        message: `Wake turbulence category ${categoryName} (${wtcValue}) - Be aware of separation requirements`
       });
     }
   }
@@ -662,24 +687,6 @@ function generateMovementAlerts(m) {
         message: `Military/ICAO callsign conflict: ${m.callsignCode} and ${otherCallsigns} may both use "${conflict.phonetic}"`
       });
     }
-  }
-
-  // 4. General abbreviated callsign confusion (original simple check)
-  const similarCallsigns = activeOrPlannedMovements.filter(mov => {
-    const otherCallsign = (mov.callsignCode || '').toUpperCase().trim();
-    // Check for abbreviated callsigns that could be confused (e.g., ASCOT vs ASCOT1)
-    return thisCallsign && otherCallsign &&
-           thisCallsign !== otherCallsign &&
-           (thisCallsign.startsWith(otherCallsign) || otherCallsign.startsWith(thisCallsign));
-  });
-
-  if (similarCallsigns.length > 0) {
-    const otherCallsigns = similarCallsigns.map(mov => mov.callsignCode).join(', ');
-    alerts.push({
-      type: 'callsign_confusion_general',
-      severity: 'info',
-      message: `Similar callsign(s) active: ${otherCallsigns}`
-    });
   }
 
   return alerts;
