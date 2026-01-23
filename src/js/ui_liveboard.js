@@ -525,12 +525,25 @@ function generateMovementAlerts(m) {
     }
   }
 
-  // Check for emergency squawk
-  if (m.squawk === '7700' || m.squawk === '#7700') {
+  // Check for emergency squawks (7500, 7600, 7700)
+  const squawkCode = (m.squawk || '').replace('#', '');
+  if (squawkCode === '7500') {
     alerts.push({
-      type: 'emergency',
+      type: 'emergency_hijack',
       severity: 'critical',
-      message: 'EMERGENCY SQUAWK 7700 - Aircraft in distress'
+      message: 'EMERGENCY SQUAWK 7500 - Unlawful interference / Hijacking'
+    });
+  } else if (squawkCode === '7600') {
+    alerts.push({
+      type: 'emergency_radio',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7600 - Radio failure / Lost communications'
+    });
+  } else if (squawkCode === '7700') {
+    alerts.push({
+      type: 'emergency_general',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7700 - General emergency'
     });
   }
 
