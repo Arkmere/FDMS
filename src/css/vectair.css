@@ -467,6 +467,7 @@ tr.strip.ft-ovr > td {
   width: 100%;
   padding: 8px 10px;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
 }
@@ -830,6 +831,64 @@ tr.strip.ft-ovr > td {
 }
 .btn-secondary-modal {
   background: #f5f6f7;
+}
+
+/* Modal minimize/restore */
+.modal-header-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.modal-minimized-bar {
+  display: none;
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 1000;
+}
+
+.modal-minimized-bar button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--va-accent-brown);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.modal-minimized-bar button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.modal-minimized-title {
+  flex: 1;
+}
+
+.modal-minimized-icon {
+  font-size: 11px;
+}
+
+/* Minimized state */
+.modal-backdrop.minimized {
+  background: transparent;
+  pointer-events: none;
+}
+
+.modal-backdrop.minimized .modal {
+  display: none;
+}
+
+.modal-backdrop.minimized .modal-minimized-bar {
+  display: block;
+  pointer-events: auto;
 }
 
 /* Reports */

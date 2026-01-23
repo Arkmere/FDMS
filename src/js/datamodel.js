@@ -22,7 +22,9 @@ const defaultConfig = {
   alwaysHideLocalTimeInBanner: false, // Never show local time in banner
   enableAlertTooltips: true, // Show alert tooltips on hover over highlighted strips
   wtcSystem: "ICAO",        // Wake turbulence system: "ICAO" or "UK"
-  wtcAlertThreshold: "off"  // ICAO: "off", "M", "H", "J" | UK: "off", "B", "C", "D", "E", "F"
+  wtcAlertThreshold: "off", // ICAO: "off", "M", "H", "J" | UK: "off", "B", "C", "D", "E", "F"
+  autoActivateEnabled: true, // Automatically activate PLANNED arrivals before ETA
+  autoActivateMinutesBeforeEta: 30 // Minutes before ETA to auto-activate (max: 120)
 };
 
 // Configuration state
