@@ -17,7 +17,9 @@ const defaultConfig = {
   locFlightDurationMinutes: 40, // LOC: ETA = ETD + this
   ovrOffsetMinutes: 0,    // OVR: ECT = now + this
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
-  showLocalTime: false    // Show local time conversions alongside UTC
+  showLocalTime: false,   // Show local time conversions alongside UTC
+  hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
+  alwaysHideLocalTimeInBanner: false  // Never show local time in banner
 };
 
 // Configuration state

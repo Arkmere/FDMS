@@ -618,6 +618,38 @@ export function renderLiveBoard() {
       }
     }
 
+    // Check for overdue arrival (CAA 493 - ARR only)
+    let overdueStyle = '';
+    let overdueTitle = '';
+    if (ft === "ARR" && m.status === "ACTIVE") {
+      const eta = getETA(m);
+      if (eta && eta !== "-" && m.dof) {
+        // Parse ETA time (HH:MM format)
+        const etaParts = eta.split(':');
+        if (etaParts.length === 2) {
+          const etaHours = parseInt(etaParts[0], 10);
+          const etaMinutes = parseInt(etaParts[1], 10);
+
+          // Create ETA datetime from DOF and ETA time
+          const etaDate = new Date(m.dof + "T00:00:00Z");
+          etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
+
+          // Calculate minutes past ETA
+          const minutesPastEta = Math.floor((now - etaDate) / (1000 * 60));
+
+          if (minutesPastEta >= 60) {
+            // Full overdue action - Red (60+ minutes past ETA)
+            overdueStyle = 'background-color: #ffcccc;';
+            overdueTitle = ` title="FULL OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
+          } else if (minutesPastEta >= 30) {
+            // Preliminary overdue action - Yellow (30-59 minutes past ETA)
+            overdueStyle = 'background-color: #ffeb3b;';
+            overdueTitle = ` title="PRELIMINARY OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
+          }
+        }
+      }
+    }
+
     // Get indicator bar color
     const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
     const indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
@@ -642,7 +674,7 @@ export function renderLiveBoard() {
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
-      <td>
+      <td style="${overdueStyle}"${overdueTitle}>
         <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
