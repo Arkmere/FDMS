@@ -320,19 +320,19 @@ tbody tr.strip-row:hover {
 
 /* Flight-type row colour blocking (main strip bay tint) */
 tr.strip.ft-arr > td {
-  background-color: rgba(230,165,87,0.22) !important;
+  background-color: rgba(230,165,87,0.22);
 }
 
 tr.strip.ft-dep > td {
-  background-color: rgba(122,163,204,0.22) !important;
+  background-color: rgba(122,163,204,0.22);
 }
 
 tr.strip.ft-loc > td {
-  background-color: rgba(232,158,196,0.22) !important;
+  background-color: rgba(232,158,196,0.22);
 }
 
 tr.strip.ft-ovr > td {
-  background-color: rgba(139,201,144,0.22) !important;
+  background-color: rgba(139,201,144,0.22);
 }
 
 /* Cell content */
