@@ -589,6 +589,15 @@ export function lookupCallsignByContraction(contraction) {
 }
 
 /**
+ * Check if a code matches a known VKB contraction (TRICODE, ICAO 3LD, or SSR INDICATION)
+ * @param {string} code - The code to check (e.g., "BAW", "EOM")
+ * @returns {boolean} True if code matches a known contraction
+ */
+export function isKnownContraction(code) {
+  return lookupCallsignByContraction(code) !== null;
+}
+
+/**
  * Get voice callsign for display on strip (only if different from contraction and registration)
  * @param {string} contraction - The callsign contraction (e.g., "BAW")
  * @param {string} registration - The aircraft registration (e.g., "G-BYUN")
