@@ -19,7 +19,8 @@ const defaultConfig = {
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
   showLocalTime: false,   // Show local time conversions alongside UTC
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
-  alwaysHideLocalTimeInBanner: false  // Never show local time in banner
+  alwaysHideLocalTimeInBanner: false, // Never show local time in banner
+  enableAlertTooltips: true // Show alert tooltips on hover over highlighted strips
 };
 
 // Configuration state

@@ -437,6 +437,7 @@ function initAdminPanelHandlers() {
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
+  const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Load current config values
@@ -449,6 +450,7 @@ function initAdminPanelHandlers() {
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
+  if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
 
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
@@ -460,6 +462,7 @@ function initAdminPanelHandlers() {
       const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
+      const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -480,7 +483,8 @@ function initAdminPanelHandlers() {
         ovrOffsetMinutes: ovrOffset,
         timezoneOffsetHours: timezoneOffset,
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
-        alwaysHideLocalTimeInBanner: alwaysHideLocal
+        alwaysHideLocalTimeInBanner: alwaysHideLocal,
+        enableAlertTooltips: enableAlertTooltips
       });
       showToast("Configuration saved successfully", 'success');
     });

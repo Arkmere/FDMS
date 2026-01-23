@@ -470,6 +470,94 @@ function renderFormationDetails(m) {
   `;
 }
 
+/**
+ * Generate all active alerts for a movement
+ * @param {Object} m - Movement object
+ * @returns {Array} Array of alert objects {type, severity, message}
+ */
+function generateMovementAlerts(m) {
+  const alerts = [];
+  const now = new Date();
+  const todayStr = getTodayDateString();
+  const ft = (m.flightType || "").toUpperCase();
+
+  // Check for stale movement (24+ hours old)
+  if (m.dof && m.dof < todayStr) {
+    const dofDate = new Date(m.dof + "T00:00:00Z");
+    const hoursOld = Math.floor((now - dofDate) / (1000 * 60 * 60));
+    if (hoursOld >= 24) {
+      alerts.push({
+        type: 'stale',
+        severity: 'warning',
+        message: `Movement is ${hoursOld} hours old - still relevant?`
+      });
+    }
+  }
+
+  // Check for overdue arrival (CAA 493 - ARR only)
+  if (ft === "ARR" && m.status === "ACTIVE") {
+    const eta = getETA(m);
+    if (eta && eta !== "-" && m.dof) {
+      const etaParts = eta.split(':');
+      if (etaParts.length === 2) {
+        const etaHours = parseInt(etaParts[0], 10);
+        const etaMinutes = parseInt(etaParts[1], 10);
+
+        const etaDate = new Date(m.dof + "T00:00:00Z");
+        etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
+
+        const minutesPastEta = Math.floor((now - etaDate) / (1000 * 60));
+
+        if (minutesPastEta >= 60) {
+          alerts.push({
+            type: 'overdue_full',
+            severity: 'critical',
+            message: `FULL OVERDUE ACTION: Aircraft is ${minutesPastEta} minutes past ETA`
+          });
+        } else if (minutesPastEta >= 30) {
+          alerts.push({
+            type: 'overdue_preliminary',
+            severity: 'warning',
+            message: `PRELIMINARY OVERDUE ACTION: Aircraft is ${minutesPastEta} minutes past ETA`
+          });
+        }
+      }
+    }
+  }
+
+  // Check for emergency squawk
+  if (m.squawk === '7700' || m.squawk === '#7700') {
+    alerts.push({
+      type: 'emergency',
+      severity: 'critical',
+      message: 'EMERGENCY SQUAWK 7700 - Aircraft in distress'
+    });
+  }
+
+  // Check for similar callsign confusion risk
+  const allMovements = getMovements();
+  const activeMovements = allMovements.filter(mov => mov.status === 'ACTIVE' && mov.id !== m.id);
+  const similarCallsigns = activeMovements.filter(mov => {
+    const thisCallsign = (m.callsignCode || '').toUpperCase();
+    const otherCallsign = (mov.callsignCode || '').toUpperCase();
+    // Check for abbreviated callsigns that could be confused (e.g., ASCOT vs ASCOT1)
+    return thisCallsign && otherCallsign &&
+           thisCallsign !== otherCallsign &&
+           (thisCallsign.startsWith(otherCallsign) || otherCallsign.startsWith(thisCallsign));
+  });
+
+  if (similarCallsigns.length > 0) {
+    const otherCallsigns = similarCallsigns.map(mov => mov.callsignCode).join(', ');
+    alerts.push({
+      type: 'callsign_confusion',
+      severity: 'info',
+      message: `Similar callsign(s) active during same time period: ${otherCallsigns}`
+    });
+  }
+
+  return alerts;
+}
+
 function renderExpandedRow(tbody, m) {
   const expTr = document.createElement("tr");
   expTr.className = "expand-row";
@@ -494,6 +582,35 @@ function renderExpandedRow(tbody, m) {
   if (m.squawk && m.squawk !== "—") {
     squawkDisplay = m.squawk.startsWith('#') ? escapeHtml(m.squawk) : `#${escapeHtml(m.squawk)}`;
   }
+
+  // Generate alerts for this movement
+  const alerts = generateMovementAlerts(m);
+
+  // Render alerts section
+  const alertsSection = alerts.length > 0 ? `
+    <div class="expand-section expand-section-alerts">
+      <div class="expand-subsection">
+        <div class="expand-title">Alerts</div>
+        <div class="alerts-list">
+          ${alerts.map(alert => {
+            let iconClass = '';
+            let alertClass = '';
+            if (alert.severity === 'critical') {
+              iconClass = '🔴';
+              alertClass = 'alert-critical';
+            } else if (alert.severity === 'warning') {
+              iconClass = '⚠️';
+              alertClass = 'alert-warning';
+            } else {
+              iconClass = 'ℹ️';
+              alertClass = 'alert-info';
+            }
+            return `<div class="alert-item ${alertClass}"><span class="alert-icon">${iconClass}</span> ${escapeHtml(alert.message)}</div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  ` : '';
 
   expTd.innerHTML = `
     <div class="expand-inner">
@@ -541,6 +658,8 @@ function renderExpandedRow(tbody, m) {
           </div>
         </div>
       </div>
+
+      ${alertsSection}
     </div>
   `;
 
@@ -604,50 +723,36 @@ export function renderLiveBoard() {
     else if (m.rules === 'Z') rulesDisplay = 'Z';
     else if (m.rules === 'SVFR') rulesDisplay = 'S';
 
-    // Check if movement is stale (over 24 hours old)
-    const now = new Date();
-    const todayStr = getTodayDateString();
-    let staleWarning = '';
-    let staleClass = '';
-    if (m.dof && m.dof < todayStr) {
-      const dofDate = new Date(m.dof + "T00:00:00Z");
-      const hoursOld = Math.floor((now - dofDate) / (1000 * 60 * 60));
-      if (hoursOld >= 24) {
-        staleWarning = `⚠ Movement is ${hoursOld} hours old - still relevant?`;
-        staleClass = ' stale-movement';
+    // Generate all alerts for this movement
+    const alerts = generateMovementAlerts(m);
+    const config = getConfig();
+    const enableTooltips = config.enableAlertTooltips !== false;
+
+    // Determine highlighting and tooltips based on alerts
+    let overdueStyle = '';
+    let tooltipTitle = '';
+    const staleAlert = alerts.find(a => a.type === 'stale');
+    const overdueFullAlert = alerts.find(a => a.type === 'overdue_full');
+    const overduePrelimAlert = alerts.find(a => a.type === 'overdue_preliminary');
+
+    if (overdueFullAlert) {
+      overdueStyle = 'background-color: #ffcccc;';
+      if (enableTooltips) {
+        tooltipTitle = ` title="${escapeHtml(overdueFullAlert.message)}"`;
+      }
+    } else if (overduePrelimAlert) {
+      overdueStyle = 'background-color: #ffeb3b;';
+      if (enableTooltips) {
+        tooltipTitle = ` title="${escapeHtml(overduePrelimAlert.message)}"`;
       }
     }
 
-    // Check for overdue arrival (CAA 493 - ARR only)
-    let overdueStyle = '';
-    let overdueTitle = '';
-    if (ft === "ARR" && m.status === "ACTIVE") {
-      const eta = getETA(m);
-      if (eta && eta !== "-" && m.dof) {
-        // Parse ETA time (HH:MM format)
-        const etaParts = eta.split(':');
-        if (etaParts.length === 2) {
-          const etaHours = parseInt(etaParts[0], 10);
-          const etaMinutes = parseInt(etaParts[1], 10);
-
-          // Create ETA datetime from DOF and ETA time
-          const etaDate = new Date(m.dof + "T00:00:00Z");
-          etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
-
-          // Calculate minutes past ETA
-          const minutesPastEta = Math.floor((now - etaDate) / (1000 * 60));
-
-          if (minutesPastEta >= 60) {
-            // Full overdue action - Red (60+ minutes past ETA)
-            overdueStyle = 'background-color: #ffcccc;';
-            overdueTitle = ` title="FULL OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
-          } else if (minutesPastEta >= 30) {
-            // Preliminary overdue action - Yellow (30-59 minutes past ETA)
-            overdueStyle = 'background-color: #ffeb3b;';
-            overdueTitle = ` title="PRELIMINARY OVERDUE ACTION: ${minutesPastEta} minutes past ETA"`;
-          }
-        }
-      }
+    // Keep stale warning for date display
+    const now = new Date();
+    const todayStr = getTodayDateString();
+    let staleWarning = '';
+    if (staleAlert) {
+      staleWarning = `⚠ ${staleAlert.message}`;
     }
 
     // Get indicator bar color
@@ -674,7 +779,7 @@ export function renderLiveBoard() {
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
-      <td style="${overdueStyle}"${overdueTitle}>
+      <td style="${overdueStyle}"${tooltipTitle}>
         <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
