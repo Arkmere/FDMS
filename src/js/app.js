@@ -248,7 +248,7 @@ function initClock() {
 
     // Local time (conditional display)
     if (localTimeEl && localTimeLineEl) {
-      const cfg = getCurrentConfig();
+      const cfg = getConfig();
       const offsetHours = cfg.timezoneOffsetHours || 0;
 
       // Calculate local time
