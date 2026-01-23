@@ -838,9 +838,64 @@ function renderExpandedRow(tbody, m) {
   tbody.appendChild(expTr);
 }
 
+/**
+ * Auto-activate PLANNED arrivals when they reach the configured time before ETA
+ */
+function autoActivatePlannedArrivals() {
+  const config = getConfig();
+
+  // Check if auto-activation is enabled
+  if (!config.autoActivateEnabled) {
+    return;
+  }
+
+  const now = new Date();
+  const minutesBeforeEta = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // Max 2 hours
+
+  // Get all PLANNED arrivals
+  const plannedArrivals = getMovements().filter(m =>
+    m.status === 'PLANNED' &&
+    (m.flightType === 'ARR' || m.flightType === 'LOC')
+  );
+
+  for (const movement of plannedArrivals) {
+    const eta = getETA(movement);
+
+    // Skip if no valid ETA or DOF
+    if (!eta || eta === '-' || !movement.dof) {
+      continue;
+    }
+
+    // Parse ETA time (HH:MM format)
+    const etaParts = eta.split(':');
+    if (etaParts.length !== 2) {
+      continue;
+    }
+
+    const etaHours = parseInt(etaParts[0], 10);
+    const etaMinutes = parseInt(etaParts[1], 10);
+
+    // Create ETA date object
+    const etaDate = new Date(movement.dof + 'T00:00:00Z');
+    etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
+
+    // Calculate minutes until ETA
+    const minutesUntilEta = Math.floor((etaDate - now) / (1000 * 60));
+
+    // Auto-activate if within the configured window
+    if (minutesUntilEta <= minutesBeforeEta && minutesUntilEta >= -60) {
+      // Don't auto-activate if more than 1 hour past ETA (probably stale)
+      transitionToActive(movement.id);
+    }
+  }
+}
+
 export function renderLiveBoard() {
   const tbody = byId("liveBody");
   if (!tbody) return;
+
+  // Auto-activate PLANNED arrivals before ETA if enabled
+  autoActivatePlannedArrivals();
 
   tbody.innerHTML = "";
 
