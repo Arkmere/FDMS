@@ -223,23 +223,58 @@ function initTabs() {
 }
 
 function initClock() {
-  const clockEl = document.getElementById("utcClock");
-  if (!clockEl) return;
+  const utcTimeEl = document.getElementById("utcTime");
+  const localTimeEl = document.getElementById("localTime");
+  const localTimeLineEl = document.getElementById("localTimeLine");
+  const dateDisplayEl = document.getElementById("dateDisplay");
+
+  if (!utcTimeEl || !dateDisplayEl) return;
 
   const updateClock = () => {
     const now = new Date();
-    const hh = String(now.getUTCHours()).padStart(2, "0");
-    const mm = String(now.getUTCMinutes()).padStart(2, "0");
+
+    // UTC time
+    const utcHh = String(now.getUTCHours()).padStart(2, "0");
+    const utcMm = String(now.getUTCMinutes()).padStart(2, "0");
+    const utcSs = String(now.getUTCSeconds()).padStart(2, "0");
+    utcTimeEl.textContent = `${utcHh}:${utcMm}:${utcSs}`;
+
+    // Date (DD/MM/YY format)
     const yyyy = now.getUTCFullYear();
+    const yy = String(yyyy).slice(-2);
     const mon = String(now.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(now.getUTCDate()).padStart(2, "0");
+    dateDisplayEl.textContent = `${dd}/${mon}/${yy}`;
 
-    // Keep formatting stable and unambiguous
-    clockEl.textContent = `UTC: ${hh}:${mm} · ${yyyy}-${mon}-${dd}`;
+    // Local time (conditional display)
+    if (localTimeEl && localTimeLineEl) {
+      const cfg = getCurrentConfig();
+      const offsetHours = cfg.timezoneOffsetHours || 0;
+
+      // Calculate local time
+      const localTime = new Date(now.getTime() + (offsetHours * 60 * 60 * 1000));
+      const localHh = String(localTime.getUTCHours()).padStart(2, "0");
+      const localMm = String(localTime.getUTCMinutes()).padStart(2, "0");
+      const localSs = String(localTime.getUTCSeconds()).padStart(2, "0");
+      localTimeEl.textContent = `${localHh}:${localMm}:${localSs}`;
+
+      // Determine visibility
+      const isSameAsUtc = offsetHours === 0;
+      const hideIfSame = cfg.hideLocalTimeInBannerIfSame || false;
+      const alwaysHide = cfg.alwaysHideLocalTimeInBanner || false;
+
+      if (alwaysHide) {
+        localTimeLineEl.style.display = 'none';
+      } else if (hideIfSame && isSameAsUtc) {
+        localTimeLineEl.style.display = 'none';
+      } else {
+        localTimeLineEl.style.display = '';
+      }
+    }
   };
 
   updateClock();
-  window.setInterval(updateClock, 30_000);
+  window.setInterval(updateClock, 1000); // Update every second for seconds display
 }
 
 function initErrorOverlay() {
@@ -400,6 +435,8 @@ function initAdminPanelHandlers() {
   const configLocDuration = document.getElementById("configLocDuration");
   const configOvrOffset = document.getElementById("configOvrOffset");
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
+  const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
+  const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Load current config values
@@ -410,6 +447,8 @@ function initAdminPanelHandlers() {
   if (configLocDuration) configLocDuration.value = currentConfig.locFlightDurationMinutes || 40;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
+  if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
+  if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
 
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
@@ -419,6 +458,8 @@ function initAdminPanelHandlers() {
       const locDuration = parseInt(configLocDuration?.value || "40", 10);
       const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
       const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
+      const hideLocalIfSame = configHideLocalIfSame?.checked || false;
+      const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -437,7 +478,9 @@ function initAdminPanelHandlers() {
         locOffsetMinutes: locOffset,
         locFlightDurationMinutes: locDuration,
         ovrOffsetMinutes: ovrOffset,
-        timezoneOffsetHours: timezoneOffset
+        timezoneOffsetHours: timezoneOffset,
+        hideLocalTimeInBannerIfSame: hideLocalIfSame,
+        alwaysHideLocalTimeInBanner: alwaysHideLocal
       });
       showToast("Configuration saved successfully", 'success');
     });

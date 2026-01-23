@@ -17,8 +17,11 @@
           </div>
         </div>
         <div class="header-right">
-          <div><strong>UTC</strong></div>
-          <div id="utcClock">--:--:--</div>
+          <div id="clockDisplay" class="clock-display">
+            <div class="clock-line"><strong>UTC</strong> <span id="utcTime">--:--:--</span></div>
+            <div class="clock-line" id="localTimeLine" style="display: none;"><strong>Loc</strong> <span id="localTime">--:--:--</span></div>
+            <div class="clock-line"><strong>Date</strong> <span id="dateDisplay">--/--/--</span></div>
+          </div>
         </div>
       </header>
 
@@ -434,6 +437,25 @@
               </div>
               <div style="font-size: 11px; color: #666;">
                 Times are stored as UTC. This setting affects local time conversions shown in modals.
+              </div>
+            </div>
+
+            <div style="margin-top: 16px; margin-bottom: 12px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                Banner Local Time Display
+              </label>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configHideLocalIfSame" style="cursor: pointer;">
+                  <span style="font-size: 12px;">Hide local time in banner if same as UTC</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configAlwaysHideLocal" style="cursor: pointer;">
+                  <span style="font-size: 12px;">Always hide local time in banner</span>
+                </label>
+              </div>
+              <div style="font-size: 11px; color: #666; margin-top: 6px;">
+                Control visibility of local time in the top-right banner clock display.
               </div>
             </div>
 
