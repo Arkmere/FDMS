@@ -6,11 +6,15 @@ import {
   initHistoryBoard,
   renderLiveBoard,
   renderHistoryBoard,
-  renderReportsSummary,
   initHistoryExport,
   initVkbLookup,
   initAdminPanel
 } from "./ui_liveboard.js";
+
+import {
+  initReports,
+  renderReports
+} from "./ui_reports.js";
 
 import {
   resetMovementsToDemo,
@@ -368,7 +372,7 @@ function initAdminPanelHandlers() {
         resetMovementsToDemo();
         renderLiveBoard();
         renderHistoryBoard();
-        renderReportsSummary();
+        renderReports();
         diagnostics.lastRenderTime = new Date().toISOString();
         updateDiagnostics();
         showToast("Session reset to demo data", 'success');
@@ -412,7 +416,7 @@ function initAdminPanelHandlers() {
           if (result.success) {
             renderLiveBoard();
             renderHistoryBoard();
-            renderReportsSummary();
+            renderReports();
             diagnostics.lastRenderTime = new Date().toISOString();
             updateDiagnostics();
             showToast(`Import successful! Loaded ${result.count} movements`, 'success');
@@ -583,10 +587,11 @@ async function bootstrap() {
     initVkbLookup();
     initAdminPanel();
     initAdminPanelHandlers();
+    initReports();
 
     renderLiveBoard();
     renderHistoryBoard();
-    renderReportsSummary();
+    renderReports();
 
     // Record init complete
     diagnostics.initTime = new Date().toISOString();
