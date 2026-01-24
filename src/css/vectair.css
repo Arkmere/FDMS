@@ -459,6 +459,19 @@ tr.strip.ft-ovr > td {
   border-radius: 2px;
 }
 
+/* Overdue alert highlighting - highlighter style (similar to stale) */
+.overdue-full {
+  background-color: #ffcccc;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.overdue-preliminary {
+  background-color: #ffeb3b;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
 /* Expanded row */
 .expand-row td {
   background: #f4f5f7;

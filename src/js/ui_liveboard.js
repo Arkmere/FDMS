@@ -955,26 +955,26 @@ export function renderLiveBoard() {
     const enableTooltips = config.enableAlertTooltips !== false;
 
     // Determine highlighting and tooltips based on alerts
-    let overdueStyle = '';
+    let overdueClass = '';
     let tooltipTitle = '';
     const staleAlert = alerts.find(a => a.type === 'stale');
     const overdueFullAlert = alerts.find(a => a.type === 'overdue_full');
     const overduePrelimAlert = alerts.find(a => a.type === 'overdue_preliminary');
     const emergencyAlert = alerts.find(a => a.type === 'emergency_hijack' || a.type === 'emergency_radio' || a.type === 'emergency_general');
 
-    // Emergency squawks take priority - red highlight
+    // Emergency squawks and overdue alerts - set class for time highlighting
     if (emergencyAlert) {
-      overdueStyle = 'background-color: #ffcccc !important;';
+      overdueClass = 'overdue-full';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(emergencyAlert.message)}"`;
       }
     } else if (overdueFullAlert) {
-      overdueStyle = 'background-color: #ffcccc !important;';
+      overdueClass = 'overdue-full';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(overdueFullAlert.message)}"`;
       }
     } else if (overduePrelimAlert) {
-      overdueStyle = 'background-color: #ffeb3b !important;';
+      overdueClass = 'overdue-preliminary';
       if (enableTooltips) {
         tooltipTitle = ` title="${escapeHtml(overduePrelimAlert.message)}"`;
       }
@@ -1027,8 +1027,8 @@ export function renderLiveBoard() {
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
-      <td style="${overdueStyle}"${tooltipTitle}>
-        <div class="cell-strong">${escapeHtml(depDisplay)} / ${escapeHtml(arrDisplay)}</div>
+      <td${tooltipTitle}>
+        <div class="cell-strong">${escapeHtml(depDisplay)} / ${overdueClass ? `<span class="${overdueClass}">${escapeHtml(arrDisplay)}</span>` : escapeHtml(arrDisplay)}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
