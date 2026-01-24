@@ -183,6 +183,14 @@ export function getVKBStatus() {
 }
 
 /**
+ * Get VKB registrations data
+ * @returns {Array} Registrations array
+ */
+export function getVKBRegistrations() {
+  return vkbData.registrations || [];
+}
+
+/**
  * Search aircraft types
  * @param {string} query - Search query
  * @param {number} limit - Max results (default 50)
