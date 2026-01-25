@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vectair FDMS Lite</title>
     <link rel="stylesheet" href="./css/vectair.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -140,10 +141,52 @@
         <!-- REPORTS -->
         <section id="tab-reports" class="tab-panel hidden">
           <div class="page-title">Reports</div>
-          <div class="page-subtitle">Basic session totals (no date slicing yet).</div>
+          <div class="page-subtitle">Official monthly returns, dashboard analytics, and insights.</div>
 
+          <!-- Reports Toolbar -->
+          <div class="reports-toolbar">
+            <div class="reports-controls">
+              <label class="control-label">Month:</label>
+              <select id="reportsMonthSelector" class="field field-select">
+                <!-- Populated by JS -->
+              </select>
+
+              <label class="control-label">View:</label>
+              <select id="reportsViewSelector" class="field field-select">
+                <option value="official">Official Monthly Return</option>
+                <option value="dashboard">Dashboard KPIs</option>
+                <option value="insights">Insights & Leaderboards</option>
+              </select>
+            </div>
+
+            <div class="reports-export-buttons">
+              <button id="btnExportCSV" class="btn btn-secondary" title="Export movements as CSV">Export CSV</button>
+              <button id="btnExportXLSX" class="btn btn-primary" title="Export monthly return as Excel">Export XLSX</button>
+            </div>
+          </div>
+
+          <!-- Hours Input Panel (shown in Official view) -->
+          <div id="hoursInputPanel" class="panel" style="display: none;">
+            <div class="panel-header">
+              <h3 class="panel-title">Daily Hours Log</h3>
+            </div>
+            <div class="hours-input-controls">
+              <label class="control-label">Date:</label>
+              <input type="date" id="hoursInputDate" class="field field-input" />
+
+              <label class="control-label">Hours:</label>
+              <input type="number" id="hoursInputValue" class="field field-input" step="0.1" min="0" max="24" placeholder="0.0" style="width: 100px;" />
+
+              <button id="btnSaveHours" class="btn btn-secondary">Save</button>
+              <button id="btnClearHours" class="btn btn-ghost">Clear</button>
+            </div>
+          </div>
+
+          <!-- Reports Content Container -->
           <div class="panel">
-            <div class="reports-grid" id="reportsSummary"></div>
+            <div id="reportsContent">
+              <!-- Content populated by JS based on selected view -->
+            </div>
           </div>
         </section>
 
