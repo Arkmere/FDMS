@@ -295,6 +295,11 @@ function getMovementPlannedTime(m) {
 }
 
 function matchesFilters(m) {
+  // Always exclude COMPLETED and CANCELLED from Live Board
+  if (m.status === "COMPLETED" || m.status === "CANCELLED") {
+    return false;
+  }
+
   const statusFilter = getStatusFilterValue();
 
   if (statusFilter === "active" && m.status !== "ACTIVE") return false;
@@ -1074,6 +1079,11 @@ export function renderLiveBoard() {
             <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
           </div>
           <div style="display: flex; flex-direction: column; gap: 2px;">
+            ${
+              m.status === "PLANNED" || m.status === "ACTIVE"
+                ? '<button class="small-btn js-cancel" type="button" aria-label="Cancel movement" style="background-color: #dc3545; color: white;">Cancel</button>'
+                : ""
+            }
             <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
             <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
           </div>
@@ -1099,6 +1109,12 @@ export function renderLiveBoard() {
     safeOn(completeBtn, "click", (e) => {
       e.stopPropagation();
       transitionToCompleted(m.id);
+    });
+
+    const cancelBtn = tr.querySelector(".js-cancel");
+    safeOn(cancelBtn, "click", (e) => {
+      e.stopPropagation();
+      transitionToCancelled(m.id);
     });
 
     // Bind Duplicate button
@@ -3203,6 +3219,29 @@ function transitionToCompleted(id) {
     arrActual: currentTime
   });
 
+  renderLiveBoard();
+  renderHistoryBoard();
+}
+
+/**
+ * Transition a movement to CANCELLED
+ * Removes the strip from the Live Board and moves it to History
+ */
+function transitionToCancelled(id) {
+  const movement = getMovements().find(m => m.id === id);
+  if (!movement) return;
+
+  // Show confirmation dialog
+  const callsign = movement.callsignCode || 'this flight';
+  if (!confirm(`Cancel ${callsign}? This will remove the strip from the Live Board and mark the flight as cancelled.`)) {
+    return;
+  }
+
+  updateMovement(id, {
+    status: "CANCELLED"
+  });
+
+  showToast(`${callsign} cancelled`, 'info');
   renderLiveBoard();
   renderHistoryBoard();
 }
