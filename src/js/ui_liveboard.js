@@ -64,6 +64,9 @@ function closeDropdownsHandler(e) {
   if (!e.target.closest(".js-edit-dropdown")) {
     document.querySelectorAll(".js-edit-menu").forEach(menu => {
       menu.style.display = "none";
+      // Reset row z-index
+      const row = menu.closest("tr");
+      if (row) row.style.zIndex = "";
     });
   }
 }
@@ -1084,9 +1087,9 @@ export function renderLiveBoard() {
               ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
               : ""
           }
-          <div style="position: relative; display: inline-block;">
+          <div style="position: relative; display: inline-block; z-index: 1;">
             <button class="small-btn js-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
-            <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 120px; margin-top: 2px;">
+            <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
               <button class="js-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Details</button>
               <button class="js-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
               ${
@@ -1106,14 +1109,25 @@ export function renderLiveBoard() {
     const editMenu = tr.querySelector(".js-edit-menu");
     safeOn(editDropdownBtn, "click", (e) => {
       e.stopPropagation();
-      // Close all other open menus
+      // Close all other open menus and reset their row z-index
       document.querySelectorAll(".js-edit-menu").forEach(menu => {
         if (menu !== editMenu) {
           menu.style.display = "none";
+          const row = menu.closest("tr");
+          if (row) row.style.position = "relative";
+          if (row) row.style.zIndex = "";
         }
       });
       // Toggle this menu
-      editMenu.style.display = editMenu.style.display === "none" ? "block" : "none";
+      const isOpening = editMenu.style.display === "none";
+      editMenu.style.display = isOpening ? "block" : "none";
+      // Set z-index on this row when opening, reset when closing
+      if (isOpening) {
+        tr.style.position = "relative";
+        tr.style.zIndex = "10";
+      } else {
+        tr.style.zIndex = "";
+      }
     });
 
     // Bind Edit Details option (opens edit modal)
@@ -1121,6 +1135,7 @@ export function renderLiveBoard() {
     safeOn(editDetailsBtn, "click", (e) => {
       e.stopPropagation();
       editMenu.style.display = "none";
+      tr.style.zIndex = "";
       openEditMovementModal(m);
     });
 
@@ -1129,6 +1144,7 @@ export function renderLiveBoard() {
     safeOn(duplicateBtn, "click", (e) => {
       e.stopPropagation();
       editMenu.style.display = "none";
+      tr.style.zIndex = "";
       openDuplicateMovementModal(m);
     });
 
@@ -1137,6 +1153,7 @@ export function renderLiveBoard() {
     safeOn(cancelBtn, "click", (e) => {
       e.stopPropagation();
       editMenu.style.display = "none";
+      tr.style.zIndex = "";
       transitionToCancelled(m.id);
     });
 
