@@ -59,6 +59,15 @@ const state = {
   showLocalTimeInModals: false // Show local time conversions in modals
 };
 
+// Handler for closing dropdown menus when clicking outside
+function closeDropdownsHandler(e) {
+  if (!e.target.closest(".js-edit-dropdown")) {
+    document.querySelectorAll(".js-edit-menu").forEach(menu => {
+      menu.style.display = "none";
+    });
+  }
+}
+
 /* -----------------------------
    Small DOM helpers
 ------------------------------ */
@@ -1067,35 +1076,68 @@ export function renderLiveBoard() {
         <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
-        <div style="display: flex; gap: 6px; justify-content: flex-end;">
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            ${
-              m.status === "PLANNED"
-                ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
-                : m.status === "ACTIVE"
-                ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
-                : ""
-            }
-            <button class="small-btn js-edit-movement" type="button" aria-label="Edit movement ${escapeHtml(m.callsignCode)}">Edit</button>
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">
+          ${
+            m.status === "PLANNED"
+              ? '<button class="small-btn js-activate" type="button" aria-label="Activate movement">→ Active</button>'
+              : m.status === "ACTIVE"
+              ? '<button class="small-btn js-complete" type="button" aria-label="Complete movement">→ Complete</button>'
+              : ""
+          }
+          <div style="position: relative; display: inline-block;">
+            <button class="small-btn js-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
+            <div class="js-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 120px; margin-top: 2px;">
+              <button class="js-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Details</button>
+              <button class="js-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
+              ${
+                m.status === "PLANNED" || m.status === "ACTIVE"
+                  ? '<button class="js-cancel" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Cancel</button>'
+                  : ""
+              }
+            </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            ${
-              m.status === "PLANNED" || m.status === "ACTIVE"
-                ? '<button class="small-btn js-cancel" type="button" aria-label="Cancel movement" style="background-color: #dc3545; color: white;">Cancel</button>'
-                : ""
-            }
-            <button class="small-btn js-duplicate" type="button" aria-label="Duplicate movement">Duplicate</button>
-            <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Details ▾</button>
-          </div>
+          <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Info ▾</button>
         </div>
       </td>
     `;
 
-    // Bind Edit button
-    const editBtn = tr.querySelector(".js-edit-movement");
-    safeOn(editBtn, "click", (e) => {
+    // Bind Edit dropdown toggle
+    const editDropdownBtn = tr.querySelector(".js-edit-dropdown");
+    const editMenu = tr.querySelector(".js-edit-menu");
+    safeOn(editDropdownBtn, "click", (e) => {
       e.stopPropagation();
+      // Close all other open menus
+      document.querySelectorAll(".js-edit-menu").forEach(menu => {
+        if (menu !== editMenu) {
+          menu.style.display = "none";
+        }
+      });
+      // Toggle this menu
+      editMenu.style.display = editMenu.style.display === "none" ? "block" : "none";
+    });
+
+    // Bind Edit Details option (opens edit modal)
+    const editDetailsBtn = tr.querySelector(".js-edit-details");
+    safeOn(editDetailsBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
       openEditMovementModal(m);
+    });
+
+    // Bind Duplicate option
+    const duplicateBtn = tr.querySelector(".js-duplicate");
+    safeOn(duplicateBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      openDuplicateMovementModal(m);
+    });
+
+    // Bind Cancel option
+    const cancelBtn = tr.querySelector(".js-cancel");
+    safeOn(cancelBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      transitionToCancelled(m.id);
     });
 
     // Bind status transition buttons
@@ -1111,20 +1153,7 @@ export function renderLiveBoard() {
       transitionToCompleted(m.id);
     });
 
-    const cancelBtn = tr.querySelector(".js-cancel");
-    safeOn(cancelBtn, "click", (e) => {
-      e.stopPropagation();
-      transitionToCancelled(m.id);
-    });
-
-    // Bind Duplicate button
-    const duplicateBtn = tr.querySelector(".js-duplicate");
-    safeOn(duplicateBtn, "click", (e) => {
-      e.stopPropagation();
-      openDuplicateMovementModal(m);
-    });
-
-    // Bind details toggle
+    // Bind info toggle (formerly details)
     const toggleBtn = tr.querySelector(".js-toggle-details");
     safeOn(toggleBtn, "click", (e) => {
       e.stopPropagation();
@@ -1197,6 +1226,10 @@ export function renderLiveBoard() {
     `;
     tbody.appendChild(empty);
   }
+
+  // Setup global click handler to close dropdown menus when clicking outside
+  document.removeEventListener("click", closeDropdownsHandler);
+  document.addEventListener("click", closeDropdownsHandler);
 }
 
 /* -----------------------------
