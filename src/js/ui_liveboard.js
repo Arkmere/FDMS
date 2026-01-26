@@ -163,6 +163,31 @@ function timeToMinutes(t) {
 }
 
 /**
+ * Convert minutes since midnight to HH:MM time string
+ * @param {number} minutes - Minutes since midnight
+ * @returns {string} Time string in HH:MM format
+ */
+function minutesToTime(minutes) {
+  if (!Number.isFinite(minutes)) return "";
+  const totalMinutes = minutes % 1440; // Wrap to 24-hour period
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+/**
+ * Add minutes to a time string
+ * @param {string} time - Time string in HH:MM format
+ * @param {number} minutesToAdd - Number of minutes to add
+ * @returns {string} New time string in HH:MM format
+ */
+function addMinutesToTime(time, minutesToAdd) {
+  const mins = timeToMinutes(time);
+  if (!Number.isFinite(mins)) return "";
+  return minutesToTime(mins + minutesToAdd);
+}
+
+/**
  * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
  * @param {string} status - Movement status
  * @returns {number} Rank value (lower = higher priority)
@@ -857,6 +882,7 @@ function renderExpandedRow(tbody, m) {
 
 /**
  * Auto-activate PLANNED arrivals when they reach the configured time before ETA
+ * Note: Only ARR flights are auto-activated. DEP and LOC flights must be manually activated.
  */
 function autoActivatePlannedArrivals() {
   const config = getConfig();
@@ -869,10 +895,10 @@ function autoActivatePlannedArrivals() {
   const now = new Date();
   const minutesBeforeEta = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // Max 2 hours
 
-  // Get all PLANNED arrivals
+  // Get all PLANNED arrivals (only ARR, not LOC or DEP)
   const plannedArrivals = getMovements().filter(m =>
     m.status === 'PLANNED' &&
-    (m.flightType === 'ARR' || m.flightType === 'LOC')
+    m.flightType === 'ARR'
   );
 
   for (const movement of plannedArrivals) {
@@ -2794,6 +2820,25 @@ function openEditMovementModal(m) {
       updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
   }
 
+  // Auto-update ETA when ETD changes
+  if (depPlannedInput && arrPlannedInput) {
+    depPlannedInput.addEventListener("input", () => {
+      const etd = depPlannedInput.value;
+      const eta = arrPlannedInput.value;
+
+      if (etd && etd.trim() !== "") {
+        const etdMinutes = timeToMinutes(etd);
+        const etaMinutes = timeToMinutes(eta);
+
+        // If ETA is not set or ETA is before ETD, set ETA to ETD + 20 minutes
+        if (!eta || eta.trim() === "" || etaMinutes <= etdMinutes) {
+          arrPlannedInput.value = addMinutesToTime(etd, 20);
+          updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan);
+        }
+      }
+    });
+  }
+
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
     // Get form values
@@ -2901,8 +2946,17 @@ function openEditMovementModal(m) {
     const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
     const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
 
+    // Auto-activate strip when ATD is entered for PLANNED DEP/LOC flights
+    let newStatus = m.status;
+    if (m.status === "PLANNED" && depActual && depActual.trim() !== "") {
+      if (selectedFlightType === "DEP" || selectedFlightType === "LOC") {
+        newStatus = "ACTIVE";
+      }
+    }
+
     // Update movement
     const updates = {
+      status: newStatus,
       callsignCode: callsign,
       callsignVoice: voiceCallsign,
       registration: regValue,
@@ -2951,6 +3005,18 @@ function openEditMovementModal(m) {
  */
 function openDuplicateMovementModal(m) {
   const flightType = m.flightType || "DEP";
+
+  // Calculate new ETD and ETA based on original strip's ETA/ATA
+  // ETD = ETA/ATA + 10 minutes
+  // ETA = ETD + 20 minutes
+  let newETD = "";
+  let newETA = "";
+
+  const originalETA = m.arrActual || m.arrPlanned || "";
+  if (originalETA) {
+    newETD = addMinutesToTime(originalETA, 10);
+    newETA = addMinutesToTime(newETD, 20);
+  }
 
   openModal(`
     <div class="modal-header">
@@ -3015,7 +3081,7 @@ function openDuplicateMovementModal(m) {
           </span>
         </label>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="dupDepPlanned" class="modal-input" value="${m.depPlanned || ""}" style="width: 80px;" />
+          <input id="dupDepPlanned" class="modal-input" value="${newETD}" style="width: 80px;" />
           <span id="localDupDepTime" style="font-size: 12px; color: #666;"></span>
         </div>
       </div>
@@ -3027,7 +3093,7 @@ function openDuplicateMovementModal(m) {
           </span>
         </label>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="dupArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" style="width: 80px;" />
+          <input id="dupArrPlanned" class="modal-input" value="${newETA}" style="width: 80px;" />
           <span id="localDupArrTime" style="font-size: 12px; color: #666;"></span>
         </div>
       </div>
@@ -3419,10 +3485,69 @@ export function renderHistoryBoard() {
 
   tbody.innerHTML = "";
 
+  // Get time period filter
+  const periodSelect = byId("historyTimePeriod");
+  const period = periodSelect ? periodSelect.value : "24h";
+
+  // Calculate cutoff time for filtering
+  const now = new Date();
+  let cutoffTime = null;
+
+  if (period === "today") {
+    // Today only - start of current day
+    cutoffTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (period === "24h") {
+    cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  } else if (period === "48h") {
+    cutoffTime = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+  } else if (period === "7d") {
+    cutoffTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+  // "all" means no filter
+
   // Get completed and cancelled movements
-  const movements = getMovements().filter(m =>
+  let movements = getMovements().filter(m =>
     m.status === "COMPLETED" || m.status === "CANCELLED"
   );
+
+  // Apply time period filter
+  if (cutoffTime) {
+    movements = movements.filter(m => {
+      // Parse DOF and completion time
+      const dofParts = (m.dof || "").split("-");
+      if (dofParts.length !== 3) return false;
+
+      // Get completion time (ATD for DEP, ATA for ARR, ACT for OVR)
+      const ft = (m.flightType || "").toUpperCase();
+      let completionTime = "";
+      if (ft === "DEP") {
+        completionTime = m.depActual || m.depPlanned || "";
+      } else if (ft === "ARR") {
+        completionTime = m.arrActual || m.arrPlanned || "";
+      } else if (ft === "LOC") {
+        completionTime = m.depActual || m.arrActual || m.depPlanned || m.arrPlanned || "";
+      } else if (ft === "OVR") {
+        completionTime = m.depActual || m.depPlanned || "";
+      }
+
+      if (!completionTime) return false;
+
+      // Parse time
+      const timeParts = completionTime.split(":");
+      if (timeParts.length !== 2) return false;
+
+      // Create date object from DOF + completion time
+      const movementDate = new Date(
+        parseInt(dofParts[0], 10),
+        parseInt(dofParts[1], 10) - 1,
+        parseInt(dofParts[2], 10),
+        parseInt(timeParts[0], 10),
+        parseInt(timeParts[1], 10)
+      );
+
+      return movementDate >= cutoffTime;
+    });
+  }
 
   // Sort movements
   const sorted = sortHistoryMovements(movements, historySortColumn, historySortDirection);
@@ -3496,6 +3621,14 @@ export function renderHistoryBoard() {
 export function initHistoryBoard() {
   const historyTable = byId("historyTable");
   if (!historyTable) return;
+
+  // Bind time period filter
+  const periodSelect = byId("historyTimePeriod");
+  if (periodSelect) {
+    periodSelect.addEventListener("change", () => {
+      renderHistoryBoard();
+    });
+  }
 
   // Bind sort headers
   const headers = historyTable.querySelectorAll("thead th[data-sort]");

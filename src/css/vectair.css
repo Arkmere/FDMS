@@ -299,23 +299,30 @@ tbody tr.strip-row:hover {
   font-size: 11px;
 }
 
-/* Status strip (status colour still matters) */
+/* Status strip - uses flight type colours */
 .status-strip {
   width: 8px;
   border-radius: 3px;
   height: 34px;
 }
-.status-planned {
-  background: var(--va-status-planned);
+
+/* Flight type colors for status strips */
+tr.ft-arr .status-strip {
+  background: var(--ft-arr);
 }
-.status-active {
-  background: var(--va-status-active);
+tr.ft-dep .status-strip {
+  background: var(--ft-dep);
 }
-.status-completed {
-  background: var(--va-status-completed);
+tr.ft-loc .status-strip {
+  background: var(--ft-loc);
 }
-.status-cancelled {
-  background: var(--va-status-cancelled);
+tr.ft-ovr .status-strip {
+  background: var(--ft-ovr);
+}
+
+/* Brown colour for cancelled strips */
+tr.strip .status-strip.status-cancelled {
+  background: #8b6f47;
 }
 
 /* Flight-type row colour blocking (main strip bay tint) */
