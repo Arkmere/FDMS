@@ -529,7 +529,7 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
       year,
       month,
       daysInMonth,
-      movementCount: monthMovements.length
+      movementCount: movementsToProcess.length
     }
   };
 }
