@@ -136,6 +136,84 @@ export function classifyMovement(movement) {
 }
 
 // ========================================
+// WEIGHTED COUNTING LOGIC (per Excel reference)
+// ========================================
+
+/**
+ * Detect flight type based on aerodromes and callsign
+ * @param {Object} movement - Movement object
+ * @returns {string} Flight type: LOC, DEP, ARR, or OVR
+ */
+export function detectFlightType(movement) {
+  // If flight type is already set, use it
+  if (movement.flightType) {
+    return movement.flightType.toUpperCase().trim();
+  }
+
+  const depAd = (movement.depAd || '').toUpperCase().trim();
+  const arrAd = (movement.arrAd || '').toUpperCase().trim();
+  const callsign = (movement.callsign || '').toUpperCase().trim();
+
+  // Special case: UAM callsigns are always local
+  if (callsign.includes('UAM')) {
+    return 'LOC';
+  }
+
+  // Determine flight type based on aerodromes
+  const isDepEGOW = depAd === 'EGOW';
+  const isArrEGOW = arrAd === 'EGOW';
+
+  if (isDepEGOW && isArrEGOW) return 'LOC';
+  if (isDepEGOW && !isArrEGOW) return 'DEP';
+  if (!isDepEGOW && isArrEGOW) return 'ARR';
+  if (!isDepEGOW && !isArrEGOW) return 'OVR';
+
+  // Default fallback
+  return 'LOC';
+}
+
+/**
+ * Get movement number (weighted count) based on flight type
+ * Per Excel reference:
+ * - LOC (Local): 2
+ * - DEP (Departure) or ARR (Arrival): 1
+ * - OVR (Overflight): 0
+ * @param {Object} movement - Movement object
+ * @returns {number} Movement number
+ */
+export function getMovementNumber(movement) {
+  const flightType = detectFlightType(movement);
+
+  if (flightType === 'LOC') return 2;
+  if (flightType === 'DEP' || flightType === 'ARR') return 1;
+  if (flightType === 'OVR') return 0;
+
+  // Default fallback for unknown types
+  return 1;
+}
+
+/**
+ * Get T&G duplication count (each T&G adds 2 to the total)
+ * Per Excel reference: T&G Duplication = T&G Count × 2
+ * @param {Object} movement - Movement object
+ * @returns {number} T&G duplication value
+ */
+export function getTngDuplication(movement) {
+  const tngCount = movement.tngCount || 0;
+  return tngCount * 2;
+}
+
+/**
+ * Calculate total weighted count for a movement
+ * Formula: Total Count = Movement Number + T&G Duplication
+ * @param {Object} movement - Movement object
+ * @returns {number} Total weighted count
+ */
+export function getTotalWeightedCount(movement) {
+  return getMovementNumber(movement) + getTngDuplication(movement);
+}
+
+// ========================================
 // MONTHLY RETURN COMPUTATION
 // ========================================
 
@@ -195,10 +273,16 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
 
     const row = rows[day - 1];
 
-    // Based Military counts
-    if (classification.isMASUAS) row.MASUAS++;
-    if (classification.isLUAS) row.LUAS++;
-    if (classification.isAEF) row.AEF++;
+    // Calculate weighted count for this movement
+    // Formula: Total Count = Movement Number + T&G Duplication
+    const movementNumber = getMovementNumber(m);
+    const tngDuplication = getTngDuplication(m);
+    const totalCount = movementNumber + tngDuplication;
+
+    // Based Military counts (using weighted counting)
+    if (classification.isMASUAS) row.MASUAS += totalCount;
+    if (classification.isLUAS) row.LUAS += totalCount;
+    if (classification.isAEF) row.AEF += totalCount;
 
     // Overshoot events (sum osCount, not flight count)
     const osCount = m.osCount || 0;
@@ -206,23 +290,23 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
     if (classification.isLUAS) row.OS_LUAS += osCount;
     if (classification.isAEF) row.OS_AEF += osCount;
 
-    // Visiting Military
-    if (classification.isVisitingMil) row.VIS_MIL++;
+    // Visiting Military (using weighted counting)
+    if (classification.isVisitingMil) row.VIS_MIL += totalCount;
 
-    // Total Military = VIS MIL + all BM
+    // Total Military = VIS MIL + all BM (using weighted counting)
     if (classification.isMilitary) {
       if (classification.egowFlightType === 'BM') {
-        row.TOTAL_MIL++; // Will add VIS_MIL separately
+        row.TOTAL_MIL += totalCount; // Will add VIS_MIL separately
       }
     }
 
-    // Civil Fixed-Wing
-    if (classification.isVisitingCivFixedWing) row.VIS_CIV_FW++;
+    // Civil Fixed-Wing (using weighted counting)
+    if (classification.isVisitingCivFixedWing) row.VIS_CIV_FW += totalCount;
 
-    // Helicopters
-    if (classification.isNavyHeli) row.NVY_HEL++;
-    if (classification.isVisitingCivHeli) row.CIV_HEL++;
-    if (classification.isVisitingMilHeli) row.MIL_HEL++;
+    // Helicopters (using weighted counting)
+    if (classification.isNavyHeli) row.NVY_HEL += totalCount;
+    if (classification.isVisitingCivHeli) row.CIV_HEL += totalCount;
+    if (classification.isVisitingMilHeli) row.MIL_HEL += totalCount;
 
     // FIS events (sum fisCount)
     const fisCount = m.fisCount || 0;
@@ -511,32 +595,43 @@ export function exportMovementsToCSV(movements, filename = 'movements.csv') {
   const headers = [
     'Date', 'Callsign', 'Registration', 'Type', 'WTC', 'Flight Type', 'Rules',
     'Departure', 'Arrival', 'Dep Planned', 'Dep Actual', 'Arr Planned', 'Arr Actual',
-    'EGOW Code', 'Unit Code', 'Captain', 'POB', 'T&Gs', 'O/S', 'FIS', 'Status'
+    'EGOW Code', 'Unit Code', 'Captain', 'POB', 'T&Gs', 'O/S', 'FIS', 'Status',
+    'Movement Number', 'T&G Duplication', 'Total Count'
   ];
 
-  const rows = movements.map(m => [
-    m.dof || '',
-    m.callsignCode || '',
-    m.registration || '',
-    m.type || '',
-    m.wtc || '',
-    m.flightType || '',
-    m.rules || '',
-    m.depAd || '',
-    m.arrAd || '',
-    m.depPlanned || '',
-    m.depActual || '',
-    m.arrPlanned || '',
-    m.arrActual || '',
-    m.egowCode || '',
-    m.unitCode || '',
-    m.captain || '',
-    m.pob || '',
-    m.tngCount || 0,
-    m.osCount || 0,
-    m.fisCount || 0,
-    m.status || ''
-  ]);
+  const rows = movements.map(m => {
+    // Calculate weighted counting values for export
+    const movementNumber = getMovementNumber(m);
+    const tngDuplication = getTngDuplication(m);
+    const totalCount = movementNumber + tngDuplication;
+
+    return [
+      m.dof || '',
+      m.callsignCode || '',
+      m.registration || '',
+      m.type || '',
+      m.wtc || '',
+      m.flightType || '',
+      m.rules || '',
+      m.depAd || '',
+      m.arrAd || '',
+      m.depPlanned || '',
+      m.depActual || '',
+      m.arrPlanned || '',
+      m.arrActual || '',
+      m.egowCode || '',
+      m.unitCode || '',
+      m.captain || '',
+      m.pob || '',
+      m.tngCount || 0,
+      m.osCount || 0,
+      m.fisCount || 0,
+      m.status || '',
+      movementNumber,
+      tngDuplication,
+      totalCount
+    ];
+  });
 
   // Build CSV
   const csvLines = [headers.join(',')];
@@ -631,14 +726,20 @@ export function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = '
   const ws1 = XLSX.utils.aoa_to_sheet(sheetData);
   XLSX.utils.book_append_sheet(wb, ws1, 'Official Return');
 
-  // Sheet 2: Movement Details
+  // Sheet 2: Movement Details (with weighted counting columns)
   const detailData = [
     ['Date', 'Callsign', 'Registration', 'Type', 'WTC', 'Flight Type', 'Rules',
      'Departure', 'Arrival', 'Dep Planned', 'Dep Actual', 'Arr Planned', 'Arr Actual',
-     'EGOW Code', 'Unit Code', 'Captain', 'POB', 'T&Gs', 'O/S', 'FIS', 'Status']
+     'EGOW Code', 'Unit Code', 'Captain', 'POB', 'T&Gs', 'O/S', 'FIS', 'Status',
+     'Movement Number', 'T&G Duplication', 'Total Count']
   ];
 
   for (const m of movements) {
+    // Calculate weighted counting values for export
+    const movementNumber = getMovementNumber(m);
+    const tngDuplication = getTngDuplication(m);
+    const totalCount = movementNumber + tngDuplication;
+
     detailData.push([
       m.dof || '',
       m.callsignCode || '',
@@ -660,7 +761,10 @@ export function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = '
       m.tngCount || 0,
       m.osCount || 0,
       m.fisCount || 0,
-      m.status || ''
+      m.status || '',
+      movementNumber,
+      tngDuplication,
+      totalCount
     ]);
   }
 
