@@ -140,6 +140,119 @@ export function classifyMovement(movement) {
 // ========================================
 
 /**
+ * Parse time string "HH:MM" to minutes since midnight
+ * @param {string} timeStr - Time string in HH:MM format
+ * @returns {number|null} Minutes since midnight, or null if invalid
+ */
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Detect if a local flight spans midnight UTC
+ * A flight spans midnight if:
+ * - It's a LOC flight
+ * - Arrival time is earlier than departure time (wrapped to next day)
+ * @param {Object} movement - Movement object
+ * @returns {boolean} True if flight spans midnight
+ */
+export function detectMidnightCrossing(movement) {
+  const flightType = detectFlightType(movement);
+
+  // Only local flights can span midnight in our context
+  if (flightType !== 'LOC') return false;
+
+  // Get departure and arrival times (prefer actual, fall back to estimated)
+  const depTime = movement.depActual || movement.depPlanned;
+  const arrTime = movement.arrActual || movement.arrPlanned;
+
+  if (!depTime || !arrTime) return false;
+
+  const depMinutes = parseTimeToMinutes(depTime);
+  const arrMinutes = parseTimeToMinutes(arrTime);
+
+  if (depMinutes === null || arrMinutes === null) return false;
+
+  // If arrival time is less than departure time, flight spans midnight
+  // e.g., DEP 23:30, ARR 00:15 => crossed midnight
+  return arrMinutes < depMinutes;
+}
+
+/**
+ * Split a midnight-crossing movement into departure and arrival portions
+ * For reporting purposes:
+ * - Day X: DEP with movement number 1 + first portion of T&Gs + first portion of O/S
+ * - Day Y: ARR with movement number 1 + remaining T&Gs + remaining O/S
+ * @param {Object} movement - Movement object that spans midnight
+ * @param {string} depDate - Departure date (YYYY-MM-DD)
+ * @param {string} arrDate - Arrival date (YYYY-MM-DD)
+ * @returns {Array} Array of two virtual movements [depPortion, arrPortion]
+ */
+export function splitMidnightMovement(movement, depDate, arrDate) {
+  const tngCount = movement.tngCount || 0;
+  const osCount = movement.osCount || 0;
+  const fisCount = movement.fisCount || 0;
+
+  // Divide T&Gs: first half (rounded up) goes to departure day
+  const depTngs = Math.ceil(tngCount / 2);
+  const arrTngs = tngCount - depTngs;
+
+  // Divide O/S: first half (rounded up) goes to departure day
+  const depOs = Math.ceil(osCount / 2);
+  const arrOs = osCount - depOs;
+
+  // FIS events go to the day they occurred - default to departure day
+  const depFis = fisCount;
+  const arrFis = 0;
+
+  // Create departure portion (virtual movement)
+  const depPortion = {
+    ...movement,
+    dof: depDate,
+    flightType: 'DEP', // Treated as departure for this day
+    tngCount: depTngs,
+    osCount: depOs,
+    fisCount: depFis,
+    _isMidnightSplit: true,
+    _splitType: 'DEP'
+  };
+
+  // Create arrival portion (virtual movement)
+  const arrPortion = {
+    ...movement,
+    dof: arrDate,
+    flightType: 'ARR', // Treated as arrival for this day
+    tngCount: arrTngs,
+    osCount: arrOs,
+    fisCount: arrFis,
+    _isMidnightSplit: true,
+    _splitType: 'ARR'
+  };
+
+  return [depPortion, arrPortion];
+}
+
+/**
+ * Get the next date string (YYYY-MM-DD) after a given date
+ * @param {string} dateStr - Date string in YYYY-MM-DD format
+ * @returns {string} Next date in YYYY-MM-DD format
+ */
+function getNextDate(dateStr) {
+  const date = new Date(dateStr + 'T12:00:00Z'); // Use noon to avoid DST issues
+  date.setUTCDate(date.getUTCDate() + 1);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Detect flight type based on aerodromes and callsign
  * @param {Object} movement - Movement object
  * @returns {string} Flight type: LOC, DEP, ARR, or OVR
@@ -269,36 +382,54 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
     });
   }
 
-  // Filter movements for this month
+  // Filter movements for this month (or that arrive in this month due to midnight crossing)
   const monthStr = String(month).padStart(2, '0');
-  const monthMovements = movements.filter(m => {
+  const targetMonthPrefix = `${year}-${monthStr}`;
+
+  // Build list of movements to process (including split midnight-crossing movements)
+  const movementsToProcess = [];
+
+  for (const m of movements) {
     const dof = m.dof || '';
-    return dof.startsWith(`${year}-${monthStr}`);
-  });
 
-  // Process each movement
-  for (const m of monthMovements) {
-    const classification = classifyMovement(m);
-    const dof = m.dof || '';
-    const day = parseInt(dof.split('-')[2], 10);
+    // Check if this is a midnight-crossing local flight
+    if (detectMidnightCrossing(m)) {
+      const depDate = dof;
+      const arrDate = getNextDate(dof);
 
-    if (day < 1 || day > daysInMonth) continue;
+      // Split the movement
+      const [depPortion, arrPortion] = splitMidnightMovement(m, depDate, arrDate);
 
-    const row = rows[day - 1];
+      // Add portions that fall within this month
+      if (depDate.startsWith(targetMonthPrefix)) {
+        movementsToProcess.push(depPortion);
+      }
+      if (arrDate.startsWith(targetMonthPrefix)) {
+        movementsToProcess.push(arrPortion);
+      }
+    } else {
+      // Regular movement - only include if DOF is in this month
+      if (dof.startsWith(targetMonthPrefix)) {
+        movementsToProcess.push(m);
+      }
+    }
+  }
 
+  // Helper function to add counts to a row
+  const addToRow = (row, classification, movement) => {
     // Calculate weighted count for this movement
-    // Formula: Total Count = Movement Number + T&G Duplication
-    const movementNumber = getMovementNumber(m);
-    const tngDuplication = getTngDuplication(m);
-    const totalCount = movementNumber + tngDuplication;
+    // Formula: Total Count = Movement Number + T&G Duplication + O/S Count
+    const movementNumber = getMovementNumber(movement);
+    const tngDuplication = getTngDuplication(movement);
+    const osCount = getOsCount(movement);
+    const totalCount = movementNumber + tngDuplication + osCount;
 
     // Based Military counts (using weighted counting)
     if (classification.isMASUAS) row.MASUAS += totalCount;
     if (classification.isLUAS) row.LUAS += totalCount;
     if (classification.isAEF) row.AEF += totalCount;
 
-    // Overshoot events (sum osCount, not flight count)
-    const osCount = m.osCount || 0;
+    // Overshoot events are now included in totalCount, but also track separately
     if (classification.isMASUAS) row.OS_MASUAS += osCount;
     if (classification.isLUAS) row.OS_LUAS += osCount;
     if (classification.isAEF) row.OS_AEF += osCount;
@@ -322,9 +453,21 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
     if (classification.isVisitingMilHeli) row.MIL_HEL += totalCount;
 
     // FIS events (sum fisCount)
-    const fisCount = m.fisCount || 0;
+    const fisCount = movement.fisCount || 0;
     if (classification.isMilitary) row.MIL_FIS += fisCount;
     if (classification.isCivil) row.CIV_FIS += fisCount;
+  };
+
+  // Process each movement (including split midnight-crossing movements)
+  for (const m of movementsToProcess) {
+    const classification = classifyMovement(m);
+    const dof = m.dof || '';
+    const day = parseInt(dof.split('-')[2], 10);
+
+    if (day < 1 || day > daysInMonth) continue;
+
+    const row = rows[day - 1];
+    addToRow(row, classification, m);
   }
 
   // Add VIS_MIL to TOTAL_MIL and compute TOTAL_CIV_FW
