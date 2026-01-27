@@ -442,6 +442,8 @@ function initAdminPanelHandlers() {
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
+  const configAutoActivateEnabled = document.getElementById("configAutoActivateEnabled");
+  const configAutoActivateMinutes = document.getElementById("configAutoActivateMinutes");
   const configWtcSystem = document.getElementById("configWtcSystem");
   const configWtcThreshold = document.getElementById("configWtcThreshold");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
@@ -510,6 +512,8 @@ function initAdminPanelHandlers() {
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
+  if (configAutoActivateEnabled) configAutoActivateEnabled.checked = currentConfig.autoActivateEnabled !== false;
+  if (configAutoActivateMinutes) configAutoActivateMinutes.value = currentConfig.autoActivateMinutesBeforeEta || 30;
 
   // Initialize WTC system and threshold
   if (configWtcSystem) {
@@ -534,6 +538,8 @@ function initAdminPanelHandlers() {
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
       const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+      const autoActivateEnabled = configAutoActivateEnabled?.checked !== false;
+      const autoActivateMinutes = parseInt(configAutoActivateMinutes?.value || "30", 10);
       const wtcSystem = configWtcSystem?.value || "ICAO";
       const wtcThreshold = configWtcThreshold?.value || "off";
 
@@ -543,7 +549,8 @@ function initAdminPanelHandlers() {
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
           isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
           isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
-          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12) {
+          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
+          isNaN(autoActivateMinutes) || autoActivateMinutes < 5 || autoActivateMinutes > 120) {
         showToast("Please enter valid configuration values", 'error');
         return;
       }
@@ -558,6 +565,8 @@ function initAdminPanelHandlers() {
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
         enableAlertTooltips: enableAlertTooltips,
+        autoActivateEnabled: autoActivateEnabled,
+        autoActivateMinutesBeforeEta: autoActivateMinutes,
         wtcSystem: wtcSystem,
         wtcAlertThreshold: wtcThreshold
       });

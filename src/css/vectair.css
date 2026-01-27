@@ -1321,6 +1321,16 @@ tr.strip.ft-ovr > td {
   border-top: 2px solid var(--va-accent-brown);
 }
 
+/* Current day highlight (subtle background to help user find today) */
+.monthly-return-table .current-day-row {
+  background: rgba(33, 150, 243, 0.08);
+}
+
+.monthly-return-table .current-day-row .day-cell {
+  background: rgba(33, 150, 243, 0.15);
+  font-weight: 700;
+}
+
 /* Dashboard KPIs */
 .dashboard-header,
 .insights-header {

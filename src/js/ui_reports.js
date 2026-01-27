@@ -325,10 +325,19 @@ function renderOfficialMonthlyReturn(container) {
         <tbody>
   `;
 
+  // Get today's day for highlighting (in UTC)
+  const now = new Date();
+  const todayDay = now.getUTCDate();
+  const todayMonth = now.getUTCMonth() + 1; // 1-12
+  const todayYear = now.getUTCFullYear();
+  const isCurrentMonth = (currentMonth === todayMonth && currentYear === todayYear);
+
   // Daily rows
   for (const row of rows) {
+    const isToday = isCurrentMonth && row.day === todayDay;
+    const rowClass = isToday ? 'current-day-row' : '';
     html += `
-      <tr>
+      <tr class="${rowClass}">
         <td class="day-cell">${row.day}</td>
         <td class="num-cell">${row.MASUAS || 0}</td>
         <td class="num-cell">${row.LUAS || 0}</td>

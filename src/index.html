@@ -138,6 +138,7 @@
                     <th data-sort="time">Times</th>
                     <th data-sort="activity">Activity</th>
                     <th data-sort="status">Status</th>
+                    <th style="width: 80px;">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="historyBody"></tbody>
@@ -522,6 +523,31 @@
               </div>
               <div style="font-size: 11px; color: #666; margin-top: 6px;">
                 Show alert details when hovering over highlighted movement strips. All alerts are always visible in the expanded Details view.
+              </div>
+            </div>
+
+            <div style="margin-top: 16px; margin-bottom: 12px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                Auto-Activate Arrivals
+              </label>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configAutoActivateEnabled" style="cursor: pointer;">
+                  <span style="font-size: 12px;">Automatically activate PLANNED arrivals before ETA</span>
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                <label style="font-size: 12px;">Minutes before ETA:</label>
+                <input
+                  type="number"
+                  id="configAutoActivateMinutes"
+                  min="5"
+                  max="120"
+                  style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                />
+              </div>
+              <div style="font-size: 11px; color: #666; margin-top: 6px;">
+                When enabled, PLANNED arrival movements will automatically transition to ACTIVE status this many minutes before their ETA.
               </div>
             </div>
 
