@@ -596,14 +596,17 @@ function generateMovementAlerts(m) {
   const wtcThreshold = config.wtcAlertThreshold || "off";
 
   if (wtcThreshold !== "off" && m.wtc) {
-    const wtcValue = (m.wtc || "").toUpperCase();
+    // Extract WTC category from value like "M (ICAO)" or "LM (UK)" or "C (RECAT)"
+    const wtcRaw = (m.wtc || "").toUpperCase();
+    const wtcMatch = wtcRaw.match(/^([A-Z]+)/);
+    const wtcValue = wtcMatch ? wtcMatch[1] : "";
     let shouldAlert = false;
     let categoryName = "";
 
     if (wtcSystem === "ICAO") {
-      // ICAO hierarchy: M=1, H=2, J=3 (L removed)
-      const wtcHierarchy = { "M": 1, "H": 2, "J": 3 };
-      const categoryNames = { "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+      // ICAO hierarchy: L < M < H (by MTOM)
+      const wtcHierarchy = { "L": 1, "M": 2, "H": 3 };
+      const categoryNames = { "L": "Light", "M": "Medium", "H": "Heavy" };
       const threshold = wtcHierarchy[wtcThreshold];
       const current = wtcHierarchy[wtcValue];
 
@@ -612,10 +615,26 @@ function generateMovementAlerts(m) {
         categoryName = categoryNames[wtcValue] || wtcValue;
       }
     } else if (wtcSystem === "UK") {
-      // UK RECAT-EU hierarchy: B=1, C=2, D=3, E=4, F=5 (A is largest, F is smallest, but we alert from threshold up)
-      // Actually for UK RECAT: A is highest wake, F is lowest. Hierarchy should be A=6, B=5, C=4, D=3, E=2, F=1
-      const wtcHierarchy = { "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1 };
-      const categoryNames = { "A": "Cat A", "B": "Cat B", "C": "Cat C", "D": "Cat D", "E": "Cat E", "F": "Cat F" };
+      // UK CAP 493 hierarchy: L < S < LM < UM < H < J
+      const wtcHierarchy = { "L": 1, "S": 2, "LM": 3, "UM": 4, "H": 5, "J": 6 };
+      const categoryNames = {
+        "L": "Light", "S": "Small", "LM": "Lower Medium",
+        "UM": "Upper Medium", "H": "Heavy", "J": "Super"
+      };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    } else if (wtcSystem === "RECAT") {
+      // RECAT-EU hierarchy: F < E < D < C < B < A
+      const wtcHierarchy = { "F": 1, "E": 2, "D": 3, "C": 4, "B": 5, "A": 6 };
+      const categoryNames = {
+        "F": "Light", "E": "Lower Medium", "D": "Upper Medium",
+        "C": "Lower Heavy", "B": "Upper Heavy", "A": "Super Heavy"
+      };
       const threshold = wtcHierarchy[wtcThreshold];
       const current = wtcHierarchy[wtcValue];
 
@@ -1945,7 +1964,7 @@ function openNewFlightModal(flightType = "DEP") {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("newType")?.value || "";
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK"); // TODO: Make "UK" configurable in admin
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get departure and arrival location names
     const depAd = document.getElementById("newDepAd")?.value || "";
@@ -2302,7 +2321,7 @@ function openNewLocalModal() {
 
     // Get WTC based on aircraft type (Local flights are always LOC)
     const aircraftType = document.getElementById("newLocType")?.value || "";
-    const wtc = getWTC(aircraftType, "LOC", "UK");
+    const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
 
     // Get warnings and notes from registration
     const warnings = regData ? (regData['WARNINGS'] || "") : "";
@@ -2921,7 +2940,7 @@ function openEditMovementModal(m) {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("editType")?.value || "";
     const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get voice callsign for display
     const regValue = document.getElementById("editReg")?.value || "";
@@ -3219,7 +3238,7 @@ function openDuplicateMovementModal(m) {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("dupType")?.value || "";
     const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get departure and arrival location names
     const depAd = document.getElementById("dupDepAd")?.value || "";
@@ -3555,7 +3574,7 @@ export function renderHistoryBoard() {
   if (sorted.length === 0) {
     const empty = document.createElement("tr");
     empty.innerHTML = `
-      <td colspan="7" style="padding:8px; font-size:12px; color:#777;">
+      <td colspan="8" style="padding:8px; font-size:12px; color:#777;">
         No completed or cancelled movements in this session.
       </td>
     `;
@@ -3566,6 +3585,17 @@ export function renderHistoryBoard() {
   for (const m of sorted) {
     const tr = document.createElement("tr");
     tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
+
+    // Get indicator bar color (same as Live Board for COMPLETED, brown for CANCELLED)
+    let indicatorColor;
+    let indicatorTitle;
+    if (m.status === 'CANCELLED') {
+      indicatorColor = '#8b6f47'; // Brown for cancelled
+      indicatorTitle = 'Cancelled';
+    } else {
+      indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
+      indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
+    }
 
     // Calculate times display
     const ft = (m.flightType || "").toUpperCase();
@@ -3583,8 +3613,10 @@ export function renderHistoryBoard() {
       arrDisplay = "-";
     }
 
+    tr.dataset.id = String(m.id);
+
     tr.innerHTML = `
-      <td><div class="status-strip ${escapeHtml(statusClass(m.status))}" title="${escapeHtml(statusLabel(m.status))}"></div></td>
+      <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
         <div class="call-main">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
@@ -3609,7 +3641,67 @@ export function renderHistoryBoard() {
       <td>
         <span class="badge ${m.status === 'COMPLETED' ? 'badge-success' : 'badge-cancelled'}">${escapeHtml(statusLabel(m.status))}</span>
       </td>
+      <td class="actions-cell">
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">
+          <div style="position: relative; display: inline-block; z-index: 1;">
+            <button class="small-btn js-history-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
+            <div class="js-history-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
+              <button class="js-history-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">View/Edit</button>
+              <button class="js-history-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
+            </div>
+          </div>
+          <button class="small-btn js-history-toggle-details" type="button" aria-label="Toggle details">Info ▾</button>
+        </div>
+      </td>
     `;
+
+    // Bind History Edit dropdown toggle
+    const editDropdownBtn = tr.querySelector(".js-history-edit-dropdown");
+    const editMenu = tr.querySelector(".js-history-edit-menu");
+    safeOn(editDropdownBtn, "click", (e) => {
+      e.stopPropagation();
+      // Close all other open menus
+      document.querySelectorAll(".js-history-edit-menu").forEach(menu => {
+        if (menu !== editMenu) {
+          menu.style.display = "none";
+          const row = menu.closest("tr");
+          if (row) row.style.zIndex = "";
+        }
+      });
+      const isOpening = editMenu.style.display === "none";
+      editMenu.style.display = isOpening ? "block" : "none";
+      if (isOpening) {
+        tr.style.position = "relative";
+        tr.style.zIndex = "10";
+      } else {
+        tr.style.zIndex = "";
+      }
+    });
+
+    // Bind View/Edit button (opens edit modal)
+    const editDetailsBtn = tr.querySelector(".js-history-edit-details");
+    safeOn(editDetailsBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openEditModal(m);
+    });
+
+    // Bind Duplicate button
+    const duplicateBtn = tr.querySelector(".js-history-duplicate");
+    safeOn(duplicateBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openDuplicateModal(m);
+    });
+
+    // Bind Info toggle (same as Live Board)
+    const toggleDetailsBtn = tr.querySelector(".js-history-toggle-details");
+    safeOn(toggleDetailsBtn, "click", (e) => {
+      e.stopPropagation();
+      toggleMovementDetails(m, tr);
+    });
 
     tbody.appendChild(tr);
   }

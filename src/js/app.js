@@ -442,6 +442,8 @@ function initAdminPanelHandlers() {
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
+  const configAutoActivateEnabled = document.getElementById("configAutoActivateEnabled");
+  const configAutoActivateMinutes = document.getElementById("configAutoActivateMinutes");
   const configWtcSystem = document.getElementById("configWtcSystem");
   const configWtcThreshold = document.getElementById("configWtcThreshold");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
@@ -458,33 +460,40 @@ function initAdminPanelHandlers() {
     offOption.textContent = 'Off (No alerts)';
     configWtcThreshold.appendChild(offOption);
 
+    let options = [];
+
     if (system === 'ICAO') {
-      const options = [
+      // ICAO: L < M < H (by MTOM: L<7t, M=7-136t, H≥136t)
+      options = [
         { value: 'M', label: 'Medium (M) or higher' },
-        { value: 'H', label: 'Heavy (H) or higher' },
-        { value: 'J', label: 'Super/Jumbo (J) only' }
+        { value: 'H', label: 'Heavy (H) only' }
       ];
-      options.forEach(opt => {
-        const el = document.createElement('option');
-        el.value = opt.value;
-        el.textContent = opt.label;
-        configWtcThreshold.appendChild(el);
-      });
     } else if (system === 'UK') {
-      const options = [
-        { value: 'B', label: 'Cat B or higher' },
-        { value: 'C', label: 'Cat C or higher' },
-        { value: 'D', label: 'Cat D or higher' },
-        { value: 'E', label: 'Cat E or higher' },
-        { value: 'F', label: 'Cat F only' }
+      // UK CAP 493: L < S < LM < UM < H < J (arrivals use 6 categories)
+      options = [
+        { value: 'S', label: 'Small (S) or higher' },
+        { value: 'LM', label: 'Lower Medium (LM) or higher' },
+        { value: 'UM', label: 'Upper Medium (UM) or higher' },
+        { value: 'H', label: 'Heavy (H) or higher' },
+        { value: 'J', label: 'Super (J) only' }
       ];
-      options.forEach(opt => {
-        const el = document.createElement('option');
-        el.value = opt.value;
-        el.textContent = opt.label;
-        configWtcThreshold.appendChild(el);
-      });
+    } else if (system === 'RECAT') {
+      // RECAT-EU: F < E < D < C < B < A
+      options = [
+        { value: 'E', label: 'Lower Medium (E) or higher' },
+        { value: 'D', label: 'Upper Medium (D) or higher' },
+        { value: 'C', label: 'Lower Heavy (C) or higher' },
+        { value: 'B', label: 'Upper Heavy (B) or higher' },
+        { value: 'A', label: 'Super Heavy (A) only' }
+      ];
     }
+
+    options.forEach(opt => {
+      const el = document.createElement('option');
+      el.value = opt.value;
+      el.textContent = opt.label;
+      configWtcThreshold.appendChild(el);
+    });
 
     // Restore previous value if it's still valid
     if (currentValue && Array.from(configWtcThreshold.options).some(opt => opt.value === currentValue)) {
@@ -503,6 +512,8 @@ function initAdminPanelHandlers() {
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
+  if (configAutoActivateEnabled) configAutoActivateEnabled.checked = currentConfig.autoActivateEnabled !== false;
+  if (configAutoActivateMinutes) configAutoActivateMinutes.value = currentConfig.autoActivateMinutesBeforeEta || 30;
 
   // Initialize WTC system and threshold
   if (configWtcSystem) {
@@ -527,6 +538,8 @@ function initAdminPanelHandlers() {
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
       const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+      const autoActivateEnabled = configAutoActivateEnabled?.checked !== false;
+      const autoActivateMinutes = parseInt(configAutoActivateMinutes?.value || "30", 10);
       const wtcSystem = configWtcSystem?.value || "ICAO";
       const wtcThreshold = configWtcThreshold?.value || "off";
 
@@ -536,7 +549,8 @@ function initAdminPanelHandlers() {
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
           isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
           isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
-          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12) {
+          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
+          isNaN(autoActivateMinutes) || autoActivateMinutes < 5 || autoActivateMinutes > 120) {
         showToast("Please enter valid configuration values", 'error');
         return;
       }
@@ -551,6 +565,8 @@ function initAdminPanelHandlers() {
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
         enableAlertTooltips: enableAlertTooltips,
+        autoActivateEnabled: autoActivateEnabled,
+        autoActivateMinutesBeforeEta: autoActivateMinutes,
         wtcSystem: wtcSystem,
         wtcAlertThreshold: wtcThreshold
       });
