@@ -30,14 +30,19 @@ The reference Excel file (Woodvale Stats AUG.xlsx) uses a **weighted counting sy
 
 ### Movement Counting Logic
 
-**Formula**: `Total Count = Movement Number + T&G Duplication`
+**Formula**: `Total Count = Movement Number + T&G Duplication + O/S Count`
+
+- **Movement Number:** LOC=2, DEP/ARR=1, OVR=0
+- **T&G Duplication:** T&G Count × 2 (each T&G = 2 runway occupancies)
+- **O/S Count:** O/S × 1 (each overshoot = 1 runway occupancy, no touchdown)
 
 **Examples**:
-- Local flight with 0 T&G: 2 + 0 = **2 movements**
-- Local flight with 1 T&G: 2 + 2 = **4 movements**
-- DEP flight with 0 T&G: 1 + 0 = **1 movement**
-- DEP flight with 2 T&G: 1 + 4 = **5 movements**
-- Overflight: 0 + 0 = **0 movements** (not counted in monthly stats)
+- Local flight with 0 T&G, 0 O/S: 2 + 0 + 0 = **2 movements**
+- Local flight with 1 T&G, 0 O/S: 2 + 2 + 0 = **4 movements**
+- Local flight with 2 T&G, 1 O/S: 2 + 4 + 1 = **7 movements**
+- DEP flight with 0 T&G, 0 O/S: 1 + 0 + 0 = **1 movement**
+- DEP flight with 2 T&G, 0 O/S: 1 + 4 + 0 = **5 movements**
+- Overflight: 0 + 0 + 0 = **0 movements** (not counted in monthly stats)
 
 ### Column Calculations
 
@@ -205,7 +210,8 @@ The current FDMS implementation **undercounts** movements compared to the Excel 
 
 The Excel reference uses a sophisticated weighted counting system where:
 - **Movement type matters**: Local flights count as 2, departures/arrivals as 1, overflights as 0
-- **T&G activity is doubled**: Each T&G adds 2 to the count
-- **Total = Movement Number + T&G Duplication** - This is the formula the user referenced
+- **T&G activity is doubled**: Each T&G adds 2 to the count (2 runway occupancies)
+- **O/S (Overshoots) count as 1**: Each overshoot adds 1 to the count (runway occupancy without touchdown)
+- **Total = Movement Number + T&G Duplication + O/S Count** - Complete weighted counting formula
 
-FDMS needs to implement this same logic to accurately match the official reporting methodology.
+FDMS implements this logic to accurately match the official reporting methodology.

@@ -204,13 +204,26 @@ export function getTngDuplication(movement) {
 }
 
 /**
+ * Get O/S (overshoot) count
+ * Overshoots count as 1 each (runway occupancy without touchdown)
+ * @param {Object} movement - Movement object
+ * @returns {number} O/S count
+ */
+export function getOsCount(movement) {
+  return movement.osCount || 0;
+}
+
+/**
  * Calculate total weighted count for a movement
- * Formula: Total Count = Movement Number + T&G Duplication
+ * Formula: Total Count = Movement Number + T&G Duplication + O/S Count
+ * - Movement Number: LOC=2, DEP/ARR=1, OVR=0
+ * - T&G Duplication: T&G Count × 2 (each T&G is 2 runway occupancies)
+ * - O/S Count: O/S × 1 (runway occupancy without touchdown)
  * @param {Object} movement - Movement object
  * @returns {number} Total weighted count
  */
 export function getTotalWeightedCount(movement) {
-  return getMovementNumber(movement) + getTngDuplication(movement);
+  return getMovementNumber(movement) + getTngDuplication(movement) + getOsCount(movement);
 }
 
 // ========================================
@@ -603,7 +616,8 @@ export function exportMovementsToCSV(movements, filename = 'movements.csv') {
     // Calculate weighted counting values for export
     const movementNumber = getMovementNumber(m);
     const tngDuplication = getTngDuplication(m);
-    const totalCount = movementNumber + tngDuplication;
+    const osCount = getOsCount(m);
+    const totalCount = movementNumber + tngDuplication + osCount;
 
     return [
       m.dof || '',
@@ -738,7 +752,8 @@ export function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = '
     // Calculate weighted counting values for export
     const movementNumber = getMovementNumber(m);
     const tngDuplication = getTngDuplication(m);
-    const totalCount = movementNumber + tngDuplication;
+    const osCount = getOsCount(m);
+    const totalCount = movementNumber + tngDuplication + osCount;
 
     detailData.push([
       m.dof || '',
