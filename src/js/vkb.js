@@ -538,29 +538,56 @@ export function lookupAircraftType(icaoType) {
 }
 
 /**
+ * Derive RECAT-EU category from MCTOM (Maximum Certified Take-Off Mass)
+ * RECAT-EU categories: A (Super Heavy) to F (Light)
+ * @param {number} mctom - MCTOM in kg
+ * @returns {string} RECAT-EU category letter
+ */
+function deriveRecatFromMctom(mctom) {
+  if (!mctom || isNaN(mctom)) return "F"; // Default to Light
+  if (mctom >= 560000) return "A"; // Super Heavy (A380 class)
+  if (mctom >= 136000) return "B"; // Upper Heavy (B747, A350, etc.)
+  if (mctom >= 100000) return "C"; // Lower Heavy (B767, A300, etc.)
+  if (mctom >= 18000) return "D";  // Upper Medium (A320, B737, etc.)
+  if (mctom >= 8600) return "E";   // Lower Medium (Regional jets, turboprops)
+  return "F";                       // Light (<8,600 kg)
+}
+
+/**
  * Get Wake Turbulence Category for an aircraft type and movement
+ * Supports three WTC standards:
+ * - ICAO: L/M/H (global baseline by MTOM)
+ * - UK: L/S/LM/UM/H/J (CAP 493, uses different categories for DEP vs ARR)
+ * - RECAT: A/B/C/D/E/F (RECAT-EU standard)
+ *
  * @param {string} icaoType - ICAO Type Designator (e.g., "A400")
  * @param {string} flightType - Flight type: DEP, ARR, LOC, OVR
- * @param {string} wtcStandard - WTC standard to use: "ICAO" or "UK" (default "UK")
- * @returns {string} WTC string (e.g., "H (UK)" or "M (ICAO)")
+ * @param {string} wtcStandard - WTC standard: "ICAO", "UK", or "RECAT" (default "ICAO")
+ * @returns {string} WTC string (e.g., "H (UK)" or "M (ICAO)" or "C (RECAT)")
  */
-export function getWTC(icaoType, flightType, wtcStandard = "UK") {
+export function getWTC(icaoType, flightType, wtcStandard = "ICAO") {
   const typeData = lookupAircraftType(icaoType);
   if (!typeData) return "L (ICAO)"; // Default fallback
 
   let wtc = "";
 
   if (wtcStandard === "UK") {
-    // Use UK Departure WTC for DEP and OVR
-    // Use UK Arrival WTC for ARR and LOC
+    // UK CAP 493: Uses different categories for departures vs arrivals
+    // DEP/OVR use 5 categories: L, S, M, H, J
+    // ARR/LOC use 6 categories: L, S, LM, UM, H, J
     if (flightType === "DEP" || flightType === "OVR") {
       wtc = typeData['UK Departure WTC'] || typeData['ICAO WTC'] || "L";
     } else {
       wtc = typeData['UK Arrival WTC'] || typeData['ICAO WTC'] || "L";
     }
     return `${wtc} (UK)`;
+  } else if (wtcStandard === "RECAT") {
+    // RECAT-EU: Derive from MCTOM if no specific RECAT column exists
+    const mctom = parseFloat(typeData['MCTOM (Kg)']) || 0;
+    wtc = deriveRecatFromMctom(mctom);
+    return `${wtc} (RECAT)`;
   } else {
-    // Use ICAO WTC
+    // ICAO: L (< 7t), M (7-136t), H (≥ 136t)
     wtc = typeData['ICAO WTC'] || "L";
     return `${wtc} (ICAO)`;
   }

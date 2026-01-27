@@ -596,14 +596,17 @@ function generateMovementAlerts(m) {
   const wtcThreshold = config.wtcAlertThreshold || "off";
 
   if (wtcThreshold !== "off" && m.wtc) {
-    const wtcValue = (m.wtc || "").toUpperCase();
+    // Extract WTC category from value like "M (ICAO)" or "LM (UK)" or "C (RECAT)"
+    const wtcRaw = (m.wtc || "").toUpperCase();
+    const wtcMatch = wtcRaw.match(/^([A-Z]+)/);
+    const wtcValue = wtcMatch ? wtcMatch[1] : "";
     let shouldAlert = false;
     let categoryName = "";
 
     if (wtcSystem === "ICAO") {
-      // ICAO hierarchy: M=1, H=2, J=3 (L removed)
-      const wtcHierarchy = { "M": 1, "H": 2, "J": 3 };
-      const categoryNames = { "M": "Medium", "H": "Heavy", "J": "Super/Jumbo" };
+      // ICAO hierarchy: L < M < H (by MTOM)
+      const wtcHierarchy = { "L": 1, "M": 2, "H": 3 };
+      const categoryNames = { "L": "Light", "M": "Medium", "H": "Heavy" };
       const threshold = wtcHierarchy[wtcThreshold];
       const current = wtcHierarchy[wtcValue];
 
@@ -612,10 +615,26 @@ function generateMovementAlerts(m) {
         categoryName = categoryNames[wtcValue] || wtcValue;
       }
     } else if (wtcSystem === "UK") {
-      // UK RECAT-EU hierarchy: B=1, C=2, D=3, E=4, F=5 (A is largest, F is smallest, but we alert from threshold up)
-      // Actually for UK RECAT: A is highest wake, F is lowest. Hierarchy should be A=6, B=5, C=4, D=3, E=2, F=1
-      const wtcHierarchy = { "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "F": 1 };
-      const categoryNames = { "A": "Cat A", "B": "Cat B", "C": "Cat C", "D": "Cat D", "E": "Cat E", "F": "Cat F" };
+      // UK CAP 493 hierarchy: L < S < LM < UM < H < J
+      const wtcHierarchy = { "L": 1, "S": 2, "LM": 3, "UM": 4, "H": 5, "J": 6 };
+      const categoryNames = {
+        "L": "Light", "S": "Small", "LM": "Lower Medium",
+        "UM": "Upper Medium", "H": "Heavy", "J": "Super"
+      };
+      const threshold = wtcHierarchy[wtcThreshold];
+      const current = wtcHierarchy[wtcValue];
+
+      if (threshold && current && current >= threshold) {
+        shouldAlert = true;
+        categoryName = categoryNames[wtcValue] || wtcValue;
+      }
+    } else if (wtcSystem === "RECAT") {
+      // RECAT-EU hierarchy: F < E < D < C < B < A
+      const wtcHierarchy = { "F": 1, "E": 2, "D": 3, "C": 4, "B": 5, "A": 6 };
+      const categoryNames = {
+        "F": "Light", "E": "Lower Medium", "D": "Upper Medium",
+        "C": "Lower Heavy", "B": "Upper Heavy", "A": "Super Heavy"
+      };
       const threshold = wtcHierarchy[wtcThreshold];
       const current = wtcHierarchy[wtcValue];
 
@@ -1945,7 +1964,7 @@ function openNewFlightModal(flightType = "DEP") {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("newType")?.value || "";
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK"); // TODO: Make "UK" configurable in admin
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get departure and arrival location names
     const depAd = document.getElementById("newDepAd")?.value || "";
@@ -2302,7 +2321,7 @@ function openNewLocalModal() {
 
     // Get WTC based on aircraft type (Local flights are always LOC)
     const aircraftType = document.getElementById("newLocType")?.value || "";
-    const wtc = getWTC(aircraftType, "LOC", "UK");
+    const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
 
     // Get warnings and notes from registration
     const warnings = regData ? (regData['WARNINGS'] || "") : "";
@@ -2921,7 +2940,7 @@ function openEditMovementModal(m) {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("editType")?.value || "";
     const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get voice callsign for display
     const regValue = document.getElementById("editReg")?.value || "";
@@ -3219,7 +3238,7 @@ function openDuplicateMovementModal(m) {
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("dupType")?.value || "";
     const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, "UK");
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
 
     // Get departure and arrival location names
     const depAd = document.getElementById("dupDepAd")?.value || "";
