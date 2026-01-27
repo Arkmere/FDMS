@@ -35,16 +35,24 @@ Returns the weighted count based on flight type:
 
 Calculates the T&G multiplier:
 - **Formula:** `T&G Duplication = T&G Count × 2`
-- Each touch-and-go adds 2 to the total movement count
+- Each touch-and-go adds 2 to the total movement count (runway occupancy: approach + departure)
 
-### 4. Total Weighted Count (`getTotalWeightedCount()`)
+### 4. O/S Count Calculation (`getOsCount()`)
 
-**Location:** `src/js/reporting.js` (lines 212-214)
+**Location:** `src/js/reporting.js` (lines 206-213)
+
+Returns the overshoot count:
+- **Formula:** `O/S Count = O/S × 1`
+- Each overshoot adds 1 to the total movement count (runway occupancy without touchdown)
+
+### 5. Total Weighted Count (`getTotalWeightedCount()`)
+
+**Location:** `src/js/reporting.js` (lines 215-226)
 
 Calculates the complete weighted count:
-- **Formula:** `Total Count = Movement Number + T&G Duplication`
+- **Formula:** `Total Count = Movement Number + T&G Duplication + O/S Count`
 
-### 5. Updated Monthly Return Computation
+### 6. Updated Monthly Return Computation
 
 **Location:** `src/js/reporting.js` (lines 267-278)
 
@@ -65,11 +73,12 @@ if (classification.isMASUAS) row.MASUAS++;
 // NEW (weighted counting):
 const movementNumber = getMovementNumber(m);
 const tngDuplication = getTngDuplication(m);
-const totalCount = movementNumber + tngDuplication;
+const osCount = getOsCount(m);
+const totalCount = movementNumber + tngDuplication + osCount;
 if (classification.isMASUAS) row.MASUAS += totalCount;
 ```
 
-### 6. Enhanced CSV Export
+### 7. Enhanced CSV Export
 
 **Location:** `src/js/reporting.js` (lines 656-688)
 
@@ -78,7 +87,7 @@ Added three new columns to `exportMovementsToCSV()`:
 - **T&G Duplication:** T&G count × 2
 - **Total Count:** Movement Number + T&G Duplication
 
-### 7. Enhanced XLSX Export
+### 8. Enhanced XLSX Export
 
 **Location:** `src/js/reporting.js` (lines 791-826)
 
@@ -98,9 +107,22 @@ Added the same three columns to the "Movement Details" sheet in `exportMonthlyRe
 **New Counting:**
 - Movement Number = 2 (LOC)
 - T&G Duplication = 3 × 2 = 6
-- Total Count = 2 + 6 = **8 movements**
+- O/S Count = 0
+- Total Count = 2 + 6 + 0 = **8 movements**
 
-### Example 2: Departure with T&Gs
+### Example 2: Local Flight with T&Gs and Overshoots
+**Scenario:** 1 MASUAS local flight with 2 T&Gs and 1 O/S
+
+**Old Counting:**
+- Count = 1 movement
+
+**New Counting:**
+- Movement Number = 2 (LOC)
+- T&G Duplication = 2 × 2 = 4
+- O/S Count = 1 × 1 = 1 (runway occupancy without touchdown)
+- Total Count = 2 + 4 + 1 = **7 movements**
+
+### Example 3: Departure with T&Gs
 **Scenario:** 1 departure with 2 T&Gs
 
 **Old Counting:**
@@ -109,10 +131,11 @@ Added the same three columns to the "Movement Details" sheet in `exportMonthlyRe
 **New Counting:**
 - Movement Number = 1 (DEP)
 - T&G Duplication = 2 × 2 = 4
-- Total Count = 1 + 4 = **5 movements**
+- O/S Count = 0
+- Total Count = 1 + 4 + 0 = **5 movements**
 
-### Example 3: Overflight
-**Scenario:** 1 overflight (no T&Gs)
+### Example 4: Overflight
+**Scenario:** 1 overflight (no T&Gs, no O/S)
 
 **Old Counting:**
 - Count = 1 movement
@@ -120,7 +143,8 @@ Added the same three columns to the "Movement Details" sheet in `exportMonthlyRe
 **New Counting:**
 - Movement Number = 0 (OVR)
 - T&G Duplication = 0 × 2 = 0
-- Total Count = 0 + 0 = **0 movements** (correctly excluded from stats)
+- O/S Count = 0
+- Total Count = 0 + 0 + 0 = **0 movements** (correctly excluded from stats)
 
 ## Data Accuracy Improvement
 
@@ -160,6 +184,7 @@ The following new functions are now exported from `reporting.js`:
 - `detectFlightType(movement)` - Detect flight type
 - `getMovementNumber(movement)` - Get weighted movement count
 - `getTngDuplication(movement)` - Get T&G duplication value
+- `getOsCount(movement)` - Get O/S (overshoot) count
 - `getTotalWeightedCount(movement)` - Get total weighted count
 
 These can be used elsewhere in the application if needed.
