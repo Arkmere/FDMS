@@ -1429,7 +1429,6 @@ export function renderLiveBoard() {
     });
 
     // Bind inline edit handlers (double-click to edit)
-    const ft = (m.flightType || "").toUpperCase();
     enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text");
     enableInlineEdit(tr.querySelector(".js-edit-reg"), m.id, "registration", "text");
     enableInlineEdit(tr.querySelector(".js-edit-type"), m.id, "type", "text");
