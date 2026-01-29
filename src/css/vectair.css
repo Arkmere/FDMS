@@ -1665,6 +1665,11 @@ tr.strip.ft-ovr > td {
 
 /* Adjust table-container when timeline is present */
 #tab-live > .panel > .timeline-container + .table-container {
-  border-radius: 0 0 4px 4px;
-  border-top: none;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+/* Timeline hidden state */
+.timeline-container.hidden {
+  display: none;
 }

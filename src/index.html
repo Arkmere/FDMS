@@ -437,6 +437,53 @@
             </div>
           </div>
 
+          <!-- Timeline Settings -->
+          <div class="panel">
+            <h3>Day View / Timeline Settings</h3>
+            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+              Configure the timeline display above the Strip Bay on the Live Board.
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configTimelineEnabled" style="cursor: pointer;" checked>
+                  <span style="font-size: 12px; font-weight: bold;">Show timeline on Live Board</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Display a visual timeline showing planned and active movements throughout the day
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Start Hour (UTC)</label>
+                  <select id="configTimelineStartHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                    <option value="0">00:00</option>
+                    <option value="4">04:00</option>
+                    <option value="5">05:00</option>
+                    <option value="6" selected>06:00</option>
+                    <option value="7">07:00</option>
+                    <option value="8">08:00</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">End Hour (UTC)</label>
+                  <select id="configTimelineEndHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                    <option value="18">18:00</option>
+                    <option value="20">20:00</option>
+                    <option value="22" selected>22:00</option>
+                    <option value="23">23:00</option>
+                    <option value="24">24:00 (midnight)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size: 11px; color: #666;">
+                Timeline will display movements scheduled within this UTC time window.
+              </div>
+            </div>
+          </div>
+
           <!-- Configuration -->
           <div class="panel">
             <h3>Configuration</h3>

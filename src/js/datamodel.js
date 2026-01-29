@@ -14,7 +14,10 @@ const defaultConfig = {
   depOffsetMinutes: 10,   // DEP: ETD = now + this
   arrOffsetMinutes: 90,   // ARR: ETA = now + this
   locOffsetMinutes: 10,   // LOC: ETD = now + this
-  locFlightDurationMinutes: 40, // LOC: ETA = ETD + this
+  locFlightDurationMinutes: 40, // LOC: ETA = ETD + this (default flight duration)
+  depFlightDurationMinutes: 60, // DEP: Default flight duration for timeline display
+  arrFlightDurationMinutes: 60, // ARR: Default flight duration for timeline display
+  ovrFlightDurationMinutes: 15, // OVR: Default duration for overflight
   ovrOffsetMinutes: 0,    // OVR: ECT = now + this
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
   showLocalTime: false,   // Show local time conversions alongside UTC
@@ -29,7 +32,11 @@ const defaultConfig = {
   historyShowTimeAlerts: false,      // Show time-based alerts (stale, overdue) in History - off by default
   historyShowEmergencyAlerts: true,  // Show emergency alerts (7500/7600/7700) in History
   historyShowCallsignAlerts: false,  // Show callsign confusion alerts in History - off by default
-  historyShowWtcAlerts: false        // Show WTC threshold alerts in History - off by default
+  historyShowWtcAlerts: false,       // Show WTC threshold alerts in History - off by default
+  // Timeline settings
+  timelineEnabled: true,             // Show timeline on Live Board
+  timelineStartHour: 6,              // Timeline start hour (UTC)
+  timelineEndHour: 22                // Timeline end hour (UTC)
 };
 
 // Configuration state

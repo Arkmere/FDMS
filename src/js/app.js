@@ -457,6 +457,10 @@ function initAdminPanelHandlers() {
   const configHistoryShowEmergencyAlerts = document.getElementById("configHistoryShowEmergencyAlerts");
   const configHistoryShowCallsignAlerts = document.getElementById("configHistoryShowCallsignAlerts");
   const configHistoryShowWtcAlerts = document.getElementById("configHistoryShowWtcAlerts");
+  // Timeline settings
+  const configTimelineEnabled = document.getElementById("configTimelineEnabled");
+  const configTimelineStartHour = document.getElementById("configTimelineStartHour");
+  const configTimelineEndHour = document.getElementById("configTimelineEndHour");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Helper to populate WTC threshold options based on system
@@ -544,6 +548,11 @@ function initAdminPanelHandlers() {
   if (configHistoryShowCallsignAlerts) configHistoryShowCallsignAlerts.checked = currentConfig.historyShowCallsignAlerts || false;
   if (configHistoryShowWtcAlerts) configHistoryShowWtcAlerts.checked = currentConfig.historyShowWtcAlerts || false;
 
+  // Load Timeline settings
+  if (configTimelineEnabled) configTimelineEnabled.checked = currentConfig.timelineEnabled !== false;
+  if (configTimelineStartHour) configTimelineStartHour.value = currentConfig.timelineStartHour ?? 6;
+  if (configTimelineEndHour) configTimelineEndHour.value = currentConfig.timelineEndHour ?? 22;
+
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
       const depOffset = parseInt(configDepOffset?.value || "10", 10);
@@ -564,6 +573,10 @@ function initAdminPanelHandlers() {
       const historyShowEmergencyAlerts = configHistoryShowEmergencyAlerts?.checked !== false;
       const historyShowCallsignAlerts = configHistoryShowCallsignAlerts?.checked || false;
       const historyShowWtcAlerts = configHistoryShowWtcAlerts?.checked || false;
+      // Timeline settings
+      const timelineEnabled = configTimelineEnabled?.checked !== false;
+      const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
+      const timelineEndHour = parseInt(configTimelineEndHour?.value || "22", 10);
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -594,9 +607,14 @@ function initAdminPanelHandlers() {
         historyShowTimeAlerts: historyShowTimeAlerts,
         historyShowEmergencyAlerts: historyShowEmergencyAlerts,
         historyShowCallsignAlerts: historyShowCallsignAlerts,
-        historyShowWtcAlerts: historyShowWtcAlerts
+        historyShowWtcAlerts: historyShowWtcAlerts,
+        timelineEnabled: timelineEnabled,
+        timelineStartHour: timelineStartHour,
+        timelineEndHour: timelineEndHour
       });
       showToast("Configuration saved successfully", 'success');
+      // Re-render timeline with new settings
+      renderTimeline();
     });
   }
 }

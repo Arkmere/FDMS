@@ -3794,13 +3794,32 @@ export function initHistoryBoard() {
 ------------------------------ */
 
 /**
- * Configuration for the timeline view
+ * Get timeline configuration from app config
  */
-const TIMELINE_CONFIG = {
-  startHour: 6,      // Start at 06:00 UTC
-  endHour: 22,       // End at 22:00 UTC (16 hour window)
-  pixelsPerHour: 60  // Width of each hour segment
-};
+function getTimelineConfig() {
+  const cfg = getConfig();
+  return {
+    enabled: cfg.timelineEnabled !== false,
+    startHour: cfg.timelineStartHour ?? 6,
+    endHour: cfg.timelineEndHour ?? 22,
+    pixelsPerHour: 60
+  };
+}
+
+/**
+ * Get default flight duration for a flight type (in minutes)
+ */
+function getDefaultFlightDuration(flightType) {
+  const cfg = getConfig();
+  const ft = (flightType || '').toUpperCase();
+  switch (ft) {
+    case 'LOC': return cfg.locFlightDurationMinutes || 40;
+    case 'DEP': return cfg.depFlightDurationMinutes || 60;
+    case 'ARR': return cfg.arrFlightDurationMinutes || 60;
+    case 'OVR': return cfg.ovrFlightDurationMinutes || 15;
+    default: return 60;
+  }
+}
 
 /**
  * Render the timeline scale (hour markers)
@@ -3811,7 +3830,7 @@ function renderTimelineScale() {
 
   scale.innerHTML = '';
 
-  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+  const { startHour, endHour, pixelsPerHour } = getTimelineConfig();
   const totalWidth = (endHour - startHour) * pixelsPerHour;
 
   scale.style.width = `${totalWidth}px`;
@@ -3853,7 +3872,7 @@ function renderTimelineTracks() {
   tracks.innerHTML = '';
 
   const movements = getMovements();
-  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+  const { startHour, endHour } = getTimelineConfig();
 
   // Filter to planned and active movements
   const relevantMovements = movements.filter(m =>
@@ -3887,9 +3906,9 @@ function renderTimelineTracks() {
     // Skip if start time is invalid
     if (!Number.isFinite(startMinutes)) return;
 
-    // Default duration of 60 minutes if no end time
+    // Default duration based on flight type if no end time
     if (!Number.isFinite(endMinutes)) {
-      endMinutes = startMinutes + 60;
+      endMinutes = startMinutes + getDefaultFlightDuration(m.flightType);
     }
 
     // Handle overnight flights (end time < start time)
@@ -3983,7 +4002,7 @@ export function updateTimelineNowLine() {
   const now = new Date();
   const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
-  const { startHour, endHour } = TIMELINE_CONFIG;
+  const { startHour, endHour } = getTimelineConfig();
   const timelineStartMinutes = startHour * 60;
   const timelineEndMinutes = endHour * 60;
 
@@ -4013,6 +4032,18 @@ export function updateTimelineNowLine() {
  * Render the complete timeline
  */
 export function renderTimeline() {
+  const container = byId("timelineContainer");
+  if (!container) return;
+
+  const { enabled } = getTimelineConfig();
+
+  // Show or hide timeline based on config
+  if (!enabled) {
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.classList.remove('hidden');
   renderTimelineScale();
   renderTimelineTracks();
   updateTimelineNowLine();
