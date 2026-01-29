@@ -26,7 +26,10 @@ import {
   getStorageInfo,
   getStorageQuota,
   getConfig,
-  updateConfig
+  updateConfig,
+  getGenericOverflightsCount,
+  incrementGenericOverflights,
+  decrementGenericOverflights
 } from "./datamodel.js";
 
 import {
@@ -444,6 +447,8 @@ function initAdminPanelHandlers() {
   const configLocOffset = document.getElementById("configLocOffset");
   const configLocDuration = document.getElementById("configLocDuration");
   const configOvrOffset = document.getElementById("configOvrOffset");
+  const configOvrDuration = document.getElementById("configOvrDuration");
+  const configOvrAutoActivate = document.getElementById("configOvrAutoActivate");
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
@@ -523,6 +528,8 @@ function initAdminPanelHandlers() {
   if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
   if (configLocDuration) configLocDuration.value = currentConfig.locFlightDurationMinutes || 40;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
+  if (configOvrDuration) configOvrDuration.value = currentConfig.ovrFlightDurationMinutes || 5;
+  if (configOvrAutoActivate) configOvrAutoActivate.value = currentConfig.ovrAutoActivateMinutes || 30;
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
@@ -560,6 +567,8 @@ function initAdminPanelHandlers() {
       const locOffset = parseInt(configLocOffset?.value || "10", 10);
       const locDuration = parseInt(configLocDuration?.value || "40", 10);
       const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
+      const ovrDuration = parseInt(configOvrDuration?.value || "5", 10);
+      const ovrAutoActivate = parseInt(configOvrAutoActivate?.value || "30", 10);
       const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
@@ -584,6 +593,8 @@ function initAdminPanelHandlers() {
           isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
           isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
           isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
+          isNaN(ovrDuration) || ovrDuration < 1 || ovrDuration > 60 ||
+          isNaN(ovrAutoActivate) || ovrAutoActivate < 5 || ovrAutoActivate > 120 ||
           isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
           isNaN(autoActivateMinutes) || autoActivateMinutes < 5 || autoActivateMinutes > 120) {
         showToast("Please enter valid configuration values", 'error');
@@ -596,6 +607,8 @@ function initAdminPanelHandlers() {
         locOffsetMinutes: locOffset,
         locFlightDurationMinutes: locDuration,
         ovrOffsetMinutes: ovrOffset,
+        ovrFlightDurationMinutes: ovrDuration,
+        ovrAutoActivateMinutes: ovrAutoActivate,
         timezoneOffsetHours: timezoneOffset,
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
@@ -617,6 +630,38 @@ function initAdminPanelHandlers() {
       renderTimeline();
     });
   }
+}
+
+/**
+ * Initialize the generic overflights counter
+ * This allows quick addition of free-caller overflights to today's stats
+ * without creating individual strips
+ */
+function initGenericOverflightsCounter() {
+  const countDisplay = document.getElementById("genericOvrCount");
+  const btnInc = document.getElementById("btnIncGenericOvr");
+  const btnDec = document.getElementById("btnDecGenericOvr");
+
+  if (!countDisplay || !btnInc || !btnDec) return;
+
+  // Initialize display with current count
+  const updateDisplay = () => {
+    countDisplay.textContent = getGenericOverflightsCount();
+  };
+
+  updateDisplay();
+
+  // Increment button
+  btnInc.addEventListener("click", () => {
+    incrementGenericOverflights();
+    updateDisplay();
+  });
+
+  // Decrement button
+  btnDec.addEventListener("click", () => {
+    decrementGenericOverflights();
+    updateDisplay();
+  });
 }
 
 async function bootstrap() {
@@ -643,6 +688,7 @@ async function bootstrap() {
     // Feature modules: bind handlers first, then render
     initLiveBoard();
     initTimeline();
+    initGenericOverflightsCounter();
     initHistoryBoard();
     initHistoryExport();
     initVkbLookup();

@@ -208,6 +208,17 @@ body {
   align-items: center;
 }
 
+/* Quick stat counter (e.g., generic overflights) */
+.quick-stat-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+}
+
 .field,
 .btn {
   font-size: 12px;

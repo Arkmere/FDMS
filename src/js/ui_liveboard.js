@@ -1050,8 +1050,9 @@ function renderExpandedRow(tbody, m, context = 'live') {
 }
 
 /**
- * Auto-activate PLANNED arrivals when they reach the configured time before ETA
- * Note: Only ARR flights are auto-activated. DEP and LOC flights must be manually activated.
+ * Auto-activate PLANNED arrivals and overflights when they reach the configured time before ETA/EOFT
+ * Note: Only ARR and OVR flights are auto-activated. DEP and LOC flights must be manually activated.
+ * For OVR: ETA field = EOFT (Expected On Frequency Time)
  */
 function autoActivatePlannedArrivals() {
   const config = getConfig();
@@ -1062,15 +1063,17 @@ function autoActivatePlannedArrivals() {
   }
 
   const now = new Date();
-  const minutesBeforeEta = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // Max 2 hours
+  const minutesBeforeEtaArr = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // For ARR
+  const minutesBeforeEoftOvr = Math.min(config.ovrAutoActivateMinutes || 30, 120); // For OVR
 
-  // Get all PLANNED arrivals (only ARR, not LOC or DEP)
-  const plannedArrivals = getMovements().filter(m =>
+  // Get all PLANNED arrivals and overflights
+  const plannedMovements = getMovements().filter(m =>
     m.status === 'PLANNED' &&
-    m.flightType === 'ARR'
+    (m.flightType === 'ARR' || m.flightType === 'OVR')
   );
 
-  for (const movement of plannedArrivals) {
+  for (const movement of plannedMovements) {
+    // For OVR, ETA is actually EOFT (Expected On Frequency Time)
     const eta = getETA(movement);
 
     // Skip if no valid ETA or DOF
@@ -1091,11 +1094,14 @@ function autoActivatePlannedArrivals() {
     const etaDate = new Date(movement.dof + 'T00:00:00Z');
     etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
 
-    // Calculate minutes until ETA
+    // Calculate minutes until ETA/EOFT
     const minutesUntilEta = Math.floor((etaDate - now) / (1000 * 60));
 
+    // Use appropriate activation window based on flight type
+    const activationWindow = movement.flightType === 'OVR' ? minutesBeforeEoftOvr : minutesBeforeEtaArr;
+
     // Auto-activate if within the configured window
-    if (minutesUntilEta <= minutesBeforeEta && minutesUntilEta >= -60) {
+    if (minutesUntilEta <= activationWindow && minutesUntilEta >= -60) {
       // Don't auto-activate if more than 1 hour past ETA (probably stale)
       transitionToActive(movement.id);
     }
