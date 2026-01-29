@@ -3827,9 +3827,10 @@ function renderTimelineScale() {
 }
 
 /**
- * Convert time string (HH:MM) to minutes since midnight
+ * Convert time string (HH:MM) to minutes since midnight for timeline rendering.
+ * Returns null for missing or invalid times.
  */
-function timeToMinutes(timeStr) {
+function timelineTimeToMinutes(timeStr) {
   if (!timeStr) return null;
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
@@ -3872,9 +3873,11 @@ function renderTimelineTracks() {
 
   // Sort by start time
   relevantMovements.sort((a, b) => {
-    const aTime = timeToMinutes(getMovementStartTime(a)) || 0;
-    const bTime = timeToMinutes(getMovementStartTime(b)) || 0;
-    return aTime - bTime;
+    const aTime = timelineTimeToMinutes(getMovementStartTime(a));
+    const bTime = timelineTimeToMinutes(getMovementStartTime(b));
+    const aVal = Number.isFinite(aTime) ? aTime : Number.POSITIVE_INFINITY;
+    const bVal = Number.isFinite(bTime) ? bTime : Number.POSITIVE_INFINITY;
+    return aVal - bVal;
   });
 
   // Calculate timeline bounds in minutes
@@ -3891,11 +3894,15 @@ function renderTimelineTracks() {
 
     if (!startTimeStr) return;
 
-    let startMinutes = timeToMinutes(startTimeStr);
-    let endMinutes = timeToMinutes(endTimeStr);
+    let startMinutes = timelineTimeToMinutes(startTimeStr);
+    let endMinutes = timelineTimeToMinutes(endTimeStr);
+
+    if (!Number.isFinite(startMinutes)) {
+      return;
+    }
 
     // Default duration of 60 minutes if no end time
-    if (!endMinutes) {
+    if (!Number.isFinite(endMinutes)) {
       endMinutes = startMinutes + 60;
     }
 
