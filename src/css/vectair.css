@@ -249,6 +249,7 @@ body {
 /* Table */
 .table-container {
   max-height: 520px;
+  min-height: 280px; /* Ensure space for at least 3-4 strips with dropdowns */
   overflow: auto;
   background: #ffffff;
   border: 1px solid var(--va-border);
@@ -429,6 +430,40 @@ tr.strip.ft-ovr > td {
 .actions-cell {
   text-align: right;
 }
+
+/* Cancelled strip styling - brown background to distinguish from completed */
+.cancelled-strip {
+  background-color: rgba(139, 111, 71, 0.25) !important;
+}
+
+.cancelled-strip:hover {
+  background-color: rgba(139, 111, 71, 0.35) !important;
+}
+
+/* Edit dropdown menu styling */
+.js-edit-menu,
+.js-history-edit-menu {
+  position: absolute !important;
+  right: 0 !important;
+  top: 100% !important;
+  background: #ffffff !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  z-index: 9999 !important;
+  min-width: 120px !important;
+  margin-top: 2px !important;
+}
+
+/* Last few rows in table: dropdowns open upward to avoid clipping */
+.table-container tbody tr:nth-last-child(-n+2) .js-edit-menu,
+.table-container tbody tr:nth-last-child(-n+2) .js-history-edit-menu {
+  top: auto !important;
+  bottom: 100% !important;
+  margin-top: 0 !important;
+  margin-bottom: 2px !important;
+}
+
 .small-btn {
   font-size: 11px;
   padding: 2px 6px;
