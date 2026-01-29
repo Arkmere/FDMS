@@ -49,6 +49,8 @@ body {
   min-height: 100vh;
   background: #ffffff;
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -135,6 +137,12 @@ body {
 }
 
 /* Tabs */
+.tab-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .tab-panel.hidden {
   display: none;
 }
@@ -142,6 +150,10 @@ body {
 /* Page / panels */
 .page-body {
   padding: 14px 18px 18px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Allow flex children to shrink below content size */
 }
 .page-title {
   color: var(--va-accent-brown);
@@ -159,6 +171,20 @@ body {
   background: var(--va-panel-bg);
   border-radius: 4px;
   padding: 10px;
+}
+
+/* Make Live Board panel fill available space */
+#tab-live > .panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#tab-live > .panel > .table-container {
+  flex: 1;
+  min-height: 200px;
+  overflow-y: auto;
 }
 .placeholder {
   font-size: 13px;
@@ -1477,4 +1503,168 @@ tr.strip.ft-ovr > td {
 
 .leaderboard-table tr:hover {
   background: #f9f9f9;
+}
+
+/* ============================================
+   Timeline Component
+   ============================================ */
+.timeline-container {
+  position: relative;
+  background: linear-gradient(to bottom, #f8f5f0 0%, #f0ebe4 100%);
+  border: 1px solid var(--va-border);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  margin-bottom: 0;
+  padding: 8px 0 0 0;
+  overflow: hidden;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 6px 10px;
+  font-size: 11px;
+  color: var(--va-text-soft);
+}
+
+.timeline-title {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.timeline-current-time {
+  font-weight: 600;
+  color: var(--va-accent-brown);
+}
+
+.timeline-scale {
+  position: relative;
+  height: 24px;
+  background: #e8e3dc;
+  border-top: 1px solid #d5cfc6;
+  border-bottom: 1px solid #d5cfc6;
+}
+
+.timeline-hour-marker {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid #c5bfb6;
+  font-size: 10px;
+  color: #666;
+  padding-left: 4px;
+  line-height: 24px;
+}
+
+.timeline-hour-marker.hour-major {
+  border-left: 1px solid #9a9488;
+  font-weight: 600;
+}
+
+.timeline-tracks {
+  position: relative;
+  min-height: 60px;
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 0;
+}
+
+.timeline-track {
+  position: relative;
+  height: 22px;
+  margin: 2px 0;
+}
+
+.timeline-movement-bar {
+  position: absolute;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  padding: 0 4px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  z-index: 1;
+}
+
+.timeline-movement-bar:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  z-index: 10;
+}
+
+/* Movement type colors matching strip colors */
+.timeline-movement-bar.ft-loc {
+  background: linear-gradient(135deg, #d87c9e 0%, #c76a8c 100%);
+}
+.timeline-movement-bar.ft-dep {
+  background: linear-gradient(135deg, #6bb36b 0%, #5a9f5a 100%);
+}
+.timeline-movement-bar.ft-arr {
+  background: linear-gradient(135deg, #5fa3d4 0%, #4a8fc0 100%);
+}
+.timeline-movement-bar.ft-ovr {
+  background: linear-gradient(135deg, #a89070 0%, #978060 100%);
+}
+
+/* Status variations */
+.timeline-movement-bar.status-planned {
+  opacity: 0.7;
+  border: 1px dashed rgba(255,255,255,0.5);
+}
+.timeline-movement-bar.status-active {
+  opacity: 1;
+  border: 2px solid rgba(255,255,255,0.8);
+}
+
+/* Now indicator line */
+.timeline-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #d32f2f;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.timeline-now-line::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #d32f2f;
+}
+
+.timeline-now-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #d32f2f;
+  background: #fff;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* Adjust table-container when timeline is present */
+#tab-live > .panel > .timeline-container + .table-container {
+  border-radius: 0 0 4px 4px;
+  border-top: none;
 }
