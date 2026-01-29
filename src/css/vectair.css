@@ -1710,3 +1710,365 @@ tr.strip.ft-ovr > td {
   box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
   outline: none;
 }
+
+/* ============================================
+   Booking Page Styles
+   ============================================ */
+
+.booking-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .booking-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.booking-form-panel {
+  padding: 16px;
+}
+
+.booking-form-panel .panel-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--va-text-main);
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--va-border);
+}
+
+.booking-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.booking-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.booking-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-accent-brown);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.booking-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+@media (max-width: 640px) {
+  .booking-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.booking-form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.booking-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.booking-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Registry lookup buttons */
+.registry-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.btn-registry {
+  font-size: 10px;
+  padding: 3px 6px;
+  background: #f8f8f8;
+  border: 1px solid var(--va-border);
+  border-radius: 3px;
+  color: var(--va-link);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-registry:hover {
+  background: #e8f0f4;
+  border-color: var(--va-link);
+}
+
+/* Right panel */
+.booking-right-panel {
+  position: sticky;
+  top: 16px;
+}
+
+.booking-charges-panel {
+  padding: 16px;
+}
+
+.booking-charges-panel .panel-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--va-text-main);
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--va-border);
+}
+
+/* Charges breakdown */
+.charges-breakdown {
+  margin-bottom: 16px;
+}
+
+.charge-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.charge-line:last-child {
+  border-bottom: none;
+}
+
+.charge-label {
+  color: var(--va-text-main);
+}
+
+.charge-note {
+  font-size: 10px;
+  color: #999;
+  font-weight: normal;
+}
+
+.charge-value {
+  font-weight: 600;
+  color: var(--va-text-main);
+  font-family: 'Courier New', monospace;
+}
+
+.charge-vat {
+  color: #666;
+  font-size: 12px;
+}
+
+.charge-vat .charge-value {
+  font-weight: normal;
+  color: #666;
+}
+
+.charge-total {
+  background: #f8f5f0;
+  margin: 8px -16px 0;
+  padding: 10px 16px;
+  border-top: 2px solid var(--va-accent-brown);
+}
+
+.charge-total .charge-label {
+  font-weight: 700;
+  color: var(--va-accent-brown);
+}
+
+.charge-total .charge-value {
+  font-size: 16px;
+  color: var(--va-accent-brown);
+}
+
+/* Charges notes */
+.charges-notes {
+  margin: 16px 0;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #666;
+}
+
+.charge-note-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.charge-note-item:last-child {
+  margin-bottom: 0;
+}
+
+.bullet {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bullet-landing {
+  background: var(--ft-arr);
+}
+
+.bullet-parking {
+  background: var(--ft-dep);
+}
+
+.bullet-fuel {
+  background: var(--ft-ovr);
+}
+
+/* Strip preview */
+.strip-preview-section {
+  margin: 20px 0;
+}
+
+.strip-preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--va-text-soft);
+  margin: 0 0 10px 0;
+}
+
+.strip-preview-note {
+  font-weight: normal;
+  color: #999;
+}
+
+.strip-preview-card {
+  background: #fff;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+  padding: 12px;
+  border-left: 6px solid #c08b5b;
+}
+
+.strip-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.strip-preview-reg {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--va-text-main);
+  letter-spacing: 0.02em;
+}
+
+.strip-preview-time {
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+}
+
+.strip-preview-type {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.strip-preview-route {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-text-main);
+  margin-bottom: 8px;
+}
+
+.strip-preview-status {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  background: var(--va-status-planned);
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+
+.strip-preview-details {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.strip-detail {
+  text-align: center;
+}
+
+.strip-detail-label {
+  display: block;
+  font-size: 9px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.strip-detail-value {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--va-text-main);
+}
+
+/* Booking actions */
+.booking-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.booking-actions .btn-primary {
+  flex: 1;
+}
+
+.booking-actions .btn-primary:disabled {
+  background: #ccc;
+  border-color: #bbb;
+  cursor: not-allowed;
+}
+
+.booking-info-note {
+  margin-top: 12px;
+  font-size: 10px;
+  color: #999;
+  line-height: 1.4;
+}
+
+/* Validation styling */
+.modal-input.is-invalid,
+.modal-select.is-invalid,
+.modal-textarea.is-invalid {
+  border-color: #d32f2f;
+  background: #fff5f5;
+}
+
+.validation-error {
+  font-size: 10px;
+  color: #d32f2f;
+  margin-top: 2px;
+}

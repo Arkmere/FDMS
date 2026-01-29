@@ -20,6 +20,10 @@ import {
 } from "./ui_reports.js";
 
 import {
+  initBookingPage
+} from "./ui_booking.js";
+
+import {
   resetMovementsToDemo,
   exportSessionJSON,
   importSessionJSON,
@@ -695,6 +699,7 @@ async function bootstrap() {
     initAdminPanel();
     initAdminPanelHandlers();
     initReports();
+    initBookingPage();
 
     renderLiveBoard();
     renderTimeline();

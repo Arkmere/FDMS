@@ -29,6 +29,7 @@
       <nav class="nav-bar">
         <div class="nav-tabs" role="tablist">
           <button class="nav-tab active" data-tab="tab-live">Live Board</button>
+          <button class="nav-tab" data-tab="tab-booking">Booking</button>
           <button class="nav-tab" data-tab="tab-history">History</button>
           <button class="nav-tab" data-tab="tab-reports">Reports</button>
           <button class="nav-tab" data-tab="tab-vkb">VKB Lookup</button>
@@ -128,6 +129,211 @@
                 </thead>
                 <tbody id="liveBody"></tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- BOOKING -->
+        <section id="tab-booking" class="tab-panel hidden">
+          <div class="page-title">Booking</div>
+          <div class="page-subtitle">Collect visitor details, auto-calculate charges, then create a planned strip on the Live Board.</div>
+
+          <div class="booking-layout">
+            <!-- Left: Booking Form -->
+            <div class="booking-form-panel panel">
+              <h3 class="panel-header">Booking details</h3>
+
+              <!-- Contact Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Contact</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field">
+                    <label class="modal-label">Name <span class="required-mark">*</span></label>
+                    <input type="text" id="bookingContactName" class="modal-input" placeholder="Jane Smith" required>
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Contact number <span class="required-mark">*</span></label>
+                    <input type="tel" id="bookingContactPhone" class="modal-input" placeholder="+44 7123 456789" required>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Schedule Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Schedule</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field">
+                    <label class="modal-label">Date of flight <span class="required-mark">*</span></label>
+                    <input type="date" id="bookingDof" class="modal-input" required>
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Time of arrival (LT) <span class="required-mark">*</span></label>
+                    <input type="time" id="bookingArrivalTime" class="modal-input" required>
+                  </div>
+                  <div class="modal-field span-2">
+                    <label class="modal-label">Length of stay (hours) <span class="required-mark">*</span></label>
+                    <input type="number" id="bookingStayHours" class="modal-input" min="0" step="0.5" placeholder="3" required>
+                    <div class="help-text">Used for parking calculation (first 2 hours free).</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Aircraft Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Aircraft</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field">
+                    <label class="modal-label">Aircraft registration <span class="required-mark">*</span></label>
+                    <div class="autocomplete-container">
+                      <input type="text" id="bookingRegistration" class="modal-input" placeholder="G-ABCD" required style="text-transform: uppercase;">
+                    </div>
+                    <div class="registry-buttons">
+                      <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register">CAA G-INFO</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnOpenReg">Open</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnCopyReg">Copy reg</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnFaaRegistry" title="Open FAA N-Number Registry">FA Registry - Open</button>
+                    </div>
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Callsign (if different)</label>
+                    <input type="text" id="bookingCallsign" class="modal-input" placeholder="Optional" style="text-transform: uppercase;">
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Aircraft type <span class="required-mark">*</span></label>
+                    <input type="text" id="bookingAircraftType" class="modal-input" placeholder="PA28" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">MTOW <span class="required-mark">*</span></label>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                      <input type="number" id="bookingMtow" class="modal-input" min="0" step="0.01" placeholder="2.30" required style="flex: 1;">
+                      <select id="bookingMtowUnit" class="modal-select" style="width: auto;">
+                        <option value="t" selected>tonnes</option>
+                        <option value="kg">kg</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Persons on Board <span class="required-mark">*</span></label>
+                    <input type="number" id="bookingPob" class="modal-input" min="1" step="1" placeholder="2" required>
+                  </div>
+                  <div class="modal-field">
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingTrainingRate">
+                      <span>Training rate applies (25% of landing fees).</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Operational Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Operational</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field">
+                    <label class="modal-label">Departure aerodrome <span class="required-mark">*</span></label>
+                    <input type="text" id="bookingDepartureAd" class="modal-input" placeholder="EGNM" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Number of landings (T&amp;G + full stops) <span class="required-mark">*</span></label>
+                    <input type="number" id="bookingLandingsCount" class="modal-input" min="1" step="1" placeholder="4" required>
+                  </div>
+                  <div class="modal-field">
+                    <label class="modal-label">Arrival type</label>
+                    <select id="bookingArrivalType" class="modal-select">
+                      <option value="ARR" selected>ARR (visiting arrival)</option>
+                      <option value="LOC">LOC (local training)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Other Requirements Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Other requirements</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field span-2">
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingParkingRequired" checked>
+                      <span>Parking</span>
+                    </label>
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingFuelRequired">
+                      <span>Fuel required</span>
+                    </label>
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingVisitingCars">
+                      <span>Visiting cars</span>
+                    </label>
+                  </div>
+                  <div class="modal-field span-2">
+                    <label class="modal-label">Notes / special requirements</label>
+                    <textarea id="bookingNotes" class="modal-textarea" rows="3" placeholder="Ramp parking. Pickup by hire car."></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Charges & Strip Preview -->
+            <div class="booking-right-panel">
+              <!-- Charges Panel -->
+              <div class="booking-charges-panel panel">
+                <h3 class="panel-header">Charges &amp; strip preview</h3>
+
+                <div class="charges-breakdown">
+                  <div class="charge-line">
+                    <span class="charge-label">Landing fees <span class="charge-note">(ex VAT)</span></span>
+                    <span class="charge-value" id="chargeLandingNet">£0.00</span>
+                  </div>
+                  <div class="charge-line">
+                    <span class="charge-label">Parking <span class="charge-note">(incl VAT)</span></span>
+                    <span class="charge-value" id="chargeParkingGross">£0.00</span>
+                  </div>
+                  <div class="charge-line charge-vat">
+                    <span class="charge-label">VAT <span class="charge-note">(parking only, 20%)</span></span>
+                    <span class="charge-value" id="chargeParkingVat">£0.00</span>
+                  </div>
+                  <div class="charge-line charge-total">
+                    <span class="charge-label">Total <span class="charge-note">(mixed VAT)</span></span>
+                    <span class="charge-value" id="chargeTotalGross">£0.00</span>
+                  </div>
+                </div>
+
+                <div class="charges-notes">
+                  <div class="charge-note-item"><span class="bullet bullet-landing"></span> Landing fee: <span id="chargeNoteLandingRate">£0.00</span> per landing</div>
+                  <div class="charge-note-item"><span class="bullet bullet-parking"></span> Parking: <span id="chargeNoteParkingPeriods">0</span> x 24h period(s)</div>
+                  <div class="charge-note-item charge-note-fuel" id="chargeNoteFuel" style="display: none;"><span class="bullet bullet-fuel"></span> Fuel: Quote required</div>
+                </div>
+
+                <!-- Strip Preview -->
+                <div class="strip-preview-section">
+                  <h4 class="strip-preview-title">Planned strip <span class="strip-preview-note">(preview)</span></h4>
+                  <div class="strip-preview-card">
+                    <div class="strip-preview-header">
+                      <div class="strip-preview-reg" id="stripPreviewReg">G-ABCD</div>
+                      <div class="strip-preview-time" id="stripPreviewTime">14:30 / 27/05/24</div>
+                    </div>
+                    <div class="strip-preview-type" id="stripPreviewType">PA28</div>
+                    <div class="strip-preview-route" id="stripPreviewRoute">EGNM → EGOW</div>
+                    <div class="strip-preview-status">Planned</div>
+                    <div class="strip-preview-details">
+                      <div class="strip-detail"><span class="strip-detail-label">POB</span><span class="strip-detail-value" id="stripPreviewPob">2</span></div>
+                      <div class="strip-detail"><span class="strip-detail-label">Stay</span><span class="strip-detail-value" id="stripPreviewStay">3h</span></div>
+                      <div class="strip-detail"><span class="strip-detail-label">Landings</span><span class="strip-detail-value" id="stripPreviewLandings">4</span></div>
+                      <div class="strip-detail"><span class="strip-detail-label">Reqs</span><span class="strip-detail-value" id="stripPreviewReqs">Parking</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="booking-actions">
+                  <button type="button" class="btn btn-secondary" id="btnResetBooking">Reset</button>
+                  <button type="button" class="btn btn-primary" id="btnCreateBooking" disabled>Create booking &amp; add strip →</button>
+                </div>
+
+                <div class="booking-info-note">
+                  'Add strip' in this prototype stores the booking in localStorage. Wiring into your <strong>actual Live Board data</strong> model is the next step.
+                </div>
+              </div>
             </div>
           </div>
         </section>
