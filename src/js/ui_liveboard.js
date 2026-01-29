@@ -3883,8 +3883,12 @@ function renderTimelineTracks() {
 
     if (!startTimeStr) return;
 
-    let startMinutes = timeToMinutes(startTimeStr);
-    let endMinutes = timeToMinutes(endTimeStr);
+    let startMinutes = timelineTimeToMinutes(startTimeStr);
+    let endMinutes = timelineTimeToMinutes(endTimeStr);
+
+    if (!Number.isFinite(startMinutes)) {
+      return;
+    }
 
     if (!Number.isFinite(startMinutes)) {
       return;
