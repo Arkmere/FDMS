@@ -3827,17 +3827,6 @@ function renderTimelineScale() {
 }
 
 /**
- * Convert time string (HH:MM) to minutes since midnight for timeline rendering.
- * Returns null for missing or invalid times.
- */
-function timelineTimeToMinutes(timeStr) {
-  if (!timeStr) return null;
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-}
-
-/**
  * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals)
  */
 function getMovementStartTime(m) {
@@ -3873,8 +3862,8 @@ function renderTimelineTracks() {
 
   // Sort by start time
   relevantMovements.sort((a, b) => {
-    const aTime = timelineTimeToMinutes(getMovementStartTime(a));
-    const bTime = timelineTimeToMinutes(getMovementStartTime(b));
+    const aTime = timeToMinutes(getMovementStartTime(a));
+    const bTime = timeToMinutes(getMovementStartTime(b));
     const aVal = Number.isFinite(aTime) ? aTime : Number.POSITIVE_INFINITY;
     const bVal = Number.isFinite(bTime) ? bTime : Number.POSITIVE_INFINITY;
     return aVal - bVal;
@@ -3896,6 +3885,10 @@ function renderTimelineTracks() {
 
     let startMinutes = timelineTimeToMinutes(startTimeStr);
     let endMinutes = timelineTimeToMinutes(endTimeStr);
+
+    if (!Number.isFinite(startMinutes)) {
+      return;
+    }
 
     if (!Number.isFinite(startMinutes)) {
       return;
