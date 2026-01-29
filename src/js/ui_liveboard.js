@@ -4024,9 +4024,11 @@ function renderTimelineTracks() {
 
   // Sort by start time
   relevantMovements.sort((a, b) => {
-    const aTime = timeToMinutes(getMovementStartTime(a)) || 0;
-    const bTime = timeToMinutes(getMovementStartTime(b)) || 0;
-    return aTime - bTime;
+    const aTime = timeToMinutes(getMovementStartTime(a));
+    const bTime = timeToMinutes(getMovementStartTime(b));
+    const aVal = Number.isFinite(aTime) ? aTime : Number.POSITIVE_INFINITY;
+    const bVal = Number.isFinite(bTime) ? bTime : Number.POSITIVE_INFINITY;
+    return aVal - bVal;
   });
 
   // Calculate timeline bounds in minutes
@@ -4043,15 +4045,20 @@ function renderTimelineTracks() {
 
     if (!startTimeStr) return;
 
-    let startMinutes = timeToMinutes(startTimeStr);
-    let endMinutes = timeToMinutes(endTimeStr);
+    let startMinutes = timelineTimeToMinutes(startTimeStr);
+    let endMinutes = timelineTimeToMinutes(endTimeStr);
 
-    // Skip if start time is invalid
-    if (!Number.isFinite(startMinutes)) return;
+    if (!Number.isFinite(startMinutes)) {
+      return;
+    }
 
-    // Default duration based on flight type if no end time
+    if (!Number.isFinite(startMinutes)) {
+      return;
+    }
+
+    // Default duration of 60 minutes if no end time
     if (!Number.isFinite(endMinutes)) {
-      endMinutes = startMinutes + getDefaultFlightDuration(m.flightType);
+      endMinutes = startMinutes + 60;
     }
 
     // Handle overnight flights (end time < start time)
