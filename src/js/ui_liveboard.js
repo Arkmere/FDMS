@@ -3584,18 +3584,13 @@ export function renderHistoryBoard() {
 
   for (const m of sorted) {
     const tr = document.createElement("tr");
-    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
+    // Add cancelled-strip class for brown background on cancelled movements
+    const cancelledClass = m.status === 'CANCELLED' ? ' cancelled-strip' : '';
+    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}${cancelledClass}`;
 
-    // Get indicator bar color (same as Live Board for COMPLETED, brown for CANCELLED)
-    let indicatorColor;
-    let indicatorTitle;
-    if (m.status === 'CANCELLED') {
-      indicatorColor = '#8b6f47'; // Brown for cancelled
-      indicatorTitle = 'Cancelled';
-    } else {
-      indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
-      indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
-    }
+    // Sidebar always uses EGOW indicator color (even for cancelled - so we can see who it was for)
+    const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
+    const indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
 
     // Calculate times display
     const ft = (m.flightType || "").toUpperCase();
