@@ -8,7 +8,10 @@ import {
   renderHistoryBoard,
   initHistoryExport,
   initVkbLookup,
-  initAdminPanel
+  initAdminPanel,
+  initTimeline,
+  renderTimeline,
+  updateTimelineNowLine
 } from "./ui_liveboard.js";
 
 import {
@@ -275,6 +278,9 @@ function initClock() {
         localTimeLineEl.style.display = '';
       }
     }
+
+    // Update timeline now line position
+    updateTimelineNowLine();
   };
 
   updateClock();
@@ -618,6 +624,7 @@ async function bootstrap() {
 
     // Feature modules: bind handlers first, then render
     initLiveBoard();
+    initTimeline();
     initHistoryBoard();
     initHistoryExport();
     initVkbLookup();
@@ -626,6 +633,7 @@ async function bootstrap() {
     initReports();
 
     renderLiveBoard();
+    renderTimeline();
     renderHistoryBoard();
     renderReports();
 

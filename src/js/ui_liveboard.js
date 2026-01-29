@@ -1326,6 +1326,9 @@ export function renderLiveBoard() {
   // Setup global click handler to close dropdown menus when clicking outside
   document.removeEventListener("click", closeDropdownsHandler);
   document.addEventListener("click", closeDropdownsHandler);
+
+  // Update timeline when movements change
+  renderTimeline();
 }
 
 /* -----------------------------
@@ -3784,6 +3787,252 @@ export function initHistoryBoard() {
   });
 
   renderHistoryBoard();
+}
+
+/* -----------------------------
+   Timeline
+------------------------------ */
+
+/**
+ * Configuration for the timeline view
+ */
+const TIMELINE_CONFIG = {
+  startHour: 6,      // Start at 06:00 UTC
+  endHour: 22,       // End at 22:00 UTC (16 hour window)
+  pixelsPerHour: 60  // Width of each hour segment
+};
+
+/**
+ * Render the timeline scale (hour markers)
+ */
+function renderTimelineScale() {
+  const scale = byId("timelineScale");
+  if (!scale) return;
+
+  scale.innerHTML = '';
+
+  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+  const totalWidth = (endHour - startHour) * pixelsPerHour;
+
+  scale.style.width = `${totalWidth}px`;
+  scale.style.minWidth = '100%';
+
+  for (let hour = startHour; hour <= endHour; hour++) {
+    const marker = document.createElement('div');
+    marker.className = `timeline-hour-marker${hour % 3 === 0 ? ' hour-major' : ''}`;
+    marker.style.left = `${(hour - startHour) * pixelsPerHour}px`;
+    marker.textContent = `${String(hour).padStart(2, '0')}:00`;
+    scale.appendChild(marker);
+  }
+}
+
+/**
+ * Convert time string (HH:MM) to minutes since midnight
+ */
+function timeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
+/**
+ * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals)
+ */
+function getMovementStartTime(m) {
+  if (m.flightType === 'ARR') {
+    return getETA(m) || getATD(m);
+  }
+  return getETD(m) || getATD(m);
+}
+
+/**
+ * Get the end time for a movement
+ */
+function getMovementEndTime(m) {
+  return getETA(m) || getATA(m);
+}
+
+/**
+ * Render timeline movement bars
+ */
+function renderTimelineTracks() {
+  const tracks = byId("timelineTracks");
+  if (!tracks) return;
+
+  tracks.innerHTML = '';
+
+  const movements = getMovements();
+  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+
+  // Filter to planned and active movements
+  const relevantMovements = movements.filter(m =>
+    m.status === 'PLANNED' || m.status === 'ACTIVE'
+  );
+
+  // Sort by start time
+  relevantMovements.sort((a, b) => {
+    const aTime = timeToMinutes(getMovementStartTime(a)) || 0;
+    const bTime = timeToMinutes(getMovementStartTime(b)) || 0;
+    return aTime - bTime;
+  });
+
+  // Calculate timeline bounds in minutes
+  const timelineStartMinutes = startHour * 60;
+  const timelineEndMinutes = endHour * 60;
+  const timelineWidthMinutes = timelineEndMinutes - timelineStartMinutes;
+
+  // Track allocation for stacking (simple greedy algorithm)
+  const trackEndTimes = []; // Each element is the end minute of a bar in that track
+
+  relevantMovements.forEach(m => {
+    const startTimeStr = getMovementStartTime(m);
+    const endTimeStr = getMovementEndTime(m);
+
+    if (!startTimeStr) return;
+
+    let startMinutes = timeToMinutes(startTimeStr);
+    let endMinutes = timeToMinutes(endTimeStr);
+
+    // Default duration of 60 minutes if no end time
+    if (!endMinutes) {
+      endMinutes = startMinutes + 60;
+    }
+
+    // Handle overnight flights (end time < start time)
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    // Skip if entirely outside timeline window
+    if (endMinutes < timelineStartMinutes || startMinutes > timelineEndMinutes) {
+      return;
+    }
+
+    // Clamp to timeline bounds
+    const displayStart = Math.max(startMinutes, timelineStartMinutes);
+    const displayEnd = Math.min(endMinutes, timelineEndMinutes);
+
+    // Calculate position and width as percentages
+    const leftPercent = ((displayStart - timelineStartMinutes) / timelineWidthMinutes) * 100;
+    const widthPercent = ((displayEnd - displayStart) / timelineWidthMinutes) * 100;
+
+    // Minimum width for visibility
+    const minWidthPercent = 2;
+    const actualWidthPercent = Math.max(widthPercent, minWidthPercent);
+
+    // Find available track
+    let trackIndex = 0;
+    for (let i = 0; i < trackEndTimes.length; i++) {
+      if (trackEndTimes[i] <= startMinutes) {
+        trackIndex = i;
+        break;
+      }
+      trackIndex = i + 1;
+    }
+    trackEndTimes[trackIndex] = endMinutes;
+
+    // Create or get track element
+    let track = tracks.querySelector(`[data-track="${trackIndex}"]`);
+    if (!track) {
+      track = document.createElement('div');
+      track.className = 'timeline-track';
+      track.dataset.track = trackIndex;
+      tracks.appendChild(track);
+    }
+
+    // Create movement bar
+    const bar = document.createElement('div');
+    const ftClass = `ft-${(m.flightType || 'loc').toLowerCase()}`;
+    const statusClass = `status-${(m.status || 'planned').toLowerCase()}`;
+    bar.className = `timeline-movement-bar ${ftClass} ${statusClass}`;
+    bar.style.left = `${leftPercent}%`;
+    bar.style.width = `${actualWidthPercent}%`;
+    bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
+    bar.textContent = m.callsignCode || '?';
+    bar.dataset.movementId = m.id;
+
+    // Click to scroll to movement in strip bay
+    bar.addEventListener('click', () => {
+      const stripRow = document.querySelector(`#liveBody tr[data-id="${m.id}"]`);
+      if (stripRow) {
+        stripRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        stripRow.style.transition = 'background-color 0.3s';
+        stripRow.style.backgroundColor = '#fffbcc';
+        setTimeout(() => {
+          stripRow.style.backgroundColor = '';
+        }, 1500);
+      }
+    });
+
+    track.appendChild(bar);
+  });
+
+  // Ensure at least one track exists for visual consistency
+  if (tracks.children.length === 0) {
+    const emptyTrack = document.createElement('div');
+    emptyTrack.className = 'timeline-track';
+    emptyTrack.innerHTML = '<span style="font-size: 10px; color: #999; padding-left: 10px;">No movements in timeline window</span>';
+    tracks.appendChild(emptyTrack);
+  }
+}
+
+/**
+ * Update the "now" indicator line position
+ */
+export function updateTimelineNowLine() {
+  const container = byId("timelineContainer");
+  const nowLine = byId("timelineNowLine");
+  const currentTimeEl = byId("timelineCurrentTime");
+
+  if (!container || !nowLine) return;
+
+  const now = new Date();
+  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+  const { startHour, endHour } = TIMELINE_CONFIG;
+  const timelineStartMinutes = startHour * 60;
+  const timelineEndMinutes = endHour * 60;
+
+  // Update current time display
+  if (currentTimeEl) {
+    const hh = String(now.getUTCHours()).padStart(2, '0');
+    const mm = String(now.getUTCMinutes()).padStart(2, '0');
+    currentTimeEl.textContent = `${hh}:${mm} UTC`;
+  }
+
+  // Check if current time is within timeline window
+  if (currentMinutes < timelineStartMinutes || currentMinutes > timelineEndMinutes) {
+    nowLine.style.display = 'none';
+    return;
+  }
+
+  nowLine.style.display = 'block';
+
+  // Calculate position as percentage
+  const timelineWidthMinutes = timelineEndMinutes - timelineStartMinutes;
+  const positionPercent = ((currentMinutes - timelineStartMinutes) / timelineWidthMinutes) * 100;
+
+  nowLine.style.left = `${positionPercent}%`;
+}
+
+/**
+ * Render the complete timeline
+ */
+export function renderTimeline() {
+  renderTimelineScale();
+  renderTimelineTracks();
+  updateTimelineNowLine();
+}
+
+/**
+ * Initialize the timeline
+ */
+export function initTimeline() {
+  renderTimeline();
+
+  // Update now line every minute
+  setInterval(updateTimelineNowLine, 60000);
 }
 
 /* -----------------------------
