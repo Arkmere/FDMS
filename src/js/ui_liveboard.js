@@ -3827,16 +3827,6 @@ function renderTimelineScale() {
 }
 
 /**
- * Convert time string (HH:MM) to minutes since midnight
- */
-function timeToMinutes(timeStr) {
-  if (!timeStr) return null;
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-}
-
-/**
  * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals)
  */
 function getMovementStartTime(m) {
@@ -3894,8 +3884,11 @@ function renderTimelineTracks() {
     let startMinutes = timeToMinutes(startTimeStr);
     let endMinutes = timeToMinutes(endTimeStr);
 
+    // Skip if start time is invalid
+    if (!Number.isFinite(startMinutes)) return;
+
     // Default duration of 60 minutes if no end time
-    if (!endMinutes) {
+    if (!Number.isFinite(endMinutes)) {
       endMinutes = startMinutes + 60;
     }
 
