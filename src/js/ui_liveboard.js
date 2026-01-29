@@ -3944,8 +3944,8 @@ function renderTimelineTracks() {
     // Create movement bar
     const bar = document.createElement('div');
     const ftClass = `ft-${(m.flightType || 'loc').toLowerCase()}`;
-    const statusClass = `status-${(m.status || 'planned').toLowerCase()}`;
-    bar.className = `timeline-movement-bar ${ftClass} ${statusClass}`;
+    const movementStatusClass = `status-${(m.status || 'planned').toLowerCase()}`;
+    bar.className = `timeline-movement-bar ${ftClass} ${movementStatusClass}`;
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
     bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
