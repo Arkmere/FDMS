@@ -118,6 +118,122 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+/* -----------------------------
+   Inline Edit Helpers
+------------------------------ */
+
+/**
+ * Create inline edit functionality for a field
+ * @param {HTMLElement} el - The element to make editable
+ * @param {string} movementId - The movement ID
+ * @param {string} fieldName - The field name to update
+ * @param {string} inputType - Type of input ('text', 'time')
+ * @param {function} onSave - Callback after save (optional)
+ */
+function enableInlineEdit(el, movementId, fieldName, inputType = 'text', onSave = null) {
+  if (!el || el.dataset.inlineEditEnabled) return;
+  el.dataset.inlineEditEnabled = 'true';
+  el.style.cursor = 'pointer';
+  el.title = 'Double-click to edit';
+
+  el.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    startInlineEdit(el, movementId, fieldName, inputType, onSave);
+  });
+}
+
+/**
+ * Start inline editing for an element
+ */
+function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
+  // Don't start if already editing
+  if (el.querySelector('input')) return;
+
+  const originalContent = el.innerHTML;
+  const currentValue = el.textContent.trim();
+  const displayValue = currentValue === '—' || currentValue === '-' ? '' : currentValue;
+
+  // Create input
+  const input = document.createElement('input');
+  input.type = inputType === 'time' ? 'text' : 'text';
+  input.value = displayValue;
+  input.className = 'inline-edit-input';
+  input.style.cssText = `
+    width: 100%;
+    padding: 2px 4px;
+    font-size: inherit;
+    font-family: inherit;
+    border: 1px solid #4a90d9;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+    outline: none;
+  `;
+
+  if (inputType === 'time') {
+    input.placeholder = 'HH:MM';
+    input.maxLength = 5;
+  }
+
+  // Clear element and add input
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  // Save function
+  const saveEdit = () => {
+    const newValue = input.value.trim();
+
+    // Validate time format if time type
+    if (inputType === 'time' && newValue && !/^\d{1,2}:\d{2}$/.test(newValue)) {
+      showToast('Invalid time format. Use HH:MM', 'error');
+      input.focus();
+      return;
+    }
+
+    // Update movement
+    const updateData = {};
+    updateData[fieldName] = newValue || null;
+    updateMovement(movementId, updateData);
+
+    // Re-render
+    renderLiveBoard();
+    renderHistoryBoard();
+
+    if (onSave) onSave();
+  };
+
+  // Cancel function
+  const cancelEdit = () => {
+    el.innerHTML = originalContent;
+  };
+
+  // Event handlers
+  input.addEventListener('blur', () => {
+    // Small delay to allow click events to register first
+    setTimeout(() => {
+      if (document.activeElement !== input) {
+        saveEdit();
+      }
+    }, 100);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEdit();
+    }
+  });
+
+  // Prevent row click events
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
 /**
  * Convert text input to uppercase on input event
  * Applies to aviation-related fields that should always be uppercase
@@ -1106,25 +1222,25 @@ export function renderLiveBoard() {
     tr.innerHTML = `
       <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
-        <div class="${callsignClass}">${escapeHtml(m.callsignCode)}</div>
+        <div class="${callsignClass} js-edit-callsign">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 6px 0 4px;' : 'padding: 0; width: 0;'}">
         ${m.priorityLetter ? `<span class="priority-letter" title="Flight Priority ${escapeHtml(m.priorityLetter)}">${escapeHtml(m.priorityLetter)}</span>` : ''}
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong"><span class="js-edit-reg">${escapeHtml(m.registration || "—")}</span>${m.type ? ` · <span class="js-edit-type" title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${wtcDisplay}</div>
       </td>
       <td>
-        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
-        <div class="cell-strong"><span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
+        <div class="cell-strong"><span class="js-edit-dep-ad"${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
+        <div class="cell-strong"><span class="js-edit-arr-ad"${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
       </td>
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
       <td${tooltipTitle}>
-        <div class="cell-strong">${escapeHtml(depDisplay)} / ${overdueClass ? `<span class="${overdueClass}">${escapeHtml(arrDisplay)}</span>` : escapeHtml(arrDisplay)}</div>
+        <div class="cell-strong"><span class="js-edit-dep-time">${escapeHtml(depDisplay)}</span> / ${overdueClass ? `<span class="js-edit-arr-time ${overdueClass}">${escapeHtml(arrDisplay)}</span>` : `<span class="js-edit-arr-time">${escapeHtml(arrDisplay)}</span>`}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
@@ -1305,6 +1421,27 @@ export function renderLiveBoard() {
       renderLiveBoard();
       renderHistoryBoard();
     });
+
+    // Bind inline edit handlers (double-click to edit)
+    const ft = (m.flightType || "").toUpperCase();
+    enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-reg"), m.id, "registration", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-type"), m.id, "type", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
+
+    // Time field mapping depends on flight type
+    const depTimeEl = tr.querySelector(".js-edit-dep-time");
+    const arrTimeEl = tr.querySelector(".js-edit-arr-time");
+    if (ft === "DEP" || ft === "LOC") {
+      enableInlineEdit(depTimeEl, m.id, m.atd ? "atd" : "etd", "time");
+    }
+    if (ft === "ARR" || ft === "LOC") {
+      enableInlineEdit(arrTimeEl, m.id, m.ata ? "ata" : "eta", "time");
+    }
+    if (ft === "OVR") {
+      enableInlineEdit(depTimeEl, m.id, m.act ? "act" : "ect", "time");
+    }
 
     tbody.appendChild(tr);
 

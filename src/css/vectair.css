@@ -1673,3 +1673,29 @@ tr.strip.ft-ovr > td {
 .timeline-container.hidden {
   display: none;
 }
+
+/* ============================================
+   Inline Edit
+   ============================================ */
+
+/* Subtle indicator for editable fields */
+[data-inline-edit-enabled="true"] {
+  border-bottom: 1px dotted transparent;
+  transition: border-color 0.2s ease;
+}
+
+[data-inline-edit-enabled="true"]:hover {
+  border-bottom-color: #4a90d9;
+}
+
+.inline-edit-input {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid #4a90d9;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+  outline: none;
+}
