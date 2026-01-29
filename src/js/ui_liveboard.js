@@ -52,6 +52,7 @@ import {
 ------------------------------ */
 
 let expandedId = null;
+let historyExpandedId = null;
 
 const state = {
   globalFilter: "",
@@ -61,8 +62,18 @@ const state = {
 
 // Handler for closing dropdown menus when clicking outside
 function closeDropdownsHandler(e) {
+  // Close Live Board dropdown menus
   if (!e.target.closest(".js-edit-dropdown")) {
     document.querySelectorAll(".js-edit-menu").forEach(menu => {
+      menu.style.display = "none";
+      // Reset row z-index
+      const row = menu.closest("tr");
+      if (row) row.style.zIndex = "";
+    });
+  }
+  // Close History dropdown menus
+  if (!e.target.closest(".js-history-edit-dropdown")) {
+    document.querySelectorAll(".js-history-edit-menu").forEach(menu => {
       menu.style.display = "none";
       // Reset row z-index
       const row = menu.closest("tr");
@@ -3691,14 +3702,20 @@ export function renderHistoryBoard() {
       openDuplicateModal(m);
     });
 
-    // Bind Info toggle (same as Live Board)
+    // Bind Info toggle (similar to Live Board)
     const toggleDetailsBtn = tr.querySelector(".js-history-toggle-details");
     safeOn(toggleDetailsBtn, "click", (e) => {
       e.stopPropagation();
-      toggleMovementDetails(m, tr);
+      historyExpandedId = historyExpandedId === m.id ? null : m.id;
+      renderHistoryBoard();
     });
 
     tbody.appendChild(tr);
+
+    // Render expanded row if this movement is expanded
+    if (historyExpandedId === m.id) {
+      renderExpandedRow(tbody, m);
+    }
   }
 }
 
