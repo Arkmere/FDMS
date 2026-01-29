@@ -118,6 +118,122 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+/* -----------------------------
+   Inline Edit Helpers
+------------------------------ */
+
+/**
+ * Create inline edit functionality for a field
+ * @param {HTMLElement} el - The element to make editable
+ * @param {string} movementId - The movement ID
+ * @param {string} fieldName - The field name to update
+ * @param {string} inputType - Type of input ('text', 'time')
+ * @param {function} onSave - Callback after save (optional)
+ */
+function enableInlineEdit(el, movementId, fieldName, inputType = 'text', onSave = null) {
+  if (!el || el.dataset.inlineEditEnabled) return;
+  el.dataset.inlineEditEnabled = 'true';
+  el.style.cursor = 'pointer';
+  el.title = 'Double-click to edit';
+
+  el.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    startInlineEdit(el, movementId, fieldName, inputType, onSave);
+  });
+}
+
+/**
+ * Start inline editing for an element
+ */
+function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
+  // Don't start if already editing
+  if (el.querySelector('input')) return;
+
+  const originalContent = el.innerHTML;
+  const currentValue = el.textContent.trim();
+  const displayValue = currentValue === '—' || currentValue === '-' ? '' : currentValue;
+
+  // Create input
+  const input = document.createElement('input');
+  input.type = inputType === 'time' ? 'text' : 'text';
+  input.value = displayValue;
+  input.className = 'inline-edit-input';
+  input.style.cssText = `
+    width: 100%;
+    padding: 2px 4px;
+    font-size: inherit;
+    font-family: inherit;
+    border: 1px solid #4a90d9;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+    outline: none;
+  `;
+
+  if (inputType === 'time') {
+    input.placeholder = 'HH:MM';
+    input.maxLength = 5;
+  }
+
+  // Clear element and add input
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  // Save function
+  const saveEdit = () => {
+    const newValue = input.value.trim();
+
+    // Validate time format if time type
+    if (inputType === 'time' && newValue && !/^\d{1,2}:\d{2}$/.test(newValue)) {
+      showToast('Invalid time format. Use HH:MM', 'error');
+      input.focus();
+      return;
+    }
+
+    // Update movement
+    const updateData = {};
+    updateData[fieldName] = newValue || null;
+    updateMovement(movementId, updateData);
+
+    // Re-render
+    renderLiveBoard();
+    renderHistoryBoard();
+
+    if (onSave) onSave();
+  };
+
+  // Cancel function
+  const cancelEdit = () => {
+    el.innerHTML = originalContent;
+  };
+
+  // Event handlers
+  input.addEventListener('blur', () => {
+    // Small delay to allow click events to register first
+    setTimeout(() => {
+      if (document.activeElement !== input) {
+        saveEdit();
+      }
+    }, 100);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEdit();
+    }
+  });
+
+  // Prevent row click events
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
 /**
  * Convert text input to uppercase on input event
  * Applies to aviation-related fields that should always be uppercase
@@ -934,8 +1050,9 @@ function renderExpandedRow(tbody, m, context = 'live') {
 }
 
 /**
- * Auto-activate PLANNED arrivals when they reach the configured time before ETA
- * Note: Only ARR flights are auto-activated. DEP and LOC flights must be manually activated.
+ * Auto-activate PLANNED arrivals and overflights when they reach the configured time before ETA/EOFT
+ * Note: Only ARR and OVR flights are auto-activated. DEP and LOC flights must be manually activated.
+ * For OVR: ETA field = EOFT (Expected On Frequency Time)
  */
 function autoActivatePlannedArrivals() {
   const config = getConfig();
@@ -946,15 +1063,17 @@ function autoActivatePlannedArrivals() {
   }
 
   const now = new Date();
-  const minutesBeforeEta = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // Max 2 hours
+  const minutesBeforeEtaArr = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // For ARR
+  const minutesBeforeEoftOvr = Math.min(config.ovrAutoActivateMinutes || 30, 120); // For OVR
 
-  // Get all PLANNED arrivals (only ARR, not LOC or DEP)
-  const plannedArrivals = getMovements().filter(m =>
+  // Get all PLANNED arrivals and overflights
+  const plannedMovements = getMovements().filter(m =>
     m.status === 'PLANNED' &&
-    m.flightType === 'ARR'
+    (m.flightType === 'ARR' || m.flightType === 'OVR')
   );
 
-  for (const movement of plannedArrivals) {
+  for (const movement of plannedMovements) {
+    // For OVR, ETA is actually EOFT (Expected On Frequency Time)
     const eta = getETA(movement);
 
     // Skip if no valid ETA or DOF
@@ -975,11 +1094,14 @@ function autoActivatePlannedArrivals() {
     const etaDate = new Date(movement.dof + 'T00:00:00Z');
     etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
 
-    // Calculate minutes until ETA
+    // Calculate minutes until ETA/EOFT
     const minutesUntilEta = Math.floor((etaDate - now) / (1000 * 60));
 
+    // Use appropriate activation window based on flight type
+    const activationWindow = movement.flightType === 'OVR' ? minutesBeforeEoftOvr : minutesBeforeEtaArr;
+
     // Auto-activate if within the configured window
-    if (minutesUntilEta <= minutesBeforeEta && minutesUntilEta >= -60) {
+    if (minutesUntilEta <= activationWindow && minutesUntilEta >= -60) {
       // Don't auto-activate if more than 1 hour past ETA (probably stale)
       transitionToActive(movement.id);
     }
@@ -1106,25 +1228,25 @@ export function renderLiveBoard() {
     tr.innerHTML = `
       <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
-        <div class="${callsignClass}">${escapeHtml(m.callsignCode)}</div>
+        <div class="${callsignClass} js-edit-callsign">${escapeHtml(m.callsignCode)}</div>
         <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
       </td>
       <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 6px 0 4px;' : 'padding: 0; width: 0;'}">
         ${m.priorityLetter ? `<span class="priority-letter" title="Flight Priority ${escapeHtml(m.priorityLetter)}">${escapeHtml(m.priorityLetter)}</span>` : ''}
       </td>
       <td>
-        <div class="cell-strong">${escapeHtml(m.registration || "—")}${m.type ? ` · <span title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
+        <div class="cell-strong"><span class="js-edit-reg">${escapeHtml(m.registration || "—")}</span>${m.type ? ` · <span class="js-edit-type" title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
         <div class="cell-muted">WTC: ${wtcDisplay}</div>
       </td>
       <td>
-        <div class="cell-strong"><span${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
-        <div class="cell-strong"><span${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
+        <div class="cell-strong"><span class="js-edit-dep-ad"${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
+        <div class="cell-strong"><span class="js-edit-arr-ad"${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
       </td>
       <td style="text-align: center;">
         <div class="cell-strong">${rulesDisplay}</div>
       </td>
       <td${tooltipTitle}>
-        <div class="cell-strong">${escapeHtml(depDisplay)} / ${overdueClass ? `<span class="${overdueClass}">${escapeHtml(arrDisplay)}</span>` : escapeHtml(arrDisplay)}</div>
+        <div class="cell-strong"><span class="js-edit-dep-time">${escapeHtml(depDisplay)}</span> / ${overdueClass ? `<span class="js-edit-arr-time ${overdueClass}">${escapeHtml(arrDisplay)}</span>` : `<span class="js-edit-arr-time">${escapeHtml(arrDisplay)}</span>`}</div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
@@ -1305,6 +1427,27 @@ export function renderLiveBoard() {
       renderLiveBoard();
       renderHistoryBoard();
     });
+
+    // Bind inline edit handlers (double-click to edit)
+    const ft = (m.flightType || "").toUpperCase();
+    enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-reg"), m.id, "registration", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-type"), m.id, "type", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
+
+    // Time field mapping depends on flight type
+    const depTimeEl = tr.querySelector(".js-edit-dep-time");
+    const arrTimeEl = tr.querySelector(".js-edit-arr-time");
+    if (ft === "DEP" || ft === "LOC") {
+      enableInlineEdit(depTimeEl, m.id, m.atd ? "atd" : "etd", "time");
+    }
+    if (ft === "ARR" || ft === "LOC") {
+      enableInlineEdit(arrTimeEl, m.id, m.ata ? "ata" : "eta", "time");
+    }
+    if (ft === "OVR") {
+      enableInlineEdit(depTimeEl, m.id, m.act ? "act" : "ect", "time");
+    }
 
     tbody.appendChild(tr);
 
@@ -3794,13 +3937,32 @@ export function initHistoryBoard() {
 ------------------------------ */
 
 /**
- * Configuration for the timeline view
+ * Get timeline configuration from app config
  */
-const TIMELINE_CONFIG = {
-  startHour: 6,      // Start at 06:00 UTC
-  endHour: 22,       // End at 22:00 UTC (16 hour window)
-  pixelsPerHour: 60  // Width of each hour segment
-};
+function getTimelineConfig() {
+  const cfg = getConfig();
+  return {
+    enabled: cfg.timelineEnabled !== false,
+    startHour: cfg.timelineStartHour ?? 6,
+    endHour: cfg.timelineEndHour ?? 22,
+    pixelsPerHour: 60
+  };
+}
+
+/**
+ * Get default flight duration for a flight type (in minutes)
+ */
+function getDefaultFlightDuration(flightType) {
+  const cfg = getConfig();
+  const ft = (flightType || '').toUpperCase();
+  switch (ft) {
+    case 'LOC': return cfg.locFlightDurationMinutes || 40;
+    case 'DEP': return cfg.depFlightDurationMinutes || 60;
+    case 'ARR': return cfg.arrFlightDurationMinutes || 60;
+    case 'OVR': return cfg.ovrFlightDurationMinutes || 15;
+    default: return 60;
+  }
+}
 
 /**
  * Render the timeline scale (hour markers)
@@ -3811,7 +3973,7 @@ function renderTimelineScale() {
 
   scale.innerHTML = '';
 
-  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+  const { startHour, endHour, pixelsPerHour } = getTimelineConfig();
   const totalWidth = (endHour - startHour) * pixelsPerHour;
 
   scale.style.width = `${totalWidth}px`;
@@ -3853,7 +4015,7 @@ function renderTimelineTracks() {
   tracks.innerHTML = '';
 
   const movements = getMovements();
-  const { startHour, endHour, pixelsPerHour } = TIMELINE_CONFIG;
+  const { startHour, endHour } = getTimelineConfig();
 
   // Filter to planned and active movements
   const relevantMovements = movements.filter(m =>
@@ -3944,8 +4106,8 @@ function renderTimelineTracks() {
     // Create movement bar
     const bar = document.createElement('div');
     const ftClass = `ft-${(m.flightType || 'loc').toLowerCase()}`;
-    const statusClass = `status-${(m.status || 'planned').toLowerCase()}`;
-    bar.className = `timeline-movement-bar ${ftClass} ${statusClass}`;
+    const movementStatusClass = `status-${(m.status || 'planned').toLowerCase()}`;
+    bar.className = `timeline-movement-bar ${ftClass} ${movementStatusClass}`;
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
     bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
@@ -3990,7 +4152,7 @@ export function updateTimelineNowLine() {
   const now = new Date();
   const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
-  const { startHour, endHour } = TIMELINE_CONFIG;
+  const { startHour, endHour } = getTimelineConfig();
   const timelineStartMinutes = startHour * 60;
   const timelineEndMinutes = endHour * 60;
 
@@ -4020,6 +4182,18 @@ export function updateTimelineNowLine() {
  * Render the complete timeline
  */
 export function renderTimeline() {
+  const container = byId("timelineContainer");
+  if (!container) return;
+
+  const { enabled } = getTimelineConfig();
+
+  // Show or hide timeline based on config
+  if (!enabled) {
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.classList.remove('hidden');
   renderTimelineScale();
   renderTimelineTracks();
   updateTimelineNowLine();

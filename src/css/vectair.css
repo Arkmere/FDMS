@@ -208,6 +208,17 @@ body {
   align-items: center;
 }
 
+/* Quick stat counter (e.g., generic overflights) */
+.quick-stat-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+}
+
 .field,
 .btn {
   font-size: 12px;
@@ -1665,6 +1676,37 @@ tr.strip.ft-ovr > td {
 
 /* Adjust table-container when timeline is present */
 #tab-live > .panel > .timeline-container + .table-container {
-  border-radius: 0 0 4px 4px;
-  border-top: none;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+/* Timeline hidden state */
+.timeline-container.hidden {
+  display: none;
+}
+
+/* ============================================
+   Inline Edit
+   ============================================ */
+
+/* Subtle indicator for editable fields */
+[data-inline-edit-enabled="true"] {
+  border-bottom: 1px dotted transparent;
+  transition: border-color 0.2s ease;
+}
+
+[data-inline-edit-enabled="true"]:hover {
+  border-bottom-color: #4a90d9;
+}
+
+.inline-edit-input {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid #4a90d9;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+  outline: none;
 }

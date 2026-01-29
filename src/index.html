@@ -76,10 +76,18 @@
               </div>
 
               <div class="toolbar-right">
+                <!-- Generic Overflights Counter -->
+                <div class="quick-stat-counter" title="Add generic overflights (free callers not on strip bay) to today's statistics">
+                  <span style="font-size: 11px; color: #666;">Generic OVR:</span>
+                  <button class="counter-btn" id="btnDecGenericOvr" type="button" aria-label="Decrease generic overflights">−</button>
+                  <span id="genericOvrCount" style="min-width: 24px; text-align: center; font-weight: 600; font-size: 13px;">0</span>
+                  <button class="counter-btn" id="btnIncGenericOvr" type="button" aria-label="Increase generic overflights">+</button>
+                </div>
+                <div style="width: 1px; height: 24px; background: #ccc; margin: 0 4px;"></div>
                 <button class="btn btn-ft btn-ft-loc" id="btnNewLoc" type="button" aria-label="Create new local flight">New LOC</button>
                 <button class="btn btn-ft btn-ft-dep" id="btnNewDep" type="button" aria-label="Create new departure">New DEP</button>
                 <button class="btn btn-ft btn-ft-arr" id="btnNewArr" type="button" aria-label="Create new arrival">New ARR</button>
-                <button class="btn btn-ft btn-ft-ovr" id="btnNewOvr" type="button" aria-label="Create new overflight">New OVR</button>
+                <button class="btn btn-ft btn-ft-ovr" id="btnNewOvr" type="button" aria-label="Create new planned overflight">New OVR</button>
               </div>
             </div>
 
@@ -437,6 +445,53 @@
             </div>
           </div>
 
+          <!-- Timeline Settings -->
+          <div class="panel">
+            <h3>Day View / Timeline Settings</h3>
+            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+              Configure the timeline display above the Strip Bay on the Live Board.
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configTimelineEnabled" style="cursor: pointer;" checked>
+                  <span style="font-size: 12px; font-weight: bold;">Show timeline on Live Board</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Display a visual timeline showing planned and active movements throughout the day
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Start Hour (UTC)</label>
+                  <select id="configTimelineStartHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                    <option value="0">00:00</option>
+                    <option value="4">04:00</option>
+                    <option value="5">05:00</option>
+                    <option value="6" selected>06:00</option>
+                    <option value="7">07:00</option>
+                    <option value="8">08:00</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">End Hour (UTC)</label>
+                  <select id="configTimelineEndHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                    <option value="18">18:00</option>
+                    <option value="20">20:00</option>
+                    <option value="22" selected>22:00</option>
+                    <option value="23">23:00</option>
+                    <option value="24">24:00 (midnight)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size: 11px; color: #666;">
+                Timeline will display movements scheduled within this UTC time window.
+              </div>
+            </div>
+          </div>
+
           <!-- Configuration -->
           <div class="panel">
             <h3>Configuration</h3>
@@ -506,7 +561,7 @@
                   <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to ETD + this (default flight duration)</td>
                 </tr>
                 <tr>
-                  <td style="padding: 6px; font-weight: bold;">OVR</td>
+                  <td style="padding: 6px; font-weight: bold;">OVR Offset</td>
                   <td style="padding: 6px;">
                     <input
                       type="number"
@@ -516,7 +571,33 @@
                       style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
                     />
                   </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ECT defaults to now + this</td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">EOFT defaults to now + this (Expected On Frequency Time)</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">OVR Duration</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configOvrDuration"
+                      min="1"
+                      max="60"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">ELFT = EOFT + this (time on frequency, default 5 min)</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px; font-weight: bold;">OVR Activate</td>
+                  <td style="padding: 6px;">
+                    <input
+                      type="number"
+                      id="configOvrAutoActivate"
+                      min="5"
+                      max="120"
+                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                    />
+                  </td>
+                  <td style="padding: 6px; font-size: 11px; color: #666;">Auto-activate this many minutes before EOFT</td>
                 </tr>
               </tbody>
             </table>

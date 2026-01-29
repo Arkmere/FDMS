@@ -14,8 +14,12 @@ const defaultConfig = {
   depOffsetMinutes: 10,   // DEP: ETD = now + this
   arrOffsetMinutes: 90,   // ARR: ETA = now + this
   locOffsetMinutes: 10,   // LOC: ETD = now + this
-  locFlightDurationMinutes: 40, // LOC: ETA = ETD + this
-  ovrOffsetMinutes: 0,    // OVR: ECT = now + this
+  locFlightDurationMinutes: 40, // LOC: ETA = ETD + this (default flight duration)
+  depFlightDurationMinutes: 60, // DEP: Default flight duration for timeline display
+  arrFlightDurationMinutes: 60, // ARR: Default flight duration for timeline display
+  ovrFlightDurationMinutes: 5,  // OVR: ELFT = EOFT + this (time on frequency, default 5 min)
+  ovrOffsetMinutes: 0,          // OVR: EOFT = now + this (when creating new OVR)
+  ovrAutoActivateMinutes: 30,   // OVR: Auto-activate this many minutes before EOFT
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
   showLocalTime: false,   // Show local time conversions alongside UTC
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
@@ -29,7 +33,11 @@ const defaultConfig = {
   historyShowTimeAlerts: false,      // Show time-based alerts (stale, overdue) in History - off by default
   historyShowEmergencyAlerts: true,  // Show emergency alerts (7500/7600/7700) in History
   historyShowCallsignAlerts: false,  // Show callsign confusion alerts in History - off by default
-  historyShowWtcAlerts: false        // Show WTC threshold alerts in History - off by default
+  historyShowWtcAlerts: false,       // Show WTC threshold alerts in History - off by default
+  // Timeline settings
+  timelineEnabled: true,             // Show timeline on Live Board
+  timelineStartHour: 6,              // Timeline start hour (UTC)
+  timelineEndHour: 22                // Timeline end hour (UTC)
 };
 
 // Configuration state
@@ -1054,4 +1062,68 @@ export function getStorageQuota() {
 export function hasEnoughStorageSpace(estimatedSize = 100000) {
   const quota = getStorageQuota();
   return quota.available > estimatedSize;
+}
+
+/* -----------------------------
+   Generic Overflights Counter
+   (Free callers not on strip bay)
+------------------------------ */
+
+const GENERIC_OVR_STORAGE_KEY = "fdms_generic_overflights";
+
+/**
+ * Get the storage key for today's generic overflights
+ */
+function getGenericOvrKeyForDate(dateStr = null) {
+  if (!dateStr) {
+    const now = new Date();
+    const yyyy = now.getUTCFullYear();
+    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(now.getUTCDate()).padStart(2, '0');
+    dateStr = `${yyyy}-${mm}-${dd}`;
+  }
+  return `${GENERIC_OVR_STORAGE_KEY}_${dateStr}`;
+}
+
+/**
+ * Get generic overflights count for a specific date (default: today)
+ * @param {string} dateStr - Date in YYYY-MM-DD format (optional, defaults to today UTC)
+ * @returns {number} The count of generic overflights
+ */
+export function getGenericOverflightsCount(dateStr = null) {
+  const key = getGenericOvrKeyForDate(dateStr);
+  const stored = localStorage.getItem(key);
+  return stored ? parseInt(stored, 10) : 0;
+}
+
+/**
+ * Set generic overflights count for a specific date (default: today)
+ * @param {number} count - The count to set
+ * @param {string} dateStr - Date in YYYY-MM-DD format (optional, defaults to today UTC)
+ */
+export function setGenericOverflightsCount(count, dateStr = null) {
+  const key = getGenericOvrKeyForDate(dateStr);
+  localStorage.setItem(key, String(Math.max(0, count)));
+}
+
+/**
+ * Increment generic overflights count for today
+ * @returns {number} The new count
+ */
+export function incrementGenericOverflights() {
+  const current = getGenericOverflightsCount();
+  const newCount = current + 1;
+  setGenericOverflightsCount(newCount);
+  return newCount;
+}
+
+/**
+ * Decrement generic overflights count for today (min 0)
+ * @returns {number} The new count
+ */
+export function decrementGenericOverflights() {
+  const current = getGenericOverflightsCount();
+  const newCount = Math.max(0, current - 1);
+  setGenericOverflightsCount(newCount);
+  return newCount;
 }
