@@ -370,6 +370,56 @@
             <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
           </div>
 
+          <!-- History Settings -->
+          <div class="panel">
+            <h3>History Settings</h3>
+            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+              Control which alerts are displayed in the History tab's expanded strip details. Time-based alerts are hidden by default as they are less relevant for historical movements.
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configHistoryShowTimeAlerts" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: bold;">Show time-based alerts</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Includes: "Movement is X hours old", Overdue (preliminary &amp; full) action alerts
+                </div>
+              </div>
+
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configHistoryShowEmergencyAlerts" style="cursor: pointer;" checked>
+                  <span style="font-size: 12px; font-weight: bold;">Show emergency alerts</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Includes: Squawk 7500 (hijack), 7600 (radio failure), 7700 (general emergency)
+                </div>
+              </div>
+
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configHistoryShowCallsignAlerts" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: bold;">Show callsign confusion alerts</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Includes: Registration confusion, VKB contraction, similar callsign, military callsign conflicts
+                </div>
+              </div>
+
+              <div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" id="configHistoryShowWtcAlerts" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: bold;">Show wake turbulence category alerts</span>
+                </label>
+                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                  Highlights aircraft meeting or exceeding the configured WTC threshold
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Configuration -->
           <div class="panel">
             <h3>Configuration</h3>

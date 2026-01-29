@@ -446,6 +446,11 @@ function initAdminPanelHandlers() {
   const configAutoActivateMinutes = document.getElementById("configAutoActivateMinutes");
   const configWtcSystem = document.getElementById("configWtcSystem");
   const configWtcThreshold = document.getElementById("configWtcThreshold");
+  // History alert visibility settings
+  const configHistoryShowTimeAlerts = document.getElementById("configHistoryShowTimeAlerts");
+  const configHistoryShowEmergencyAlerts = document.getElementById("configHistoryShowEmergencyAlerts");
+  const configHistoryShowCallsignAlerts = document.getElementById("configHistoryShowCallsignAlerts");
+  const configHistoryShowWtcAlerts = document.getElementById("configHistoryShowWtcAlerts");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Helper to populate WTC threshold options based on system
@@ -527,6 +532,12 @@ function initAdminPanelHandlers() {
   }
   if (configWtcThreshold) configWtcThreshold.value = currentConfig.wtcAlertThreshold || "off";
 
+  // Load History alert visibility settings
+  if (configHistoryShowTimeAlerts) configHistoryShowTimeAlerts.checked = currentConfig.historyShowTimeAlerts || false;
+  if (configHistoryShowEmergencyAlerts) configHistoryShowEmergencyAlerts.checked = currentConfig.historyShowEmergencyAlerts !== false;
+  if (configHistoryShowCallsignAlerts) configHistoryShowCallsignAlerts.checked = currentConfig.historyShowCallsignAlerts || false;
+  if (configHistoryShowWtcAlerts) configHistoryShowWtcAlerts.checked = currentConfig.historyShowWtcAlerts || false;
+
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
       const depOffset = parseInt(configDepOffset?.value || "10", 10);
@@ -542,6 +553,11 @@ function initAdminPanelHandlers() {
       const autoActivateMinutes = parseInt(configAutoActivateMinutes?.value || "30", 10);
       const wtcSystem = configWtcSystem?.value || "ICAO";
       const wtcThreshold = configWtcThreshold?.value || "off";
+      // History alert visibility settings
+      const historyShowTimeAlerts = configHistoryShowTimeAlerts?.checked || false;
+      const historyShowEmergencyAlerts = configHistoryShowEmergencyAlerts?.checked !== false;
+      const historyShowCallsignAlerts = configHistoryShowCallsignAlerts?.checked || false;
+      const historyShowWtcAlerts = configHistoryShowWtcAlerts?.checked || false;
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -568,7 +584,11 @@ function initAdminPanelHandlers() {
         autoActivateEnabled: autoActivateEnabled,
         autoActivateMinutesBeforeEta: autoActivateMinutes,
         wtcSystem: wtcSystem,
-        wtcAlertThreshold: wtcThreshold
+        wtcAlertThreshold: wtcThreshold,
+        historyShowTimeAlerts: historyShowTimeAlerts,
+        historyShowEmergencyAlerts: historyShowEmergencyAlerts,
+        historyShowCallsignAlerts: historyShowCallsignAlerts,
+        historyShowWtcAlerts: historyShowWtcAlerts
       });
       showToast("Configuration saved successfully", 'success');
     });

@@ -24,7 +24,12 @@ const defaultConfig = {
   wtcSystem: "ICAO",        // Wake turbulence system: "ICAO", "UK", or "RECAT"
   wtcAlertThreshold: "off", // ICAO: "off","M","H" | UK: "off","S","LM","UM","H","J" | RECAT: "off","E","D","C","B","A"
   autoActivateEnabled: true, // Automatically activate PLANNED arrivals before ETA
-  autoActivateMinutesBeforeEta: 30 // Minutes before ETA to auto-activate (max: 120)
+  autoActivateMinutesBeforeEta: 30, // Minutes before ETA to auto-activate (max: 120)
+  // History tab alert visibility settings
+  historyShowTimeAlerts: false,      // Show time-based alerts (stale, overdue) in History - off by default
+  historyShowEmergencyAlerts: true,  // Show emergency alerts (7500/7600/7700) in History
+  historyShowCallsignAlerts: false,  // Show callsign confusion alerts in History - off by default
+  historyShowWtcAlerts: false        // Show WTC threshold alerts in History - off by default
 };
 
 // Configuration state

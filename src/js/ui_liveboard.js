@@ -801,7 +801,7 @@ function generateMovementAlerts(m) {
   return alerts;
 }
 
-function renderExpandedRow(tbody, m) {
+function renderExpandedRow(tbody, m, context = 'live') {
   const expTr = document.createElement("tr");
   expTr.className = "expand-row";
 
@@ -827,7 +827,30 @@ function renderExpandedRow(tbody, m) {
   }
 
   // Generate alerts for this movement
-  const alerts = generateMovementAlerts(m);
+  let alerts = generateMovementAlerts(m);
+
+  // Filter alerts based on History settings when in history context
+  if (context === 'history') {
+    const config = getConfig();
+    alerts = alerts.filter(alert => {
+      // Time-based alerts: stale, overdue_full, overdue_preliminary
+      const isTimeAlert = ['stale', 'overdue_full', 'overdue_preliminary'].includes(alert.type);
+      if (isTimeAlert && !config.historyShowTimeAlerts) return false;
+
+      // Emergency alerts: emergency_hijack, emergency_radio, emergency_general
+      const isEmergencyAlert = ['emergency_hijack', 'emergency_radio', 'emergency_general'].includes(alert.type);
+      if (isEmergencyAlert && !config.historyShowEmergencyAlerts) return false;
+
+      // Callsign confusion alerts
+      const isCallsignAlert = ['callsign_confusion_reg', 'callsign_confusion_contraction', 'callsign_confusion_ua', 'callsign_confusion_military'].includes(alert.type);
+      if (isCallsignAlert && !config.historyShowCallsignAlerts) return false;
+
+      // WTC alerts
+      if (alert.type === 'wtc_alert' && !config.historyShowWtcAlerts) return false;
+
+      return true;
+    });
+  }
 
   // Render alerts section
   const alertsSection = alerts.length > 0 ? `
@@ -3714,7 +3737,7 @@ export function renderHistoryBoard() {
 
     // Render expanded row if this movement is expanded
     if (historyExpandedId === m.id) {
-      renderExpandedRow(tbody, m);
+      renderExpandedRow(tbody, m, 'history');
     }
   }
 }
