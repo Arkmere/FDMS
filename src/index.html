@@ -226,8 +226,7 @@
                       <input type="text" id="bookingRegistration" class="modal-input" placeholder="G-ABCD" required style="text-transform: uppercase;">
                     </div>
                     <div class="registry-buttons">
-                      <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register">CAA G-INFO</button>
-                      <button type="button" class="btn btn-registry btn-small" id="btnCopyReg">Copy reg</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register (copies registration without G-)">CAA G-INFO</button>
                       <button type="button" class="btn btn-registry btn-small" id="btnFaaRegistry" title="Open FAA N-Number Registry">FAA Registry</button>
                     </div>
                   </div>
@@ -242,10 +241,10 @@
                   <div class="modal-field">
                     <label class="modal-label">MTOW <span class="required-mark">*</span></label>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                      <input type="number" id="bookingMtow" class="modal-input" min="0" step="0.01" placeholder="2.30" required style="flex: 1;">
+                      <input type="number" id="bookingMtow" class="modal-input" min="0" step="1" placeholder="1000" required style="flex: 1;">
                       <select id="bookingMtowUnit" class="modal-select" style="width: auto;">
-                        <option value="t" selected>tonnes</option>
-                        <option value="kg">kg</option>
+                        <option value="kg" selected>kg</option>
+                        <option value="t">tonnes</option>
                       </select>
                     </div>
                   </div>
@@ -261,10 +260,10 @@
                   </div>
                   <div class="modal-field">
                     <label class="booking-checkbox-label">
-                      <input type="checkbox" id="bookingHasCuiw" checked>
+                      <input type="checkbox" id="bookingHasCuiw">
                       <span>Has Civil User Indemnity Waiver (CUIW)</span>
                     </label>
-                    <div class="help-text">If unchecked, a waiver fee will be added to charges.</div>
+                    <div class="help-text">If unchecked, a £25 waiver fee will be added to charges.</div>
                   </div>
                 </div>
               </div>

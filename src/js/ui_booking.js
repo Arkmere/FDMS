@@ -691,18 +691,6 @@ function openFaaRegistry() {
   window.open('https://registry.faa.gov/aircraftinquiry/Search/NNumberInquiry', '_blank');
 }
 
-function copyRegistration() {
-  const reg = byId('bookingRegistration')?.value || '';
-  const normalized = (reg || '').toUpperCase().trim();
-
-  if (normalized) {
-    copyToClipboard(normalized);
-    showToast(`Copied '${normalized}' to clipboard`, 'success', 3000);
-  } else {
-    showToast('No registration to copy', 'warning', 3000);
-  }
-}
-
 /* -----------------------------
    Booking Submission
 ------------------------------ */
@@ -1215,7 +1203,6 @@ export function initBookingPage() {
   // Registry lookup buttons
   byId('btnCaaGinfo')?.addEventListener('click', openCaaGinfo);
   byId('btnFaaRegistry')?.addEventListener('click', openFaaRegistry);
-  byId('btnCopyReg')?.addEventListener('click', copyRegistration);
 
   // Action buttons
   byId('btnResetBooking')?.addEventListener('click', resetForm);
