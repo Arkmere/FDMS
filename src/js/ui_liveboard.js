@@ -4044,8 +4044,8 @@ function renderTimelineTracks() {
 
     if (!startTimeStr) return;
 
-    let startMinutes = timelineTimeToMinutes(startTimeStr);
-    let endMinutes = timelineTimeToMinutes(endTimeStr);
+    let startMinutes = timeToMinutes(startTimeStr);
+    let endMinutes = timeToMinutes(endTimeStr);
 
     if (!Number.isFinite(startMinutes)) {
       return;
