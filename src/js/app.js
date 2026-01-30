@@ -35,7 +35,8 @@ import {
   updateConfig,
   getGenericOverflightsCount,
   incrementGenericOverflights,
-  decrementGenericOverflights
+  decrementGenericOverflights,
+  getMovements
 } from "./datamodel.js";
 
 import {
@@ -472,6 +473,9 @@ function initAdminPanelHandlers() {
   const configTimelineEnabled = document.getElementById("configTimelineEnabled");
   const configTimelineStartHour = document.getElementById("configTimelineStartHour");
   const configTimelineEndHour = document.getElementById("configTimelineEndHour");
+  // Reciprocal strip settings
+  const configDepToArrOffset = document.getElementById("configDepToArrOffset");
+  const configArrToDepOffset = document.getElementById("configArrToDepOffset");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
 
   // Helper to populate WTC threshold options based on system
@@ -566,6 +570,10 @@ function initAdminPanelHandlers() {
   if (configTimelineStartHour) configTimelineStartHour.value = currentConfig.timelineStartHour ?? 6;
   if (configTimelineEndHour) configTimelineEndHour.value = currentConfig.timelineEndHour ?? 22;
 
+  // Load Reciprocal strip settings
+  if (configDepToArrOffset) configDepToArrOffset.value = currentConfig.depToArrOffsetMinutes ?? 180;
+  if (configArrToDepOffset) configArrToDepOffset.value = currentConfig.arrToDepOffsetMinutes ?? 30;
+
   if (btnSaveConfig) {
     btnSaveConfig.addEventListener("click", () => {
       const depOffset = parseInt(configDepOffset?.value || "10", 10);
@@ -592,6 +600,9 @@ function initAdminPanelHandlers() {
       const timelineEnabled = configTimelineEnabled?.checked !== false;
       const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
       const timelineEndHour = parseInt(configTimelineEndHour?.value || "22", 10);
+      // Reciprocal strip settings
+      const depToArrOffset = parseInt(configDepToArrOffset?.value || "180", 10);
+      const arrToDepOffset = parseInt(configArrToDepOffset?.value || "30", 10);
 
       // Validate all offsets
       if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
@@ -629,7 +640,9 @@ function initAdminPanelHandlers() {
         historyShowWtcAlerts: historyShowWtcAlerts,
         timelineEnabled: timelineEnabled,
         timelineStartHour: timelineStartHour,
-        timelineEndHour: timelineEndHour
+        timelineEndHour: timelineEndHour,
+        depToArrOffsetMinutes: depToArrOffset,
+        arrToDepOffsetMinutes: arrToDepOffset
       });
       showToast("Configuration saved successfully", 'success');
       // Re-render timeline with new settings
@@ -643,30 +656,54 @@ function initAdminPanelHandlers() {
  * This allows quick addition of free-caller overflights to today's stats
  * without creating individual strips
  */
+/**
+ * Calculate total FIS count from all strips on the board
+ * @returns {number} Total FIS count from strips
+ */
+function calculateStripFisCount() {
+  const movements = getMovements();
+  return movements.reduce((total, m) => total + (m.fisCount || 0), 0);
+}
+
+/**
+ * Update all FIS counter displays
+ */
+function updateFisCounters() {
+  const genericDisplay = document.getElementById("genericOvrCount");
+  const stripFisDisplay = document.getElementById("stripFisCount");
+  const totalFisDisplay = document.getElementById("totalFisCount");
+
+  const genericCount = getGenericOverflightsCount();
+  const stripFisCount = calculateStripFisCount();
+  const totalFis = genericCount + stripFisCount;
+
+  if (genericDisplay) genericDisplay.textContent = genericCount;
+  if (stripFisDisplay) stripFisDisplay.textContent = stripFisCount;
+  if (totalFisDisplay) totalFisDisplay.textContent = totalFis;
+}
+
+// Export for use in other modules
+window.updateFisCounters = updateFisCounters;
+
 function initGenericOverflightsCounter() {
-  const countDisplay = document.getElementById("genericOvrCount");
   const btnInc = document.getElementById("btnIncGenericOvr");
   const btnDec = document.getElementById("btnDecGenericOvr");
 
-  if (!countDisplay || !btnInc || !btnDec) return;
+  if (!btnInc || !btnDec) return;
 
-  // Initialize display with current count
-  const updateDisplay = () => {
-    countDisplay.textContent = getGenericOverflightsCount();
-  };
-
-  updateDisplay();
+  // Initialize display with current counts
+  updateFisCounters();
 
   // Increment button
   btnInc.addEventListener("click", () => {
     incrementGenericOverflights();
-    updateDisplay();
+    updateFisCounters();
   });
 
   // Decrement button
   btnDec.addEventListener("click", () => {
     decrementGenericOverflights();
-    updateDisplay();
+    updateFisCounters();
   });
 }
 

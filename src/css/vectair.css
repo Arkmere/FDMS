@@ -219,6 +219,47 @@ body {
   border-radius: 4px;
 }
 
+/* FIS Counter Section */
+.fis-counter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.fis-counter-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fis-label {
+  color: #666;
+  min-width: 50px;
+}
+
+.fis-value {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.fis-total-row {
+  border-top: 1px solid #ddd;
+  padding-top: 2px;
+  margin-top: 2px;
+}
+
+.fis-total {
+  color: var(--ft-ovr);
+  font-size: 13px;
+}
+
 .field,
 .btn {
   font-size: 12px;
@@ -327,6 +368,11 @@ tbody tr.strip-row {
 
 tbody tr.strip-row:hover {
   filter: brightness(0.985);
+}
+
+tbody tr.strip-row.strip-highlight {
+  background-color: #fffbcc !important;
+  transition: background-color 0.15s ease;
 }
 
 .filter-row input {
@@ -1576,65 +1622,56 @@ tr.strip.ft-ovr > td {
 
 .timeline-tracks {
   position: relative;
-  min-height: 60px;
-  max-height: 120px;
+  min-height: 24px;
+  max-height: 60px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .timeline-track {
   position: relative;
-  height: 22px;
-  margin: 2px 0;
+  height: 8px;
+  margin: 1px 0;
 }
 
 .timeline-movement-bar {
   position: absolute;
-  height: 18px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 600;
-  color: #fff;
-  padding: 0 4px;
-  line-height: 18px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  height: 6px;
+  border-radius: 2px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition: opacity 0.15s ease, height 0.15s ease, margin-top 0.15s ease;
   z-index: 1;
 }
 
-.timeline-movement-bar:hover {
-  transform: scale(1.02);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+.timeline-movement-bar:hover,
+.timeline-movement-bar.highlight {
+  height: 8px;
+  margin-top: -1px;
+  opacity: 1 !important;
   z-index: 10;
 }
 
-/* Movement type colors matching strip colors */
+/* Movement type colors matching strip sidebar colors */
 .timeline-movement-bar.ft-loc {
-  background: linear-gradient(135deg, #d87c9e 0%, #c76a8c 100%);
+  background: var(--ft-loc);
 }
 .timeline-movement-bar.ft-dep {
-  background: linear-gradient(135deg, #6bb36b 0%, #5a9f5a 100%);
+  background: var(--ft-dep);
 }
 .timeline-movement-bar.ft-arr {
-  background: linear-gradient(135deg, #5fa3d4 0%, #4a8fc0 100%);
+  background: var(--ft-arr);
 }
 .timeline-movement-bar.ft-ovr {
-  background: linear-gradient(135deg, #a89070 0%, #978060 100%);
+  background: var(--ft-ovr);
 }
 
 /* Status variations */
 .timeline-movement-bar.status-planned {
-  opacity: 0.7;
-  border: 1px dashed rgba(255,255,255,0.5);
+  opacity: 0.6;
 }
 .timeline-movement-bar.status-active {
   opacity: 1;
-  border: 2px solid rgba(255,255,255,0.8);
 }
 
 /* Now indicator line */
@@ -2196,6 +2233,37 @@ tr.strip.ft-ovr > td {
 }
 
 .calendar-event.event-note {
+  background: rgba(139, 201, 144, 0.3);
+  border-left: 3px solid var(--ft-ovr);
+  color: #2a5a2a;
+}
+
+.calendar-event.event-general {
+  background: rgba(150, 150, 150, 0.2);
+  border-left: 3px solid #888;
+  color: #444;
+}
+
+/* Movement type colors on calendar */
+.calendar-event.event-dep {
+  background: rgba(122, 163, 204, 0.3);
+  border-left: 3px solid var(--ft-dep);
+  color: #2a4a6a;
+}
+
+.calendar-event.event-arr {
+  background: rgba(230, 165, 87, 0.3);
+  border-left: 3px solid var(--ft-arr);
+  color: #5a4020;
+}
+
+.calendar-event.event-loc {
+  background: rgba(232, 158, 196, 0.3);
+  border-left: 3px solid var(--ft-loc);
+  color: #6a3050;
+}
+
+.calendar-event.event-ovr {
   background: rgba(139, 201, 144, 0.3);
   border-left: 3px solid var(--ft-ovr);
   color: #2a5a2a;

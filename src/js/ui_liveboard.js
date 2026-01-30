@@ -156,11 +156,15 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
   // Create input
   const input = document.createElement('input');
-  input.type = inputType === 'time' ? 'text' : 'text';
-  input.value = displayValue;
+  input.type = 'text';
+  // For time inputs, strip the colon for easier editing
+  input.value = inputType === 'time' ? displayValue.replace(':', '') : displayValue;
   input.className = 'inline-edit-input';
+
+  // Time inputs get a narrower width
+  const inputWidth = inputType === 'time' ? '50px' : '100%';
   input.style.cssText = `
-    width: 100%;
+    width: ${inputWidth};
     padding: 2px 4px;
     font-size: inherit;
     font-family: inherit;
@@ -169,11 +173,21 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     background: #fff;
     box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
     outline: none;
+    text-align: ${inputType === 'time' ? 'center' : 'left'};
   `;
 
   if (inputType === 'time') {
-    input.placeholder = 'HH:MM';
-    input.maxLength = 5;
+    input.placeholder = 'HHMM';
+    input.maxLength = 4;
+    // Auto-format time input - only allow digits
+    input.addEventListener('input', (e) => {
+      const cursorPos = e.target.selectionStart;
+      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 4);
+      e.target.value = digitsOnly;
+      // Restore cursor position
+      const newPos = Math.min(cursorPos, digitsOnly.length);
+      e.target.setSelectionRange(newPos, newPos);
+    });
   }
 
   // Clear element and add input
@@ -184,13 +198,19 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
   // Save function
   const saveEdit = () => {
-    const newValue = input.value.trim();
+    let newValue = input.value.trim();
 
-    // Validate time format if time type
-    if (inputType === 'time' && newValue && !/^\d{1,2}:\d{2}$/.test(newValue)) {
-      showToast('Invalid time format. Use HH:MM', 'error');
-      input.focus();
-      return;
+    // Validate and normalize time format if time type
+    if (inputType === 'time' && newValue) {
+      // Use validateTime which handles both HHMM and HH:MM
+      const validation = validateTime(newValue);
+      if (!validation.valid) {
+        showToast(validation.error || 'Invalid time format', 'error');
+        input.focus();
+        return;
+      }
+      // Use the normalized value (HH:MM format)
+      newValue = validation.normalized || newValue;
     }
 
     // Update movement
@@ -1294,6 +1314,13 @@ export function renderLiveBoard() {
               <button class="js-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Details</button>
               <button class="js-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
               ${
+                ft === "DEP"
+                  ? '<button class="js-produce-arr" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Arrival</button>'
+                  : ft === "ARR"
+                    ? '<button class="js-produce-dep" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Departure</button>'
+                    : ""
+              }
+              ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
                   ? '<button class="js-cancel" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Cancel</button>'
                   : ""
@@ -1347,6 +1374,24 @@ export function renderLiveBoard() {
       editMenu.style.display = "none";
       tr.style.zIndex = "";
       openDuplicateMovementModal(m);
+    });
+
+    // Bind Produce Arrival option (for DEP strips)
+    const produceArrBtn = tr.querySelector(".js-produce-arr");
+    safeOn(produceArrBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openReciprocalStripModal(m, "ARR");
+    });
+
+    // Bind Produce Departure option (for ARR strips)
+    const produceDepBtn = tr.querySelector(".js-produce-dep");
+    safeOn(produceDepBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openReciprocalStripModal(m, "DEP");
     });
 
     // Bind Cancel option
@@ -1418,6 +1463,7 @@ export function renderLiveBoard() {
       updateMovement(m.id, { fisCount: Math.min((m.fisCount || 0) + 1, 99) });
       renderLiveBoard();
       renderHistoryBoard();
+      if (window.updateFisCounters) window.updateFisCounters();
     });
 
     const decFis = tr.querySelector(".js-dec-fis");
@@ -1426,6 +1472,7 @@ export function renderLiveBoard() {
       updateMovement(m.id, { fisCount: Math.max((m.fisCount || 0) - 1, 0) });
       renderLiveBoard();
       renderHistoryBoard();
+      if (window.updateFisCounters) window.updateFisCounters();
     });
 
     // Bind inline edit handlers (double-click to edit)
@@ -1447,6 +1494,16 @@ export function renderLiveBoard() {
     if (ft === "OVR") {
       enableInlineEdit(depTimeEl, m.id, m.act ? "act" : "ect", "time");
     }
+
+    // Hover sync with timeline bar
+    tr.addEventListener('mouseenter', () => {
+      const timelineBar = document.querySelector(`.timeline-movement-bar[data-movement-id="${m.id}"]`);
+      if (timelineBar) timelineBar.classList.add('highlight');
+    });
+    tr.addEventListener('mouseleave', () => {
+      const timelineBar = document.querySelector(`.timeline-movement-bar[data-movement-id="${m.id}"]`);
+      if (timelineBar) timelineBar.classList.remove('highlight');
+    });
 
     tbody.appendChild(tr);
 
@@ -3486,6 +3543,92 @@ function openDuplicateMovementModal(m) {
 }
 
 /**
+ * Open reciprocal strip creation - create ARR from DEP or DEP from ARR
+ * Swaps aerodromes and calculates time based on config
+ * @param {Object} m - Source movement
+ * @param {string} targetType - "ARR" or "DEP"
+ */
+function openReciprocalStripModal(m, targetType) {
+  const config = getConfig();
+  const sourceFT = (m.flightType || "").toUpperCase();
+
+  // Calculate the reciprocal time
+  let newTime = "";
+  if (sourceFT === "DEP" && targetType === "ARR") {
+    // DEP → ARR: Arrival time = ETD/ATD + depToArrOffsetMinutes
+    const sourceTime = m.depActual || m.depPlanned || "";
+    if (sourceTime) {
+      newTime = addMinutesToTime(sourceTime, config.depToArrOffsetMinutes || 180);
+    }
+  } else if (sourceFT === "ARR" && targetType === "DEP") {
+    // ARR → DEP: Departure time = ETA/ATA + arrToDepOffsetMinutes
+    const sourceTime = m.arrActual || m.arrPlanned || "";
+    if (sourceTime) {
+      newTime = addMinutesToTime(sourceTime, config.arrToDepOffsetMinutes || 30);
+    }
+  }
+
+  // Swap aerodromes - the original arrival becomes the departure and vice versa
+  const newDepAd = m.arrAd || "";
+  const newArrAd = m.depAd || "";
+  const newDepName = getLocationName(newDepAd);
+  const newArrName = getLocationName(newArrAd);
+
+  // Get WTC for new flight type
+  const wtc = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
+
+  // Create the reciprocal movement
+  let movement = {
+    status: "PLANNED",
+    flightType: targetType,
+    callsignCode: m.callsignCode || "",
+    callsignLabel: m.callsignLabel || "",
+    callsignVoice: m.callsignVoice || "",
+    registration: m.registration || "",
+    operator: m.operator || "",
+    type: m.type || "",
+    popularName: m.popularName || "",
+    rules: m.rules || "VFR",
+    depAd: newDepAd,
+    depName: newDepName,
+    arrAd: newArrAd,
+    arrName: newArrName,
+    wtc: wtc,
+    dof: getTodayDateString(),
+    pob: m.pob || 0,
+    tngCount: 0,
+    osCount: 0,
+    fisCount: targetType === "OVR" ? 1 : 0,
+    egowCode: "",
+    ssr: "",
+    remarks: `Reciprocal of ${m.callsignCode || ""} ${sourceFT}`,
+    warnings: m.warnings || "",
+    notes: m.notes || ""
+  };
+
+  // Set appropriate time fields
+  if (targetType === "ARR") {
+    movement.arrPlanned = newTime;
+  } else if (targetType === "DEP") {
+    movement.depPlanned = newTime;
+  }
+
+  // Enrich with auto-populated fields
+  movement = enrichMovementData(movement);
+
+  // Create the movement
+  const newMovement = createMovement(movement);
+  renderLiveBoard();
+  renderHistoryBoard();
+  showToast(`Reciprocal ${targetType} strip created`, 'success');
+
+  // Open edit modal for the new movement so user can adjust
+  if (newMovement) {
+    openEditMovementModal(newMovement);
+  }
+}
+
+/**
  * Transition a PLANNED movement to ACTIVE
  * Sets ATD/ACT to current time
  * Auto-updates DOF to today if flight was planned for future date
@@ -4110,7 +4253,7 @@ function renderTimelineTracks() {
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
     bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
-    bar.textContent = m.callsignCode || '?';
+    // No text content - bars are thin visual indicators only
     bar.dataset.movementId = m.id;
 
     // Click to scroll to movement in strip bay
@@ -4123,6 +4266,20 @@ function renderTimelineTracks() {
         setTimeout(() => {
           stripRow.style.backgroundColor = '';
         }, 1500);
+      }
+    });
+
+    // Hover sync with strip row - highlight strip when hovering timeline bar
+    bar.addEventListener('mouseenter', () => {
+      const stripRow = document.querySelector(`#liveBody tr[data-id="${m.id}"]`);
+      if (stripRow) {
+        stripRow.classList.add('strip-highlight');
+      }
+    });
+    bar.addEventListener('mouseleave', () => {
+      const stripRow = document.querySelector(`#liveBody tr[data-id="${m.id}"]`);
+      if (stripRow) {
+        stripRow.classList.remove('strip-highlight');
       }
     });
 

@@ -67,23 +67,25 @@
                     <option value="999999">All future</option>
                   </select>
                 </label>
-
-                <input
-                  class="field field-search-global"
-                  id="globalSearch"
-                  type="search"
-                  placeholder="Search callsign, reg, type, route, codes…"
-                  aria-label="Search movements"
-                />
               </div>
 
               <div class="toolbar-right">
-                <!-- Generic Overflights Counter -->
-                <div class="quick-stat-counter" title="Add generic overflights (free callers not on strip bay) to today's statistics">
-                  <span style="font-size: 11px; color: #666;">Generic OVR:</span>
-                  <button class="counter-btn" id="btnDecGenericOvr" type="button" aria-label="Decrease generic overflights">−</button>
-                  <span id="genericOvrCount" style="min-width: 24px; text-align: center; font-weight: 600; font-size: 13px;">0</span>
-                  <button class="counter-btn" id="btnIncGenericOvr" type="button" aria-label="Increase generic overflights">+</button>
+                <!-- FIS Counter Section -->
+                <div class="fis-counter-section" title="FIS (Flight Information Service) statistics">
+                  <div class="fis-counter-row">
+                    <span class="fis-label">Generic:</span>
+                    <button class="counter-btn" id="btnDecGenericOvr" type="button" aria-label="Decrease generic FIS">−</button>
+                    <span id="genericOvrCount" class="fis-value">0</span>
+                    <button class="counter-btn" id="btnIncGenericOvr" type="button" aria-label="Increase generic FIS">+</button>
+                  </div>
+                  <div class="fis-counter-row">
+                    <span class="fis-label">Strips:</span>
+                    <span id="stripFisCount" class="fis-value">0</span>
+                  </div>
+                  <div class="fis-counter-row fis-total-row">
+                    <span class="fis-label">Total FIS:</span>
+                    <span id="totalFisCount" class="fis-value fis-total">0</span>
+                  </div>
                 </div>
                 <div style="width: 1px; height: 24px; background: #ccc; margin: 0 4px;"></div>
                 <button class="btn btn-ft btn-ft-loc" id="btnNewLoc" type="button" aria-label="Create new local flight">New LOC</button>
@@ -145,6 +147,9 @@
               <span class="calendar-month-label" id="calendarMonthLabel">January 2026</span>
               <button type="button" class="btn btn-secondary" id="btnCalendarNext" title="Next month">&gt;</button>
               <button type="button" class="btn btn-secondary" id="btnCalendarToday">Today</button>
+            </div>
+            <div class="calendar-actions">
+              <button type="button" class="btn btn-primary" id="btnAddCalendarEvent">+ Add Event</button>
             </div>
           </div>
 
@@ -221,8 +226,7 @@
                       <input type="text" id="bookingRegistration" class="modal-input" placeholder="G-ABCD" required style="text-transform: uppercase;">
                     </div>
                     <div class="registry-buttons">
-                      <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register">CAA G-INFO</button>
-                      <button type="button" class="btn btn-registry btn-small" id="btnCopyReg">Copy reg</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register (copies registration without G-)">CAA G-INFO</button>
                       <button type="button" class="btn btn-registry btn-small" id="btnFaaRegistry" title="Open FAA N-Number Registry">FAA Registry</button>
                     </div>
                   </div>
@@ -237,10 +241,10 @@
                   <div class="modal-field">
                     <label class="modal-label">MTOW <span class="required-mark">*</span></label>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                      <input type="number" id="bookingMtow" class="modal-input" min="0" step="0.01" placeholder="2.30" required style="flex: 1;">
+                      <input type="number" id="bookingMtow" class="modal-input" min="0" step="1" placeholder="1000" required style="flex: 1;">
                       <select id="bookingMtowUnit" class="modal-select" style="width: auto;">
-                        <option value="t" selected>tonnes</option>
-                        <option value="kg">kg</option>
+                        <option value="kg" selected>kg</option>
+                        <option value="t">tonnes</option>
                       </select>
                     </div>
                   </div>
@@ -256,10 +260,10 @@
                   </div>
                   <div class="modal-field">
                     <label class="booking-checkbox-label">
-                      <input type="checkbox" id="bookingHasCuiw" checked>
+                      <input type="checkbox" id="bookingHasCuiw">
                       <span>Has Civil User Indemnity Waiver (CUIW)</span>
                     </label>
-                    <div class="help-text">If unchecked, a waiver fee will be added to charges.</div>
+                    <div class="help-text">If unchecked, a £25 waiver fee will be added to charges.</div>
                   </div>
                 </div>
               </div>
@@ -856,6 +860,42 @@
                 </tr>
               </tbody>
             </table>
+
+            <!-- Reciprocal Strip Settings -->
+            <div style="margin-top: 16px; margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 4px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                Reciprocal Strip Time Offsets
+              </label>
+              <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                Default time calculation when creating reciprocal strips (DEP→ARR or ARR→DEP):
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR (minutes)</label>
+                  <input
+                    type="number"
+                    id="configDepToArrOffset"
+                    min="0"
+                    max="720"
+                    placeholder="180"
+                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                  />
+                  <div style="font-size: 10px; color: #888;">ETA = ETD/ATD + this (default 3 hours)</div>
+                </div>
+                <div>
+                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP (minutes)</label>
+                  <input
+                    type="number"
+                    id="configArrToDepOffset"
+                    min="0"
+                    max="720"
+                    placeholder="30"
+                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                  />
+                  <div style="font-size: 10px; color: #888;">ETD = ETA/ATA + this (default 30 min)</div>
+                </div>
+              </div>
+            </div>
 
             <div style="margin-top: 16px; margin-bottom: 12px;">
               <label style="display: block; font-weight: bold; margin-bottom: 4px;">
