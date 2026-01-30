@@ -1314,6 +1314,13 @@ export function renderLiveBoard() {
               <button class="js-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Details</button>
               <button class="js-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
               ${
+                ft === "DEP"
+                  ? '<button class="js-produce-arr" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Arrival</button>'
+                  : ft === "ARR"
+                    ? '<button class="js-produce-dep" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Departure</button>'
+                    : ""
+              }
+              ${
                 m.status === "PLANNED" || m.status === "ACTIVE"
                   ? '<button class="js-cancel" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Cancel</button>'
                   : ""
@@ -1367,6 +1374,24 @@ export function renderLiveBoard() {
       editMenu.style.display = "none";
       tr.style.zIndex = "";
       openDuplicateMovementModal(m);
+    });
+
+    // Bind Produce Arrival option (for DEP strips)
+    const produceArrBtn = tr.querySelector(".js-produce-arr");
+    safeOn(produceArrBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openReciprocalStripModal(m, "ARR");
+    });
+
+    // Bind Produce Departure option (for ARR strips)
+    const produceDepBtn = tr.querySelector(".js-produce-dep");
+    safeOn(produceDepBtn, "click", (e) => {
+      e.stopPropagation();
+      editMenu.style.display = "none";
+      tr.style.zIndex = "";
+      openReciprocalStripModal(m, "DEP");
     });
 
     // Bind Cancel option
@@ -1438,6 +1463,7 @@ export function renderLiveBoard() {
       updateMovement(m.id, { fisCount: Math.min((m.fisCount || 0) + 1, 99) });
       renderLiveBoard();
       renderHistoryBoard();
+      if (window.updateFisCounters) window.updateFisCounters();
     });
 
     const decFis = tr.querySelector(".js-dec-fis");
@@ -1446,6 +1472,7 @@ export function renderLiveBoard() {
       updateMovement(m.id, { fisCount: Math.max((m.fisCount || 0) - 1, 0) });
       renderLiveBoard();
       renderHistoryBoard();
+      if (window.updateFisCounters) window.updateFisCounters();
     });
 
     // Bind inline edit handlers (double-click to edit)
@@ -3513,6 +3540,92 @@ function openDuplicateMovementModal(m) {
     const modalRoot = document.getElementById("modalRoot");
     if (modalRoot) modalRoot.innerHTML = "";
   });
+}
+
+/**
+ * Open reciprocal strip creation - create ARR from DEP or DEP from ARR
+ * Swaps aerodromes and calculates time based on config
+ * @param {Object} m - Source movement
+ * @param {string} targetType - "ARR" or "DEP"
+ */
+function openReciprocalStripModal(m, targetType) {
+  const config = getConfig();
+  const sourceFT = (m.flightType || "").toUpperCase();
+
+  // Calculate the reciprocal time
+  let newTime = "";
+  if (sourceFT === "DEP" && targetType === "ARR") {
+    // DEP → ARR: Arrival time = ETD/ATD + depToArrOffsetMinutes
+    const sourceTime = m.depActual || m.depPlanned || "";
+    if (sourceTime) {
+      newTime = addMinutesToTime(sourceTime, config.depToArrOffsetMinutes || 180);
+    }
+  } else if (sourceFT === "ARR" && targetType === "DEP") {
+    // ARR → DEP: Departure time = ETA/ATA + arrToDepOffsetMinutes
+    const sourceTime = m.arrActual || m.arrPlanned || "";
+    if (sourceTime) {
+      newTime = addMinutesToTime(sourceTime, config.arrToDepOffsetMinutes || 30);
+    }
+  }
+
+  // Swap aerodromes - the original arrival becomes the departure and vice versa
+  const newDepAd = m.arrAd || "";
+  const newArrAd = m.depAd || "";
+  const newDepName = getLocationName(newDepAd);
+  const newArrName = getLocationName(newArrAd);
+
+  // Get WTC for new flight type
+  const wtc = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
+
+  // Create the reciprocal movement
+  let movement = {
+    status: "PLANNED",
+    flightType: targetType,
+    callsignCode: m.callsignCode || "",
+    callsignLabel: m.callsignLabel || "",
+    callsignVoice: m.callsignVoice || "",
+    registration: m.registration || "",
+    operator: m.operator || "",
+    type: m.type || "",
+    popularName: m.popularName || "",
+    rules: m.rules || "VFR",
+    depAd: newDepAd,
+    depName: newDepName,
+    arrAd: newArrAd,
+    arrName: newArrName,
+    wtc: wtc,
+    dof: getTodayDateString(),
+    pob: m.pob || 0,
+    tngCount: 0,
+    osCount: 0,
+    fisCount: targetType === "OVR" ? 1 : 0,
+    egowCode: "",
+    ssr: "",
+    remarks: `Reciprocal of ${m.callsignCode || ""} ${sourceFT}`,
+    warnings: m.warnings || "",
+    notes: m.notes || ""
+  };
+
+  // Set appropriate time fields
+  if (targetType === "ARR") {
+    movement.arrPlanned = newTime;
+  } else if (targetType === "DEP") {
+    movement.depPlanned = newTime;
+  }
+
+  // Enrich with auto-populated fields
+  movement = enrichMovementData(movement);
+
+  // Create the movement
+  const newMovement = createMovement(movement);
+  renderLiveBoard();
+  renderHistoryBoard();
+  showToast(`Reciprocal ${targetType} strip created`, 'success');
+
+  // Open edit modal for the new movement so user can adjust
+  if (newMovement) {
+    openEditMovementModal(newMovement);
+  }
 }
 
 /**

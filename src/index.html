@@ -859,6 +859,42 @@
               </tbody>
             </table>
 
+            <!-- Reciprocal Strip Settings -->
+            <div style="margin-top: 16px; margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 4px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                Reciprocal Strip Time Offsets
+              </label>
+              <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                Default time calculation when creating reciprocal strips (DEP→ARR or ARR→DEP):
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR (minutes)</label>
+                  <input
+                    type="number"
+                    id="configDepToArrOffset"
+                    min="0"
+                    max="720"
+                    placeholder="180"
+                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                  />
+                  <div style="font-size: 10px; color: #888;">ETA = ETD/ATD + this (default 3 hours)</div>
+                </div>
+                <div>
+                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP (minutes)</label>
+                  <input
+                    type="number"
+                    id="configArrToDepOffset"
+                    min="0"
+                    max="720"
+                    placeholder="30"
+                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
+                  />
+                  <div style="font-size: 10px; color: #888;">ETD = ETA/ATA + this (default 30 min)</div>
+                </div>
+              </div>
+            </div>
+
             <div style="margin-top: 16px; margin-bottom: 12px;">
               <label style="display: block; font-weight: bold; margin-bottom: 4px;">
                 Timezone Offset (Local time relative to UTC)

@@ -37,7 +37,10 @@ const defaultConfig = {
   // Timeline settings
   timelineEnabled: true,             // Show timeline on Live Board
   timelineStartHour: 6,              // Timeline start hour (UTC)
-  timelineEndHour: 22                // Timeline end hour (UTC)
+  timelineEndHour: 22,               // Timeline end hour (UTC)
+  // Reciprocal strip creation settings
+  depToArrOffsetMinutes: 180,        // DEP→ARR: Arrival time = ETD/ATD + this (default 3 hours)
+  arrToDepOffsetMinutes: 30          // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
 };
 
 // Configuration state
