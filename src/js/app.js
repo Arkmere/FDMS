@@ -20,7 +20,9 @@ import {
 } from "./ui_reports.js";
 
 import {
-  initBookingPage
+  initBookingPage,
+  initCalendarPage,
+  renderCalendar
 } from "./ui_booking.js";
 
 import {
@@ -700,11 +702,13 @@ async function bootstrap() {
     initAdminPanelHandlers();
     initReports();
     initBookingPage();
+    initCalendarPage();
 
     renderLiveBoard();
     renderTimeline();
     renderHistoryBoard();
     renderReports();
+    renderCalendar();
 
     // Record init complete
     diagnostics.initTime = new Date().toISOString();

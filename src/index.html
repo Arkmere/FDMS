@@ -29,6 +29,7 @@
       <nav class="nav-bar">
         <div class="nav-tabs" role="tablist">
           <button class="nav-tab active" data-tab="tab-live">Live Board</button>
+          <button class="nav-tab" data-tab="tab-calendar">Calendar</button>
           <button class="nav-tab" data-tab="tab-booking">Booking</button>
           <button class="nav-tab" data-tab="tab-history">History</button>
           <button class="nav-tab" data-tab="tab-reports">Reports</button>
@@ -133,6 +134,38 @@
           </div>
         </section>
 
+        <!-- CALENDAR -->
+        <section id="tab-calendar" class="tab-panel hidden">
+          <div class="page-title">Calendar</div>
+          <div class="page-subtitle">View bookings and daily operations. Click a booking to see full details.</div>
+
+          <div class="calendar-toolbar">
+            <div class="calendar-nav">
+              <button type="button" class="btn btn-secondary" id="btnCalendarPrev" title="Previous month">&lt;</button>
+              <span class="calendar-month-label" id="calendarMonthLabel">January 2026</span>
+              <button type="button" class="btn btn-secondary" id="btnCalendarNext" title="Next month">&gt;</button>
+              <button type="button" class="btn btn-secondary" id="btnCalendarToday">Today</button>
+            </div>
+          </div>
+
+          <div class="panel calendar-panel">
+            <div class="calendar-grid" id="calendarGrid">
+              <!-- Calendar will be rendered here -->
+            </div>
+          </div>
+
+          <!-- Booking Details Drawer -->
+          <div class="booking-details-drawer" id="bookingDetailsDrawer" style="display: none;">
+            <div class="drawer-header">
+              <h3 class="drawer-title">Booking Details</h3>
+              <button type="button" class="btn btn-ghost" id="btnCloseDrawer">Close</button>
+            </div>
+            <div class="drawer-content" id="drawerContent">
+              <!-- Booking details will be rendered here -->
+            </div>
+          </div>
+        </section>
+
         <!-- BOOKING -->
         <section id="tab-booking" class="tab-panel hidden">
           <div class="page-title">Booking</div>
@@ -189,9 +222,8 @@
                     </div>
                     <div class="registry-buttons">
                       <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register">CAA G-INFO</button>
-                      <button type="button" class="btn btn-registry btn-small" id="btnOpenReg">Open</button>
                       <button type="button" class="btn btn-registry btn-small" id="btnCopyReg">Copy reg</button>
-                      <button type="button" class="btn btn-registry btn-small" id="btnFaaRegistry" title="Open FAA N-Number Registry">FA Registry - Open</button>
+                      <button type="button" class="btn btn-registry btn-small" id="btnFaaRegistry" title="Open FAA N-Number Registry">FAA Registry</button>
                     </div>
                   </div>
                   <div class="modal-field">
@@ -222,6 +254,13 @@
                       <span>Training rate applies (25% of landing fees).</span>
                     </label>
                   </div>
+                  <div class="modal-field">
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingHasCuiw" checked>
+                      <span>Has Civil User Indemnity Waiver (CUIW)</span>
+                    </label>
+                    <div class="help-text">If unchecked, a waiver fee will be added to charges.</div>
+                  </div>
                 </div>
               </div>
 
@@ -232,6 +271,12 @@
                   <div class="modal-field">
                     <label class="modal-label">Departure aerodrome <span class="required-mark">*</span></label>
                     <input type="text" id="bookingDepartureAd" class="modal-input" placeholder="EGNM" required style="text-transform: uppercase;">
+                    <div class="help-text">Use ZZZZ for unlisted locations</div>
+                  </div>
+                  <div class="modal-field" id="bookingDepNameField" style="display: none;">
+                    <label class="modal-label">Location name (for ZZZZ) <span class="required-mark">*</span></label>
+                    <input type="text" id="bookingDepartureName" class="modal-input" placeholder="Main Hall Farm, Cambridge">
+                    <div class="help-text">Plain English name - will appear in remarks</div>
                   </div>
                   <div class="modal-field">
                     <label class="modal-label">Number of landings (T&amp;G + full stops) <span class="required-mark">*</span></label>
@@ -291,6 +336,10 @@
                   <div class="charge-line charge-vat">
                     <span class="charge-label">VAT <span class="charge-note">(parking only, 20%)</span></span>
                     <span class="charge-value" id="chargeParkingVat">£0.00</span>
+                  </div>
+                  <div class="charge-line" id="chargeCuiwLine" style="display: none;">
+                    <span class="charge-label">CUIW fee <span class="charge-note">(no waiver)</span></span>
+                    <span class="charge-value" id="chargeCuiw">£0.00</span>
                   </div>
                   <div class="charge-line charge-total">
                     <span class="charge-label">Total <span class="charge-note">(mixed VAT)</span></span>

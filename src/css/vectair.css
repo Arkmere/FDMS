@@ -2072,3 +2072,240 @@ tr.strip.ft-ovr > td {
   color: #d32f2f;
   margin-top: 2px;
 }
+
+/* ============================================
+   Calendar Page Styles
+   ============================================ */
+
+.calendar-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-month-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--va-accent-brown);
+  min-width: 140px;
+  text-align: center;
+}
+
+.calendar-panel {
+  padding: 12px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--va-border);
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.calendar-header-cell {
+  background: #e1e7ea;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--va-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.calendar-day-cell {
+  background: #fff;
+  min-height: 100px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.calendar-day-cell.other-month {
+  background: #f8f8f8;
+}
+
+.calendar-day-cell.other-month .day-number {
+  color: #bbb;
+}
+
+.calendar-day-cell.is-today {
+  background: #f0f7ff;
+  border: 2px solid var(--va-link);
+  margin: -1px;
+}
+
+.calendar-day-cell.is-today .day-number {
+  color: var(--va-link);
+  font-weight: 700;
+}
+
+.day-number {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--va-text-main);
+  margin-bottom: 4px;
+}
+
+.calendar-events {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendar-event {
+  padding: 3px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: transform 0.1s ease;
+}
+
+.calendar-event:hover {
+  transform: scale(1.02);
+  z-index: 1;
+}
+
+.calendar-event.event-booking {
+  background: rgba(230, 165, 87, 0.3);
+  border-left: 3px solid var(--ft-arr);
+  color: #5a4020;
+}
+
+.calendar-event.event-movement {
+  background: rgba(122, 163, 204, 0.3);
+  border-left: 3px solid var(--ft-dep);
+  color: #2a4a6a;
+}
+
+.calendar-event.event-note {
+  background: rgba(139, 201, 144, 0.3);
+  border-left: 3px solid var(--ft-ovr);
+  color: #2a5a2a;
+}
+
+.calendar-more-link {
+  font-size: 10px;
+  color: var(--va-link);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+/* Booking Details Drawer */
+.booking-details-drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  max-width: 90vw;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+.booking-details-drawer.open {
+  transform: translateX(0);
+  display: flex;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--va-border);
+  background: #f8f8f8;
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--va-accent-brown);
+  margin: 0;
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.drawer-section {
+  margin-bottom: 20px;
+}
+
+.drawer-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--va-accent-brown);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.drawer-field {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.drawer-field-label {
+  color: var(--va-text-soft);
+}
+
+.drawer-field-value {
+  font-weight: 600;
+  color: var(--va-text-main);
+  text-align: right;
+}
+
+.drawer-charges {
+  background: #f8f5f0;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.drawer-charges .charge-line {
+  font-size: 12px;
+}
+
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 999;
+  display: none;
+}
+
+.drawer-overlay.open {
+  display: block;
+}
