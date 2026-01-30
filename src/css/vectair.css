@@ -166,6 +166,104 @@ body {
   color: var(--va-text-soft);
   margin-bottom: 14px;
 }
+
+/* Live Board Header with Stats */
+.liveboard-header {
+  margin-bottom: 10px;
+}
+
+.liveboard-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.liveboard-title-row .page-subtitle {
+  margin-bottom: 0;
+}
+
+.liveboard-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8f5f0;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.daily-stats-section,
+.fis-stats-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 36px;
+}
+
+.stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--va-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--va-text-main);
+  line-height: 1.2;
+}
+
+.stat-item.stat-total .stat-value,
+.stat-item.stat-fis-total .stat-value {
+  color: var(--va-accent-brown);
+}
+
+.stat-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.counter-btn-sm {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--va-border-dark);
+  background: #ffffff;
+  cursor: pointer;
+  color: var(--va-text-main);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.counter-btn-sm:hover {
+  background: #e8eef2;
+  border-color: var(--va-link);
+}
+
+.stats-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--va-border-dark);
+}
+
 .panel {
   border: 1px solid var(--va-border);
   background: var(--va-panel-bg);
@@ -1598,6 +1696,7 @@ tr.strip.ft-ovr > td {
 
 .timeline-scale {
   position: relative;
+  width: 100%;
   height: 24px;
   background: #e8e3dc;
   border-top: 1px solid #d5cfc6;
@@ -1622,6 +1721,7 @@ tr.strip.ft-ovr > td {
 
 .timeline-tracks {
   position: relative;
+  width: 100%;
   min-height: 24px;
   max-height: 60px;
   overflow-y: auto;
@@ -1631,6 +1731,7 @@ tr.strip.ft-ovr > td {
 
 .timeline-track {
   position: relative;
+  width: 100%;
   height: 8px;
   margin: 1px 0;
 }
@@ -1660,7 +1761,7 @@ tr.strip.ft-ovr > td {
   background: var(--ft-dep);
 }
 .timeline-movement-bar.ft-arr {
-  background: var(--ft-arr);
+  background: #8b8b8b; /* Grey for inbound/arrival movements */
 }
 .timeline-movement-bar.ft-ovr {
   background: var(--ft-ovr);

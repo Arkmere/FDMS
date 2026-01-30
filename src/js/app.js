@@ -685,14 +685,79 @@ function updateFisCounters() {
 // Export for use in other modules
 window.updateFisCounters = updateFisCounters;
 
-function initGenericOverflightsCounter() {
+/**
+ * Get today's date in YYYY-MM-DD format (UTC)
+ * @returns {string} Today's date
+ */
+function getTodayDateString() {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
+
+/**
+ * Calculate daily movement statistics for today
+ * @returns {object} Object with movement counts
+ */
+function calculateDailyStats() {
+  const movements = getMovements();
+  const today = getTodayDateString();
+
+  // Filter movements for today (by DOF date of flight)
+  const todaysMovements = movements.filter(m => m.dof === today);
+
+  // Count by status
+  const planned = todaysMovements.filter(m => m.status === 'PLANNED').length;
+  const active = todaysMovements.filter(m => m.status === 'ACTIVE').length;
+  const completed = todaysMovements.filter(m => m.status === 'COMPLETED').length;
+
+  // Count VFR movements
+  const vfrMovements = todaysMovements.filter(m => m.flightRules === 'V' || m.flightRules === 'VFR');
+  const vfrPlannedActive = vfrMovements.filter(m => m.status === 'PLANNED' || m.status === 'ACTIVE').length;
+  const vfrCompleted = vfrMovements.filter(m => m.status === 'COMPLETED').length;
+
+  // Booked movements (planned + active)
+  const bookedMovements = planned + active;
+
+  return {
+    bookedMovements: bookedMovements,      // BM - Planned + Active today
+    bookedCompleted: completed,            // BC - Completed today
+    vfrMovements: vfrPlannedActive,        // VM - VFR planned/active today
+    vfrCompleted: vfrCompleted,            // VC - VFR completed today
+    total: todaysMovements.length          // Total movements today
+  };
+}
+
+/**
+ * Update daily movement statistics display
+ */
+function updateDailyStats() {
+  const stats = calculateDailyStats();
+
+  const bmDisplay = document.getElementById("statBookedMvmts");
+  const bcDisplay = document.getElementById("statBookedComp");
+  const vmDisplay = document.getElementById("statVfrMvmts");
+  const vcDisplay = document.getElementById("statVfrComp");
+  const totalDisplay = document.getElementById("statTotalToday");
+
+  if (bmDisplay) bmDisplay.textContent = stats.bookedMovements;
+  if (bcDisplay) bcDisplay.textContent = stats.bookedCompleted;
+  if (vmDisplay) vmDisplay.textContent = stats.vfrMovements;
+  if (vcDisplay) vcDisplay.textContent = stats.vfrCompleted;
+  if (totalDisplay) totalDisplay.textContent = stats.total;
+}
+
+// Export for use in other modules
+window.updateDailyStats = updateDailyStats;
+
+function initLiveboardCounters() {
   const btnInc = document.getElementById("btnIncGenericOvr");
   const btnDec = document.getElementById("btnDecGenericOvr");
 
-  if (!btnInc || !btnDec) return;
-
   // Initialize display with current counts
   updateFisCounters();
+  updateDailyStats();
+
+  if (!btnInc || !btnDec) return;
 
   // Increment button
   btnInc.addEventListener("click", () => {
@@ -731,7 +796,7 @@ async function bootstrap() {
     // Feature modules: bind handlers first, then render
     initLiveBoard();
     initTimeline();
-    initGenericOverflightsCounter();
+    initLiveboardCounters();
     initHistoryBoard();
     initHistoryExport();
     initVkbLookup();
