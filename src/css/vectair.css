@@ -2238,6 +2238,37 @@ tr.strip.ft-ovr > td {
   color: #2a5a2a;
 }
 
+.calendar-event.event-general {
+  background: rgba(150, 150, 150, 0.2);
+  border-left: 3px solid #888;
+  color: #444;
+}
+
+/* Movement type colors on calendar */
+.calendar-event.event-dep {
+  background: rgba(122, 163, 204, 0.3);
+  border-left: 3px solid var(--ft-dep);
+  color: #2a4a6a;
+}
+
+.calendar-event.event-arr {
+  background: rgba(230, 165, 87, 0.3);
+  border-left: 3px solid var(--ft-arr);
+  color: #5a4020;
+}
+
+.calendar-event.event-loc {
+  background: rgba(232, 158, 196, 0.3);
+  border-left: 3px solid var(--ft-loc);
+  color: #6a3050;
+}
+
+.calendar-event.event-ovr {
+  background: rgba(139, 201, 144, 0.3);
+  border-left: 3px solid var(--ft-ovr);
+  color: #2a5a2a;
+}
+
 .calendar-more-link {
   font-size: 10px;
   color: var(--va-link);

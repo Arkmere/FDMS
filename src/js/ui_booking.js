@@ -18,10 +18,16 @@ import { renderLiveBoard, renderTimeline } from "./ui_liveboard.js";
 ------------------------------ */
 
 const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
+const CALENDAR_EVENTS_STORAGE_KEY = "vectair_fdms_calendar_events_v1";
 
 let bookings = [];
 let bookingsInitialised = false;
 let nextBookingId = 1;
+
+// Calendar events storage
+let calendarEvents = [];
+let calendarEventsInitialised = false;
+let nextCalendarEventId = 1;
 
 function loadBookingsFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
@@ -65,6 +71,93 @@ function ensureBookingsInitialised() {
     nextBookingId = 1;
   }
   bookingsInitialised = true;
+}
+
+/* -----------------------------
+   Storage for Calendar Events
+------------------------------ */
+
+function loadCalendarEventsFromStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(CALENDAR_EVENTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.events)) {
+        return parsed;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn("FDMS: failed to load calendar events from storage", e);
+    return null;
+  }
+}
+
+function saveCalendarEventsToStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const payload = JSON.stringify({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      events: calendarEvents
+    });
+    window.localStorage.setItem(CALENDAR_EVENTS_STORAGE_KEY, payload);
+  } catch (e) {
+    console.warn("FDMS: failed to save calendar events to storage", e);
+  }
+}
+
+function ensureCalendarEventsInitialised() {
+  if (calendarEventsInitialised) return;
+  const loaded = loadCalendarEventsFromStorage();
+  if (loaded && loaded.events) {
+    calendarEvents = loaded.events;
+    nextCalendarEventId = calendarEvents.reduce((max, e) => Math.max(max, e.id || 0), 0) + 1;
+  } else {
+    calendarEvents = [];
+    nextCalendarEventId = 1;
+  }
+  calendarEventsInitialised = true;
+}
+
+export function getCalendarEvents() {
+  ensureCalendarEventsInitialised();
+  return calendarEvents;
+}
+
+export function getCalendarEventsForDate(dateStr) {
+  ensureCalendarEventsInitialised();
+  return calendarEvents.filter(e => e.date === dateStr);
+}
+
+export function createCalendarEvent(eventData) {
+  ensureCalendarEventsInitialised();
+  const now = new Date().toISOString();
+  const event = {
+    id: nextCalendarEventId++,
+    createdAt: now,
+    updatedAt: now,
+    date: eventData.date || '',
+    time: eventData.time || '',
+    title: eventData.title || '',
+    description: eventData.description || '',
+    type: eventData.type || 'general' // general, reminder, note
+  };
+  calendarEvents.push(event);
+  saveCalendarEventsToStorage();
+  return event;
+}
+
+export function deleteCalendarEvent(id) {
+  ensureCalendarEventsInitialised();
+  const index = calendarEvents.findIndex(e => e.id === id);
+  if (index !== -1) {
+    calendarEvents.splice(index, 1);
+    saveCalendarEventsToStorage();
+    return true;
+  }
+  return false;
 }
 
 export function getBookings() {
@@ -885,6 +978,7 @@ export function renderCalendar() {
 function renderCalendarDay(day, dateStr, isOtherMonth, isToday) {
   const bookings = getBookingsForDate(dateStr);
   const movements = getMovementsForDate(dateStr);
+  const events = getCalendarEventsForDate(dateStr);
 
   let classes = 'calendar-day-cell';
   if (isOtherMonth) classes += ' other-month';
@@ -899,11 +993,19 @@ function renderCalendarDay(day, dateStr, isOtherMonth, isToday) {
     eventsHtml += `<div class="calendar-event event-booking" data-booking-id="${b.id}" title="${reg} - ${time}">${time} ${reg}</div>`;
   });
 
-  // Show movements that don't have a bookingId (non-booked movements)
-  movements.filter(m => !m.bookingId).forEach(m => {
+  // Show calendar events
+  events.forEach(e => {
+    const time = e.time || '';
+    const title = e.title || 'Event';
+    eventsHtml += `<div class="calendar-event event-general" data-event-id="${e.id}" title="${title}">${time ? time + ' ' : ''}${title}</div>`;
+  });
+
+  // Only show movements that have showOnCalendar flag set
+  movements.filter(m => m.showOnCalendar).forEach(m => {
     const time = m.arrPlanned || m.depPlanned || '';
     const callsign = m.callsignCode || m.registration || 'Unknown';
-    eventsHtml += `<div class="calendar-event event-movement" title="${callsign} - ${time}">${time} ${callsign}</div>`;
+    const ftClass = `event-${(m.flightType || 'loc').toLowerCase()}`;
+    eventsHtml += `<div class="calendar-event event-movement ${ftClass}" data-movement-id="${m.id}" title="${callsign} - ${time} (${m.flightType || ''})">${time} ${callsign}</div>`;
   });
 
   eventsHtml += '</div>';
@@ -1140,9 +1242,113 @@ export function initCalendarPage() {
     renderCalendar();
   });
 
+  // Add Event button
+  byId('btnAddCalendarEvent')?.addEventListener('click', () => {
+    openAddEventModal();
+  });
+
   // Drawer close button
   byId('btnCloseDrawer')?.addEventListener('click', closeBookingDrawer);
 
   // Initial render
   renderCalendar();
+}
+
+/**
+ * Open modal to add a calendar event
+ */
+function openAddEventModal(presetDate = null) {
+  const today = presetDate || new Date().toISOString().split('T')[0];
+
+  const modalRoot = document.getElementById('modalRoot');
+  if (!modalRoot) return;
+
+  modalRoot.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <div class="modal-title">Add Calendar Event</div>
+          <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Date</label>
+            <input id="eventDate" type="date" class="modal-input" value="${today}" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Time (optional)</label>
+            <input id="eventTime" class="modal-input" placeholder="HHMM" maxlength="4" style="width: 80px;" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Title</label>
+            <input id="eventTitle" class="modal-input" placeholder="Event title" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Description (optional)</label>
+            <textarea id="eventDescription" class="modal-textarea" placeholder="Additional details..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+          <button class="btn btn-primary js-save-event" type="button">Add Event</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Close handlers
+  modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalRoot.innerHTML = '';
+    });
+  });
+
+  // Save handler
+  modalRoot.querySelector('.js-save-event')?.addEventListener('click', () => {
+    const date = document.getElementById('eventDate')?.value || '';
+    const timeRaw = document.getElementById('eventTime')?.value || '';
+    const title = document.getElementById('eventTitle')?.value?.trim() || '';
+    const description = document.getElementById('eventDescription')?.value?.trim() || '';
+
+    if (!date) {
+      showToast('Please select a date', 'error');
+      return;
+    }
+
+    if (!title) {
+      showToast('Please enter a title', 'error');
+      return;
+    }
+
+    // Format time if provided
+    let formattedTime = '';
+    if (timeRaw) {
+      const digits = timeRaw.replace(/\D/g, '');
+      if (digits.length === 4) {
+        const hours = parseInt(digits.slice(0, 2), 10);
+        const mins = parseInt(digits.slice(2, 4), 10);
+        if (hours >= 0 && hours <= 23 && mins >= 0 && mins <= 59) {
+          formattedTime = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+        } else {
+          showToast('Invalid time format', 'error');
+          return;
+        }
+      } else if (digits.length > 0) {
+        showToast('Time should be in HHMM format', 'error');
+        return;
+      }
+    }
+
+    createCalendarEvent({
+      date: date,
+      time: formattedTime,
+      title: title,
+      description: description,
+      type: 'general'
+    });
+
+    showToast('Calendar event added', 'success');
+    renderCalendar();
+    modalRoot.innerHTML = '';
+  });
 }
