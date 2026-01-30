@@ -1,9 +1,11 @@
 // ui_booking.js
 // Handles the Booking page: form, charges calculation, strip preview, and submission.
+// Also handles Calendar page functionality.
 // ES module, no framework, DOM-contract driven.
 
 import {
   createMovement,
+  getMovements,
   getConfig
 } from "./datamodel.js";
 
@@ -70,6 +72,11 @@ export function getBookings() {
   return bookings;
 }
 
+export function getBookingById(id) {
+  ensureBookingsInitialised();
+  return bookings.find(b => b.id === id) || null;
+}
+
 export function createBooking(bookingData) {
   ensureBookingsInitialised();
   const now = new Date().toISOString();
@@ -97,6 +104,10 @@ export function createBooking(bookingData) {
    - First 2 hours free
    - After 2 hours: flat fee of £16.67 + 20% VAT per 24h period (or part thereof)
    - Periods = CEILING((stay_hours - 2)/24), minimum 1 if stay_hours > 2
+
+   CUIW (Civil User Indemnity Waiver):
+   - If aircraft does NOT have CUIW, a fee is charged
+   - Default: £25 per visit (configurable)
 ------------------------------ */
 
 const LANDING_RATE_PER_TONNE_UP_TO_4 = 12.00;
@@ -104,6 +115,7 @@ const LANDING_RATE_PER_TONNE_OVER_4 = 16.00;
 const PARKING_NET_PER_24H = 16.67;
 const PARKING_VAT_RATE = 0.20;
 const TRAINING_DISCOUNT = 0.25;
+const CUIW_FEE = 25.00; // Fee when aircraft does not have CUIW
 
 /**
  * Calculate landing fee for a single landing based on MTOW
@@ -178,6 +190,15 @@ export function calculateParkingFees(stayHours, parkingRequired) {
 }
 
 /**
+ * Calculate CUIW fee
+ * @param {boolean} hasCuiw - Whether aircraft has Civil User Indemnity Waiver
+ * @returns {number} CUIW fee (0 if has waiver, fee amount if not)
+ */
+export function calculateCuiwFee(hasCuiw) {
+  return hasCuiw ? 0 : CUIW_FEE;
+}
+
+/**
  * Calculate all charges for a booking
  * @param {object} params - Booking parameters
  * @returns {object} Charges breakdown
@@ -190,14 +211,16 @@ export function calculateAllCharges(params) {
     stayHours = 0,
     parkingRequired = false,
     fuelRequired = false,
-    visitingCarsRequired = false
+    visitingCarsRequired = false,
+    hasCuiw = true
   } = params;
 
   const landing = calculateLandingFees(mtowTonnes, landingsCount, isTraining);
   const parking = calculateParkingFees(stayHours, parkingRequired);
+  const cuiwFee = calculateCuiwFee(hasCuiw);
 
-  // Total: landing fees (no VAT) + parking (with VAT)
-  const totalGross = landing.total + parking.gross;
+  // Total: landing fees (no VAT) + parking (with VAT) + CUIW (no VAT)
+  const totalGross = landing.total + parking.gross + cuiwFee;
 
   return {
     landing: {
@@ -211,10 +234,15 @@ export function calculateAllCharges(params) {
       gross: parking.gross,
       periods: parking.periods
     },
+    cuiw: {
+      fee: cuiwFee,
+      hasWaiver: hasCuiw
+    },
     totalGross: Math.round(totalGross * 100) / 100,
     breakdown: [
       { label: 'Landing fees', amount: landing.total, vatIncluded: false },
-      ...(parking.gross > 0 ? [{ label: 'Parking', amount: parking.gross, vatIncluded: true }] : [])
+      ...(parking.gross > 0 ? [{ label: 'Parking', amount: parking.gross, vatIncluded: true }] : []),
+      ...(cuiwFee > 0 ? [{ label: 'CUIW fee', amount: cuiwFee, vatIncluded: false }] : [])
     ],
     extras: {
       fuelRequired,
@@ -266,6 +294,11 @@ export function testChargesCalculation() {
     if (!passed) allPassed = false;
   });
 
+  // CUIW tests
+  console.log("\n=== CUIW Tests ===");
+  console.log(`${calculateCuiwFee(true) === 0 ? '✓' : '✗'} Has CUIW -> £0`);
+  console.log(`${calculateCuiwFee(false) === CUIW_FEE ? '✓' : '✗'} No CUIW -> £${CUIW_FEE}`);
+
   console.log(`\n${allPassed ? 'All tests passed!' : 'Some tests failed.'}`);
   return allPassed;
 }
@@ -290,6 +323,17 @@ function formatDate(dateStr) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear()).slice(-2);
   return `${dd}/${mm}/${yy}`;
+}
+
+function formatDateLong(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 }
 
 /* -----------------------------
@@ -318,6 +362,9 @@ function getFormData() {
   const mtowUnit = byId('bookingMtowUnit')?.value || 't';
   const mtowTonnes = mtowUnit === 'kg' ? mtowValue / 1000 : mtowValue;
 
+  const departureAd = (byId('bookingDepartureAd')?.value || '').toUpperCase().trim();
+  const departureName = byId('bookingDepartureName')?.value.trim() || '';
+
   return {
     contact: {
       name: byId('bookingContactName')?.value.trim() || '',
@@ -335,10 +382,12 @@ function getFormData() {
       mtowValue: mtowValue,
       mtowUnit: mtowUnit,
       mtowTonnes: mtowTonnes,
-      pob: parseInt(byId('bookingPob')?.value) || 0
+      pob: parseInt(byId('bookingPob')?.value) || 0,
+      hasCuiw: byId('bookingHasCuiw')?.checked ?? true
     },
     ops: {
-      departureAd: (byId('bookingDepartureAd')?.value || '').toUpperCase().trim(),
+      departureAd: departureAd,
+      departureName: departureName,
       landingsCount: parseInt(byId('bookingLandingsCount')?.value) || 1,
       arrivalType: byId('bookingArrivalType')?.value || 'ARR',
       isTraining: byId('bookingTrainingRate')?.checked || false,
@@ -367,6 +416,11 @@ function validateForm() {
   if (!data.ops.departureAd) errors.push('Departure aerodrome is required');
   if (!data.ops.landingsCount || data.ops.landingsCount < 1) errors.push('Number of landings is required');
 
+  // ZZZZ requires location name
+  if (data.ops.departureAd === 'ZZZZ' && !data.ops.departureName) {
+    errors.push('Location name is required for ZZZZ');
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -378,6 +432,15 @@ function validateForm() {
    UI Update Functions
 ------------------------------ */
 
+function updateZzzzField() {
+  const depAd = (byId('bookingDepartureAd')?.value || '').toUpperCase().trim();
+  const zzzzField = byId('bookingDepNameField');
+
+  if (zzzzField) {
+    zzzzField.style.display = depAd === 'ZZZZ' ? '' : 'none';
+  }
+}
+
 function updateChargesDisplay() {
   const data = getFormData();
 
@@ -388,7 +451,8 @@ function updateChargesDisplay() {
     stayHours: data.schedule.stayHours,
     parkingRequired: data.ops.parkingRequired,
     fuelRequired: data.ops.fuelRequired,
-    visitingCarsRequired: data.ops.visitingCarsRequired
+    visitingCarsRequired: data.ops.visitingCarsRequired,
+    hasCuiw: data.aircraft.hasCuiw
   });
 
   // Update display elements
@@ -396,6 +460,18 @@ function updateChargesDisplay() {
   byId('chargeParkingGross').textContent = formatCurrency(charges.parking.gross);
   byId('chargeParkingVat').textContent = formatCurrency(charges.parking.vat);
   byId('chargeTotalGross').textContent = formatCurrency(charges.totalGross);
+
+  // Update CUIW line
+  const cuiwLine = byId('chargeCuiwLine');
+  const cuiwValue = byId('chargeCuiw');
+  if (cuiwLine && cuiwValue) {
+    if (charges.cuiw.fee > 0) {
+      cuiwLine.style.display = '';
+      cuiwValue.textContent = formatCurrency(charges.cuiw.fee);
+    } else {
+      cuiwLine.style.display = 'none';
+    }
+  }
 
   // Update notes
   byId('chargeNoteLandingRate').textContent = formatCurrency(charges.landing.perLanding);
@@ -425,8 +501,8 @@ function updateStripPreview() {
   const dateStr = formatDate(data.schedule.dof) || 'DD/MM/YY';
   byId('stripPreviewTime').textContent = `${timeStr} / ${dateStr}`;
 
-  // Route
-  const depAd = data.ops.departureAd || 'XXXX';
+  // Route - show ZZZZ with name if applicable
+  let depAd = data.ops.departureAd || 'XXXX';
   byId('stripPreviewRoute').textContent = `${depAd} → EGOW`;
 
   // Details
@@ -451,6 +527,7 @@ function updateSubmitButton() {
 }
 
 function updateAll() {
+  updateZzzzField();
   updateChargesDisplay();
   updateStripPreview();
   updateSubmitButton();
@@ -463,7 +540,6 @@ function updateAll() {
 function copyToClipboard(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).catch(() => {
-      // Fallback for older browsers
       fallbackCopyToClipboard(text);
     });
   } else {
@@ -487,11 +563,9 @@ function fallbackCopyToClipboard(text) {
 }
 
 function normalizeRegistration(reg) {
-  // Remove common prefixes and normalize
   let normalized = (reg || '').toUpperCase().trim();
-  // For G-INFO, remove the G- prefix for search
   if (normalized.startsWith('G-')) {
-    return normalized.substring(2); // e.g., G-ABCD -> ABCD
+    return normalized.substring(2);
   }
   return normalized;
 }
@@ -512,9 +586,8 @@ function openFaaRegistry() {
   const reg = byId('bookingRegistration')?.value || '';
   let searchKey = (reg || '').toUpperCase().trim();
 
-  // For FAA, N-numbers - keep or remove the N as appropriate
   if (searchKey.startsWith('N')) {
-    searchKey = searchKey.substring(1); // Remove N for search
+    searchKey = searchKey.substring(1);
   }
 
   if (searchKey) {
@@ -537,46 +610,18 @@ function copyRegistration() {
   }
 }
 
-function openRegistration() {
-  const reg = byId('bookingRegistration')?.value || '';
-  const normalized = (reg || '').toUpperCase().trim();
-
-  if (!normalized) {
-    showToast('Enter a registration first', 'warning', 3000);
-    return;
-  }
-
-  // Detect registry type and open appropriate page
-  if (normalized.startsWith('G-')) {
-    openCaaGinfo();
-  } else if (normalized.startsWith('N')) {
-    openFaaRegistry();
-  } else if (normalized.startsWith('M-')) {
-    // Manx (Isle of Man) registry
-    copyToClipboard(normalized);
-    showToast(`Copied '${normalized}' - paste into search`, 'info', 4000);
-    window.open('https://ardis.iomaircraftregistry.com/register/search', '_blank');
-  } else {
-    // Generic - just copy and show info
-    copyToClipboard(normalized);
-    showToast(`Copied '${normalized}' - check appropriate registry`, 'info', 4000);
-  }
-}
-
 /* -----------------------------
    Booking Submission
 ------------------------------ */
 
 function resetForm() {
-  // Reset all form fields
   const form = document.querySelector('#tab-booking');
   if (form) {
     form.querySelectorAll('input[type="text"], input[type="tel"], input[type="date"], input[type="time"], input[type="number"], textarea').forEach(el => {
       el.value = '';
     });
     form.querySelectorAll('input[type="checkbox"]').forEach(el => {
-      // Reset to defaults
-      if (el.id === 'bookingParkingRequired') {
+      if (el.id === 'bookingParkingRequired' || el.id === 'bookingHasCuiw') {
         el.checked = true;
       } else {
         el.checked = false;
@@ -587,7 +632,6 @@ function resetForm() {
     });
   }
 
-  // Set default date to today
   const dofInput = byId('bookingDof');
   if (dofInput) {
     const today = new Date().toISOString().split('T')[0];
@@ -614,7 +658,8 @@ function createBookingAndStrip() {
     stayHours: data.schedule.stayHours,
     parkingRequired: data.ops.parkingRequired,
     fuelRequired: data.ops.fuelRequired,
-    visitingCarsRequired: data.ops.visitingCarsRequired
+    visitingCarsRequired: data.ops.visitingCarsRequired,
+    hasCuiw: data.aircraft.hasCuiw
   });
 
   // Create booking record
@@ -630,10 +675,12 @@ function createBookingAndStrip() {
       callsign: data.aircraft.callsign || data.aircraft.registration,
       type: data.aircraft.type,
       pob: data.aircraft.pob,
-      mtowTonnes: data.aircraft.mtowTonnes
+      mtowTonnes: data.aircraft.mtowTonnes,
+      hasCuiw: data.aircraft.hasCuiw
     },
     movement: {
       departure: data.ops.departureAd,
+      departureName: data.ops.departureName,
       destination: 'EGOW'
     },
     ops: {
@@ -651,6 +698,7 @@ function createBookingAndStrip() {
       parkingNet: charges.parking.net,
       parkingVat: charges.parking.vat,
       parkingGross: charges.parking.gross,
+      cuiwFee: charges.cuiw.fee,
       totalGross: charges.totalGross,
       breakdown: charges.breakdown
     }
@@ -658,6 +706,12 @@ function createBookingAndStrip() {
 
   // Build remarks string
   const remarksParts = [];
+
+  // Add ZZZZ location name first if applicable
+  if (data.ops.departureAd === 'ZZZZ' && data.ops.departureName) {
+    remarksParts.push(data.ops.departureName);
+  }
+
   if (data.ops.landingsCount > 1) {
     remarksParts.push(`${data.ops.landingsCount} landings`);
   }
@@ -670,6 +724,9 @@ function createBookingAndStrip() {
   if (data.ops.fuelRequired) {
     remarksParts.push('fuel req');
   }
+  if (!data.aircraft.hasCuiw) {
+    remarksParts.push('no CUIW');
+  }
   if (data.ops.notes) {
     remarksParts.push(data.ops.notes);
   }
@@ -679,16 +736,16 @@ function createBookingAndStrip() {
   const flightType = data.ops.arrivalType;
   const isLocal = flightType === 'LOC';
 
-  const movement = createMovement({
+  createMovement({
     status: 'PLANNED',
     callsignCode: data.aircraft.callsign || data.aircraft.registration,
     callsignLabel: data.aircraft.callsign || data.aircraft.registration,
     callsignVoice: '',
     registration: data.aircraft.registration,
     type: data.aircraft.type,
-    wtc: 'L (ICAO)', // Default; user can update later
+    wtc: 'L (ICAO)',
     depAd: isLocal ? 'EGOW' : data.ops.departureAd,
-    depName: '',
+    depName: data.ops.departureName || '',
     arrAd: 'EGOW',
     arrName: 'RAF Woodvale',
     depPlanned: isLocal ? data.schedule.arrivalTime : '',
@@ -702,7 +759,7 @@ function createBookingAndStrip() {
     tngCount: data.ops.isTraining ? data.ops.landingsCount : 0,
     osCount: 0,
     fisCount: 0,
-    egowCode: 'VC', // Visiting Civil by default
+    egowCode: 'VC',
     egowDesc: 'Visiting Civil Fixed-Wing',
     unitCode: '',
     unitDesc: '',
@@ -710,24 +767,310 @@ function createBookingAndStrip() {
     pob: data.aircraft.pob,
     remarks: remarks,
     formation: null,
-    bookingId: booking.id // Link to booking
+    bookingId: booking.id
   });
 
-  // Success!
   showToast(`Booking created! Strip added to Live Board.`, 'success', 5000);
 
-  // Re-render Live Board
   renderLiveBoard();
   renderTimeline();
+  renderCalendar();
 
-  // Navigate to Live Board tab
   const liveTab = document.querySelector('[data-tab="tab-live"]');
   if (liveTab) {
     liveTab.click();
   }
 
-  // Reset the form for next booking
   resetForm();
+}
+
+/* -----------------------------
+   Calendar Functions
+------------------------------ */
+
+let calendarCurrentDate = new Date();
+
+function getCalendarMonth() {
+  return {
+    year: calendarCurrentDate.getFullYear(),
+    month: calendarCurrentDate.getMonth()
+  };
+}
+
+function setCalendarMonth(year, month) {
+  calendarCurrentDate = new Date(year, month, 1);
+  renderCalendar();
+}
+
+function getBookingsForDate(dateStr) {
+  ensureBookingsInitialised();
+  return bookings.filter(b => b.schedule?.dateISO === dateStr);
+}
+
+function getMovementsForDate(dateStr) {
+  const movements = getMovements();
+  return movements.filter(m => m.dof === dateStr);
+}
+
+export function renderCalendar() {
+  const grid = byId('calendarGrid');
+  const monthLabel = byId('calendarMonthLabel');
+
+  if (!grid) return;
+
+  const { year, month } = getCalendarMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Update month label
+  if (monthLabel) {
+    monthLabel.textContent = firstDay.toLocaleDateString('en-GB', {
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  // Build calendar HTML
+  let html = '';
+
+  // Header row
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  dayNames.forEach(day => {
+    html += `<div class="calendar-header-cell">${day}</div>`;
+  });
+
+  // Calculate start day (Monday = 0)
+  let startDayOfWeek = firstDay.getDay() - 1;
+  if (startDayOfWeek < 0) startDayOfWeek = 6;
+
+  // Previous month days
+  const prevMonthLastDay = new Date(year, month, 0);
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const day = prevMonthLastDay.getDate() - i;
+    const dateStr = new Date(year, month - 1, day).toISOString().split('T')[0];
+    html += renderCalendarDay(day, dateStr, true, false);
+  }
+
+  // Current month days
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    const dateStr = new Date(year, month, day).toISOString().split('T')[0];
+    const isToday = dateStr === todayStr;
+    html += renderCalendarDay(day, dateStr, false, isToday);
+  }
+
+  // Next month days to fill grid
+  const totalCells = Math.ceil((startDayOfWeek + lastDay.getDate()) / 7) * 7;
+  const remainingCells = totalCells - (startDayOfWeek + lastDay.getDate());
+  for (let day = 1; day <= remainingCells; day++) {
+    const dateStr = new Date(year, month + 1, day).toISOString().split('T')[0];
+    html += renderCalendarDay(day, dateStr, true, false);
+  }
+
+  grid.innerHTML = html;
+
+  // Add click handlers for events
+  grid.querySelectorAll('.calendar-event').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const bookingId = el.dataset.bookingId;
+      if (bookingId) {
+        openBookingDrawer(parseInt(bookingId));
+      }
+    });
+  });
+}
+
+function renderCalendarDay(day, dateStr, isOtherMonth, isToday) {
+  const bookings = getBookingsForDate(dateStr);
+  const movements = getMovementsForDate(dateStr);
+
+  let classes = 'calendar-day-cell';
+  if (isOtherMonth) classes += ' other-month';
+  if (isToday) classes += ' is-today';
+
+  let eventsHtml = '<div class="calendar-events">';
+
+  // Show bookings
+  bookings.forEach(b => {
+    const time = b.schedule?.arrivalTimeLocalHHMM || '';
+    const reg = b.aircraft?.registration || 'Unknown';
+    eventsHtml += `<div class="calendar-event event-booking" data-booking-id="${b.id}" title="${reg} - ${time}">${time} ${reg}</div>`;
+  });
+
+  // Show movements that don't have a bookingId (non-booked movements)
+  movements.filter(m => !m.bookingId).forEach(m => {
+    const time = m.arrPlanned || m.depPlanned || '';
+    const callsign = m.callsignCode || m.registration || 'Unknown';
+    eventsHtml += `<div class="calendar-event event-movement" title="${callsign} - ${time}">${time} ${callsign}</div>`;
+  });
+
+  eventsHtml += '</div>';
+
+  return `
+    <div class="${classes}" data-date="${dateStr}">
+      <div class="day-number">${day}</div>
+      ${eventsHtml}
+    </div>
+  `;
+}
+
+function openBookingDrawer(bookingId) {
+  const booking = getBookingById(bookingId);
+  if (!booking) return;
+
+  const drawer = byId('bookingDetailsDrawer');
+  const content = byId('drawerContent');
+
+  if (!drawer || !content) return;
+
+  content.innerHTML = renderBookingDetails(booking);
+  drawer.classList.add('open');
+  drawer.style.display = 'flex';
+}
+
+function closeBookingDrawer() {
+  const drawer = byId('bookingDetailsDrawer');
+  if (drawer) {
+    drawer.classList.remove('open');
+    setTimeout(() => {
+      drawer.style.display = 'none';
+    }, 300);
+  }
+}
+
+function renderBookingDetails(booking) {
+  const contact = booking.contact || {};
+  const schedule = booking.schedule || {};
+  const aircraft = booking.aircraft || {};
+  const movement = booking.movement || {};
+  const ops = booking.ops || {};
+  const charges = booking.charges || {};
+
+  const departureDisplay = movement.departure === 'ZZZZ' && movement.departureName
+    ? `ZZZZ (${escapeHtml(movement.departureName)})`
+    : escapeHtml(movement.departure || '');
+
+  return `
+    <div class="drawer-section">
+      <div class="drawer-section-title">Contact</div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Name</span>
+        <span class="drawer-field-value">${escapeHtml(contact.name || '-')}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Phone</span>
+        <span class="drawer-field-value">${escapeHtml(contact.phone || '-')}</span>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">Schedule</div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Date</span>
+        <span class="drawer-field-value">${formatDateLong(schedule.dateISO)}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Arrival Time</span>
+        <span class="drawer-field-value">${escapeHtml(schedule.arrivalTimeLocalHHMM || '-')}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Stay Duration</span>
+        <span class="drawer-field-value">${schedule.stayHours || 0} hours</span>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">Aircraft</div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Registration</span>
+        <span class="drawer-field-value">${escapeHtml(aircraft.registration || '-')}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Type</span>
+        <span class="drawer-field-value">${escapeHtml(aircraft.type || '-')}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">MTOW</span>
+        <span class="drawer-field-value">${aircraft.mtowTonnes?.toFixed(2) || '-'} t</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">POB</span>
+        <span class="drawer-field-value">${aircraft.pob || '-'}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">CUIW</span>
+        <span class="drawer-field-value">${aircraft.hasCuiw ? 'Yes' : 'No'}</span>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">Operational</div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">From</span>
+        <span class="drawer-field-value">${departureDisplay}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">To</span>
+        <span class="drawer-field-value">${escapeHtml(movement.destination || 'EGOW')}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Landings</span>
+        <span class="drawer-field-value">${ops.landingsCount || 1}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Training</span>
+        <span class="drawer-field-value">${ops.isTraining ? 'Yes' : 'No'}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Requirements</span>
+        <span class="drawer-field-value">
+          ${[
+            ops.parkingRequired ? 'Parking' : '',
+            ops.fuelRequired ? 'Fuel' : '',
+            ops.visitingCarsRequired ? 'Cars' : ''
+          ].filter(Boolean).join(', ') || 'None'}
+        </span>
+      </div>
+      ${ops.notes ? `
+      <div class="drawer-field" style="flex-direction: column; align-items: flex-start;">
+        <span class="drawer-field-label">Notes</span>
+        <span class="drawer-field-value" style="text-align: left; margin-top: 4px;">${escapeHtml(ops.notes)}</span>
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">Charges</div>
+      <div class="drawer-charges">
+        <div class="charge-line">
+          <span class="charge-label">Landing fees</span>
+          <span class="charge-value">${formatCurrency(charges.landingNet)}</span>
+        </div>
+        ${charges.parkingGross > 0 ? `
+        <div class="charge-line">
+          <span class="charge-label">Parking (incl VAT)</span>
+          <span class="charge-value">${formatCurrency(charges.parkingGross)}</span>
+        </div>
+        ` : ''}
+        ${charges.cuiwFee > 0 ? `
+        <div class="charge-line">
+          <span class="charge-label">CUIW fee</span>
+          <span class="charge-value">${formatCurrency(charges.cuiwFee)}</span>
+        </div>
+        ` : ''}
+        <div class="charge-line charge-total" style="margin: 8px 0 0; padding: 8px 0 0; border-top: 2px solid var(--va-accent-brown);">
+          <span class="charge-label" style="font-weight: 700;">Total</span>
+          <span class="charge-value" style="font-size: 14px;">${formatCurrency(charges.totalGross)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-section" style="font-size: 10px; color: #999;">
+      Booking #${booking.id} created ${new Date(booking.createdAtUtc).toLocaleString()}
+    </div>
+  `;
 }
 
 /* -----------------------------
@@ -742,14 +1085,20 @@ export function initBookingPage() {
     dofInput.value = today;
   }
 
+  // Set default CUIW checkbox
+  const cuiwCheckbox = byId('bookingHasCuiw');
+  if (cuiwCheckbox) {
+    cuiwCheckbox.checked = true;
+  }
+
   // Add input listeners for live updates
   const inputIds = [
     'bookingContactName', 'bookingContactPhone',
     'bookingDof', 'bookingArrivalTime', 'bookingStayHours',
     'bookingRegistration', 'bookingCallsign', 'bookingAircraftType',
     'bookingMtow', 'bookingMtowUnit', 'bookingPob',
-    'bookingDepartureAd', 'bookingLandingsCount', 'bookingArrivalType',
-    'bookingTrainingRate', 'bookingParkingRequired', 'bookingFuelRequired',
+    'bookingDepartureAd', 'bookingDepartureName', 'bookingLandingsCount', 'bookingArrivalType',
+    'bookingTrainingRate', 'bookingHasCuiw', 'bookingParkingRequired', 'bookingFuelRequired',
     'bookingVisitingCars', 'bookingNotes'
   ];
 
@@ -765,7 +1114,6 @@ export function initBookingPage() {
   byId('btnCaaGinfo')?.addEventListener('click', openCaaGinfo);
   byId('btnFaaRegistry')?.addEventListener('click', openFaaRegistry);
   byId('btnCopyReg')?.addEventListener('click', copyRegistration);
-  byId('btnOpenReg')?.addEventListener('click', openRegistration);
 
   // Action buttons
   byId('btnResetBooking')?.addEventListener('click', resetForm);
@@ -773,4 +1121,28 @@ export function initBookingPage() {
 
   // Initial update
   updateAll();
+}
+
+export function initCalendarPage() {
+  // Calendar navigation
+  byId('btnCalendarPrev')?.addEventListener('click', () => {
+    const { year, month } = getCalendarMonth();
+    setCalendarMonth(year, month - 1);
+  });
+
+  byId('btnCalendarNext')?.addEventListener('click', () => {
+    const { year, month } = getCalendarMonth();
+    setCalendarMonth(year, month + 1);
+  });
+
+  byId('btnCalendarToday')?.addEventListener('click', () => {
+    calendarCurrentDate = new Date();
+    renderCalendar();
+  });
+
+  // Drawer close button
+  byId('btnCloseDrawer')?.addEventListener('click', closeBookingDrawer);
+
+  // Initial render
+  renderCalendar();
 }
