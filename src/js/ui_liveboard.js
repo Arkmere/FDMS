@@ -156,11 +156,15 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
   // Create input
   const input = document.createElement('input');
-  input.type = inputType === 'time' ? 'text' : 'text';
-  input.value = displayValue;
+  input.type = 'text';
+  // For time inputs, strip the colon for easier editing
+  input.value = inputType === 'time' ? displayValue.replace(':', '') : displayValue;
   input.className = 'inline-edit-input';
+
+  // Time inputs get a narrower width
+  const inputWidth = inputType === 'time' ? '50px' : '100%';
   input.style.cssText = `
-    width: 100%;
+    width: ${inputWidth};
     padding: 2px 4px;
     font-size: inherit;
     font-family: inherit;
@@ -169,11 +173,21 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     background: #fff;
     box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
     outline: none;
+    text-align: ${inputType === 'time' ? 'center' : 'left'};
   `;
 
   if (inputType === 'time') {
-    input.placeholder = 'HH:MM';
-    input.maxLength = 5;
+    input.placeholder = 'HHMM';
+    input.maxLength = 4;
+    // Auto-format time input - only allow digits
+    input.addEventListener('input', (e) => {
+      const cursorPos = e.target.selectionStart;
+      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 4);
+      e.target.value = digitsOnly;
+      // Restore cursor position
+      const newPos = Math.min(cursorPos, digitsOnly.length);
+      e.target.setSelectionRange(newPos, newPos);
+    });
   }
 
   // Clear element and add input
@@ -184,13 +198,19 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
   // Save function
   const saveEdit = () => {
-    const newValue = input.value.trim();
+    let newValue = input.value.trim();
 
-    // Validate time format if time type
-    if (inputType === 'time' && newValue && !/^\d{1,2}:\d{2}$/.test(newValue)) {
-      showToast('Invalid time format. Use HH:MM', 'error');
-      input.focus();
-      return;
+    // Validate and normalize time format if time type
+    if (inputType === 'time' && newValue) {
+      // Use validateTime which handles both HHMM and HH:MM
+      const validation = validateTime(newValue);
+      if (!validation.valid) {
+        showToast(validation.error || 'Invalid time format', 'error');
+        input.focus();
+        return;
+      }
+      // Use the normalized value (HH:MM format)
+      newValue = validation.normalized || newValue;
     }
 
     // Update movement
@@ -1447,6 +1467,16 @@ export function renderLiveBoard() {
     if (ft === "OVR") {
       enableInlineEdit(depTimeEl, m.id, m.act ? "act" : "ect", "time");
     }
+
+    // Hover sync with timeline bar
+    tr.addEventListener('mouseenter', () => {
+      const timelineBar = document.querySelector(`.timeline-movement-bar[data-movement-id="${m.id}"]`);
+      if (timelineBar) timelineBar.classList.add('highlight');
+    });
+    tr.addEventListener('mouseleave', () => {
+      const timelineBar = document.querySelector(`.timeline-movement-bar[data-movement-id="${m.id}"]`);
+      if (timelineBar) timelineBar.classList.remove('highlight');
+    });
 
     tbody.appendChild(tr);
 
@@ -4110,7 +4140,7 @@ function renderTimelineTracks() {
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
     bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
-    bar.textContent = m.callsignCode || '?';
+    // No text content - bars are thin visual indicators only
     bar.dataset.movementId = m.id;
 
     // Click to scroll to movement in strip bay
@@ -4123,6 +4153,20 @@ function renderTimelineTracks() {
         setTimeout(() => {
           stripRow.style.backgroundColor = '';
         }, 1500);
+      }
+    });
+
+    // Hover sync with strip row - highlight strip when hovering timeline bar
+    bar.addEventListener('mouseenter', () => {
+      const stripRow = document.querySelector(`#liveBody tr[data-id="${m.id}"]`);
+      if (stripRow) {
+        stripRow.classList.add('strip-highlight');
+      }
+    });
+    bar.addEventListener('mouseleave', () => {
+      const stripRow = document.querySelector(`#liveBody tr[data-id="${m.id}"]`);
+      if (stripRow) {
+        stripRow.classList.remove('strip-highlight');
       }
     });
 

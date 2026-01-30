@@ -67,23 +67,25 @@
                     <option value="999999">All future</option>
                   </select>
                 </label>
-
-                <input
-                  class="field field-search-global"
-                  id="globalSearch"
-                  type="search"
-                  placeholder="Search callsign, reg, type, route, codes…"
-                  aria-label="Search movements"
-                />
               </div>
 
               <div class="toolbar-right">
-                <!-- Generic Overflights Counter -->
-                <div class="quick-stat-counter" title="Add generic overflights (free callers not on strip bay) to today's statistics">
-                  <span style="font-size: 11px; color: #666;">Generic OVR:</span>
-                  <button class="counter-btn" id="btnDecGenericOvr" type="button" aria-label="Decrease generic overflights">−</button>
-                  <span id="genericOvrCount" style="min-width: 24px; text-align: center; font-weight: 600; font-size: 13px;">0</span>
-                  <button class="counter-btn" id="btnIncGenericOvr" type="button" aria-label="Increase generic overflights">+</button>
+                <!-- FIS Counter Section -->
+                <div class="fis-counter-section" title="FIS (Flight Information Service) statistics">
+                  <div class="fis-counter-row">
+                    <span class="fis-label">Generic:</span>
+                    <button class="counter-btn" id="btnDecGenericOvr" type="button" aria-label="Decrease generic FIS">−</button>
+                    <span id="genericOvrCount" class="fis-value">0</span>
+                    <button class="counter-btn" id="btnIncGenericOvr" type="button" aria-label="Increase generic FIS">+</button>
+                  </div>
+                  <div class="fis-counter-row">
+                    <span class="fis-label">Strips:</span>
+                    <span id="stripFisCount" class="fis-value">0</span>
+                  </div>
+                  <div class="fis-counter-row fis-total-row">
+                    <span class="fis-label">Total FIS:</span>
+                    <span id="totalFisCount" class="fis-value fis-total">0</span>
+                  </div>
                 </div>
                 <div style="width: 1px; height: 24px; background: #ccc; margin: 0 4px;"></div>
                 <button class="btn btn-ft btn-ft-loc" id="btnNewLoc" type="button" aria-label="Create new local flight">New LOC</button>
