@@ -226,6 +226,7 @@
                     <label class="modal-label">Aircraft registration <span class="required-mark">*</span></label>
                     <div class="autocomplete-container">
                       <input type="text" id="bookingRegistration" class="modal-input" placeholder="G-ABCD" required style="text-transform: uppercase;">
+                      <span id="profileLoadedIndicator" class="profile-indicator" style="display: none;"></span>
                     </div>
                     <div class="registry-buttons">
                       <button type="button" class="btn btn-registry btn-small" id="btnCaaGinfo" title="Open CAA G-INFO register (copies registration without G-)">CAA G-INFO</button>
@@ -357,6 +358,32 @@
                   <div class="modal-field span-2">
                     <label class="modal-label">Notes / special requirements</label>
                     <textarea id="bookingNotes" class="modal-textarea" rows="3" placeholder="Ramp parking. Pickup by hire car."></textarea>
+                  </div>
+                  <!-- System Notes Block (read-only, auto-populated from VKB/profile) -->
+                  <div class="modal-field span-2" id="bookingSystemNotesContainer" style="display: none;">
+                    <label class="modal-label">System notes</label>
+                    <div id="bookingSystemNotes" class="system-notes-block"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Profile Management Section -->
+              <div class="booking-section">
+                <div class="booking-section-title">Profile</div>
+                <div class="booking-form-grid">
+                  <div class="modal-field span-2">
+                    <label class="booking-checkbox-label">
+                      <input type="checkbox" id="bookingSaveProfile">
+                      <span>Save booking profile for this registration</span>
+                    </label>
+                    <div class="help-text">Saves aircraft details, contact info, and notes for future autofill.</div>
+                  </div>
+                  <div class="modal-field span-2">
+                    <div class="profile-actions">
+                      <button type="button" class="btn btn-secondary btn-small" id="btnExportProfiles" title="Export all booking profiles to JSON">Export Profiles</button>
+                      <button type="button" class="btn btn-secondary btn-small" id="btnImportProfiles" title="Import booking profiles from JSON">Import Profiles</button>
+                    </div>
+                    <div class="help-text" style="margin-top: 6px;">Manage saved booking profiles for repeat visitors.</div>
                   </div>
                 </div>
               </div>
