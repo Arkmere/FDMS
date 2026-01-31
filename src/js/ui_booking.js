@@ -139,10 +139,16 @@ export function createCalendarEvent(eventData) {
     createdAt: now,
     updatedAt: now,
     date: eventData.date || '',
+    endDate: eventData.endDate || eventData.date || '',
     time: eventData.time || '',
+    endTime: eventData.endTime || '',
     title: eventData.title || '',
     description: eventData.description || '',
-    type: eventData.type || 'general' // general, reminder, note
+    type: eventData.type || 'general',
+    allDay: eventData.allDay || false,
+    repeat: eventData.repeat || 'none',
+    repeatEndDate: eventData.repeatEndDate || '',
+    notification: eventData.notification || 'none'
   };
   calendarEvents.push(event);
   saveCalendarEventsToStorage();
@@ -1251,25 +1257,90 @@ function openAddEventModal(presetDate = null) {
   if (!modalRoot) return;
 
   modalRoot.innerHTML = `
-    <div class="modal-overlay">
-      <div class="modal-content" style="max-width: 400px;">
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width: 500px;">
         <div class="modal-header">
-          <div class="modal-title">Add Calendar Event</div>
+          <div>
+            <div class="modal-title">Add Calendar Event</div>
+            <div class="modal-subtitle">Create a new event on the calendar</div>
+          </div>
           <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
         </div>
         <div class="modal-body">
           <div class="modal-field">
-            <label class="modal-label">Date</label>
-            <input id="eventDate" type="date" class="modal-input" value="${today}" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">Time (optional)</label>
-            <input id="eventTime" class="modal-input" placeholder="HHMM" maxlength="4" style="width: 80px;" />
-          </div>
-          <div class="modal-field">
             <label class="modal-label">Title</label>
             <input id="eventTitle" class="modal-input" placeholder="Event title" />
           </div>
+
+          <div class="modal-field">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="eventAllDay" style="cursor: pointer;" />
+              <span class="modal-label" style="margin: 0;">All-day event</span>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="modal-field" style="flex: 1; min-width: 140px;">
+              <label class="modal-label">Start Date</label>
+              <input id="eventStartDate" type="date" class="modal-input" value="${today}" />
+            </div>
+            <div class="modal-field js-time-field" style="flex: 0 0 80px;">
+              <label class="modal-label">Start Time</label>
+              <input id="eventStartTime" class="modal-input" placeholder="HHMM" maxlength="4" />
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="modal-field" style="flex: 1; min-width: 140px;">
+              <label class="modal-label">End Date <span style="font-size: 11px; font-weight: normal;">(optional)</span></label>
+              <input id="eventEndDate" type="date" class="modal-input" />
+            </div>
+            <div class="modal-field js-time-field" style="flex: 0 0 80px;">
+              <label class="modal-label">End Time</label>
+              <input id="eventEndTime" class="modal-input" placeholder="HHMM" maxlength="4" />
+            </div>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Repeat</label>
+            <select id="eventRepeat" class="modal-input">
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="annually">Annually</option>
+            </select>
+          </div>
+
+          <div class="modal-field js-repeat-end-field" style="display: none;">
+            <label class="modal-label">Repeat until</label>
+            <input id="eventRepeatEndDate" type="date" class="modal-input" />
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Notification</label>
+            <select id="eventNotification" class="modal-input">
+              <option value="none">None</option>
+              <option value="15">15 minutes before</option>
+              <option value="30">30 minutes before</option>
+              <option value="45" selected>45 minutes before</option>
+              <option value="60">1 hour before</option>
+              <option value="120">2 hours before</option>
+              <option value="1440">1 day before</option>
+            </select>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">Event Type</label>
+            <select id="eventType" class="modal-input">
+              <option value="general">General</option>
+              <option value="meeting">Meeting</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="closure">Closure</option>
+              <option value="training">Training</option>
+            </select>
+          </div>
+
           <div class="modal-field">
             <label class="modal-label">Description (optional)</label>
             <textarea id="eventDescription" class="modal-textarea" placeholder="Additional details..."></textarea>
@@ -1283,6 +1354,24 @@ function openAddEventModal(presetDate = null) {
     </div>
   `;
 
+  // Toggle time fields based on all-day checkbox
+  const allDayCheckbox = document.getElementById('eventAllDay');
+  const timeFields = modalRoot.querySelectorAll('.js-time-field');
+  allDayCheckbox?.addEventListener('change', () => {
+    timeFields.forEach(field => {
+      field.style.display = allDayCheckbox.checked ? 'none' : 'block';
+    });
+  });
+
+  // Toggle repeat end date field based on repeat selection
+  const repeatSelect = document.getElementById('eventRepeat');
+  const repeatEndField = modalRoot.querySelector('.js-repeat-end-field');
+  repeatSelect?.addEventListener('change', () => {
+    if (repeatEndField) {
+      repeatEndField.style.display = repeatSelect.value === 'none' ? 'none' : 'block';
+    }
+  });
+
   // Close handlers
   modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1292,13 +1381,20 @@ function openAddEventModal(presetDate = null) {
 
   // Save handler
   modalRoot.querySelector('.js-save-event')?.addEventListener('click', () => {
-    const date = document.getElementById('eventDate')?.value || '';
-    const timeRaw = document.getElementById('eventTime')?.value || '';
     const title = document.getElementById('eventTitle')?.value?.trim() || '';
+    const allDay = document.getElementById('eventAllDay')?.checked || false;
+    const startDate = document.getElementById('eventStartDate')?.value || '';
+    const startTimeRaw = document.getElementById('eventStartTime')?.value || '';
+    const endDate = document.getElementById('eventEndDate')?.value || '';
+    const endTimeRaw = document.getElementById('eventEndTime')?.value || '';
+    const repeat = document.getElementById('eventRepeat')?.value || 'none';
+    const repeatEndDate = document.getElementById('eventRepeatEndDate')?.value || '';
+    const notification = document.getElementById('eventNotification')?.value || 'none';
+    const eventType = document.getElementById('eventType')?.value || 'general';
     const description = document.getElementById('eventDescription')?.value?.trim() || '';
 
-    if (!date) {
-      showToast('Please select a date', 'error');
+    if (!startDate) {
+      showToast('Please select a start date', 'error');
       return;
     }
 
@@ -1307,31 +1403,52 @@ function openAddEventModal(presetDate = null) {
       return;
     }
 
-    // Format time if provided
-    let formattedTime = '';
-    if (timeRaw) {
-      const digits = timeRaw.replace(/\D/g, '');
+    // Format times if provided and not all-day
+    const formatTime = (raw) => {
+      if (!raw) return '';
+      const digits = raw.replace(/\D/g, '');
       if (digits.length === 4) {
         const hours = parseInt(digits.slice(0, 2), 10);
         const mins = parseInt(digits.slice(2, 4), 10);
         if (hours >= 0 && hours <= 23 && mins >= 0 && mins <= 59) {
-          formattedTime = `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
-        } else {
-          showToast('Invalid time format', 'error');
+          return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+        }
+      }
+      return null; // Invalid
+    };
+
+    let startTime = '';
+    let endTime = '';
+
+    if (!allDay) {
+      if (startTimeRaw) {
+        startTime = formatTime(startTimeRaw);
+        if (startTime === null) {
+          showToast('Invalid start time format (use HHMM)', 'error');
           return;
         }
-      } else if (digits.length > 0) {
-        showToast('Time should be in HHMM format', 'error');
-        return;
+      }
+      if (endTimeRaw) {
+        endTime = formatTime(endTimeRaw);
+        if (endTime === null) {
+          showToast('Invalid end time format (use HHMM)', 'error');
+          return;
+        }
       }
     }
 
     createCalendarEvent({
-      date: date,
-      time: formattedTime,
+      date: startDate,
+      endDate: endDate || startDate,
+      time: startTime,
+      endTime: endTime,
       title: title,
       description: description,
-      type: 'general'
+      type: eventType,
+      allDay: allDay,
+      repeat: repeat,
+      repeatEndDate: repeatEndDate,
+      notification: notification
     });
 
     showToast('Calendar event added', 'success');
