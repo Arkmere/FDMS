@@ -1051,7 +1051,7 @@ function renderExpandedRow(tbody, m, context = 'live') {
         <div class="expand-subsection">
           <div class="expand-title">Additional</div>
           <div class="kv">
-            ${m.remarks && m.remarks !== '' && m.remarks !== '-' ? `<div class="kv-label">REMARKS EXTD</div><div class="kv-value">${escapeHtml(m.remarks)}</div>` : ''}
+            ${m.remarks && m.remarks !== '' && m.remarks !== '-' ? `<div class="kv-label">REMARKS EXTD</div><div class="kv-value" style="text-transform: uppercase;">${escapeHtml(m.remarks)}</div>` : ''}
             ${m.warnings && m.warnings !== '' && m.warnings !== '-' ? `<div class="kv-label">WARNINGS</div><div class="kv-value" style="color: #d32f2f; font-weight: 600;">${escapeHtml(m.warnings)}</div>` : ''}
             ${m.notes && m.notes !== '' && m.notes !== '-' ? `<div class="kv-label">NOTES</div><div class="kv-value">${escapeHtml(m.notes)}</div>` : ''}
             ${m.squawk && m.squawk !== '' && m.squawk !== '-' && m.squawk !== '—' ? `<div class="kv-label">SQUAWK</div><div class="kv-value">${squawkDisplay}</div>` : ''}
@@ -1297,7 +1297,7 @@ export function renderLiveBoard() {
         </div>
       </td>
       <td>
-        <div style="font-size: 12px;">${escapeHtml(m.remarks || '')}</div>
+        <div style="font-size: 12px; text-transform: uppercase;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
         <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">
@@ -1464,6 +1464,7 @@ export function renderLiveBoard() {
       renderLiveBoard();
       renderHistoryBoard();
       if (window.updateFisCounters) window.updateFisCounters();
+      if (window.updateDailyStats) window.updateDailyStats();
     });
 
     const decFis = tr.querySelector(".js-dec-fis");
@@ -1473,6 +1474,7 @@ export function renderLiveBoard() {
       renderLiveBoard();
       renderHistoryBoard();
       if (window.updateFisCounters) window.updateFisCounters();
+      if (window.updateDailyStats) window.updateDailyStats();
     });
 
     // Bind inline edit handlers (double-click to edit)
@@ -1886,7 +1888,10 @@ function openNewFlightModal(flightType = "DEP") {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
-      <button class="btn btn-primary js-save-flight" type="button">Save</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary-modal js-save-complete-flight" type="button">Save & Complete</button>
+        <button class="btn btn-primary js-save-flight" type="button">Save</button>
+      </div>
     </div>
   `);
 
@@ -2268,7 +2273,137 @@ function openNewFlightModal(flightType = "DEP") {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement created successfully", 'success');
+
+    // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
+  });
+
+  // Bind "Save & Complete" handler - creates movement and immediately marks as completed
+  document.querySelector(".js-save-complete-flight")?.addEventListener("click", () => {
+    // Simulate click on save button first to run validation
+    const saveBtn = document.querySelector(".js-save-flight");
+    if (!saveBtn) return;
+
+    // Get current time for actual times
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Get form values for validation
+    const dof = document.getElementById("newDOF")?.value || getTodayDateString();
+    let depPlanned = document.getElementById("newDepPlanned")?.value || "";
+    let arrPlanned = document.getElementById("newArrPlanned")?.value || "";
+    const callsignCode = document.getElementById("newCallsignCode")?.value || "";
+
+    // Run basic validation
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) {
+      showToast(dofValidation.error, 'error');
+      return;
+    }
+
+    const callsignValidation = validateRequired(callsignCode, "Callsign Code");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Validate EGOW Code
+    const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
+    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+      showToast("Valid EGOW Code is required", 'error');
+      return;
+    }
+
+    // Validate and normalize times
+    const depValidation = validateTime(depPlanned);
+    if (depValidation.normalized) depPlanned = depValidation.normalized;
+    const arrValidation = validateTime(arrPlanned);
+    if (arrValidation.normalized) arrPlanned = arrValidation.normalized;
+
+    // Get all other form values (same as save handler)
+    const pob = document.getElementById("newPob")?.value || "0";
+    const tng = document.getElementById("newTng")?.value || "0";
+    const flightNumber = document.getElementById("newFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber;
+    const regValue = document.getElementById("newReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+    const aircraftType = document.getElementById("newType")?.value || "";
+    const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
+    const depAd = document.getElementById("newDepAd")?.value || "";
+    const arrAd = document.getElementById("newArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+    const priorityEnabledCheck = document.getElementById("priorityEnabled")?.checked || false;
+    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("priorityLetter")?.value || "") : "";
+    const remarksValue = document.getElementById("rwRemarks")?.value || "";
+    const warningsValue = document.getElementById("rwWarnings")?.value || "";
+    const notesValue = regData ? (regData['NOTES'] || "") : "";
+    const osCountValue = parseInt(document.getElementById("newOsCount")?.value || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newFisCount")?.value || (selectedFlightType === "OVR" ? "1" : "0"), 10);
+    const squawkValue = document.getElementById("atcSquawk")?.value || "";
+    const routeValue = document.getElementById("atcRoute")?.value || "";
+    const clearanceValue = document.getElementById("atcClearance")?.value || "";
+
+    // Create movement with COMPLETED status and actual times
+    let movement = {
+      status: "COMPLETED",
+      callsignCode: callsign,
+      callsignLabel: "",
+      callsignVoice: voiceCallsign,
+      registration: regValue,
+      operator: operator,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
+      depPlanned: depPlanned,
+      depActual: depPlanned || currentTime,
+      arrPlanned: arrPlanned,
+      arrActual: arrPlanned || currentTime,
+      dof: dof,
+      rules: document.getElementById("newRules")?.value || "VFR",
+      flightType: selectedFlightType,
+      isLocal: selectedFlightType === "LOC",
+      tngCount: parseInt(tng, 10),
+      osCount: osCountValue,
+      fisCount: fisCountValue,
+      egowCode: egowCode,
+      egowDesc: "",
+      unitCode: document.getElementById("newUnitCode")?.value || "",
+      unitDesc: "",
+      captain: "",
+      pob: parseInt(pob, 10),
+      priorityLetter: priorityLetterValue,
+      remarks: remarksValue,
+      warnings: warningsValue,
+      notes: notesValue,
+      squawk: squawkValue,
+      route: routeValue,
+      clearance: clearanceValue,
+      formation: null
+    };
+
+    // Enrich with auto-populated fields
+    movement = enrichMovementData(movement);
+
+    createMovement(movement);
+    renderLiveBoard();
+    renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
+    showToast("Movement created and completed", 'success');
 
     // Close modal
     const modalRoot = document.getElementById("modalRoot");
@@ -2364,7 +2499,10 @@ function openNewLocalModal() {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
-      <button class="btn btn-primary js-save-loc" type="button">Save</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary-modal js-save-complete-loc" type="button">Save & Complete</button>
+        <button class="btn btn-primary js-save-loc" type="button">Save</button>
+      </div>
     </div>
   `);
 
@@ -2611,9 +2749,99 @@ function openNewLocalModal() {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
     showToast("Local flight created successfully", 'success');
 
     // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
+  });
+
+  // Bind "Save & Complete" handler for local flight
+  document.querySelector(".js-save-complete-loc")?.addEventListener("click", () => {
+    // Get current time for actual times
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Get form values
+    const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
+    const depPlanned = document.getElementById("newLocStart")?.value || "";
+    const arrPlanned = document.getElementById("newLocEnd")?.value || "";
+    const pob = document.getElementById("newPob")?.value || "0";
+    const tng = document.getElementById("newLocTng")?.value || "0";
+    const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
+    const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber;
+
+    // Basic validation
+    const callsignValidation = validateRequired(callsign, "Callsign");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Get voice callsign and other data
+    const regValue = document.getElementById("newLocReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+    const aircraftType = document.getElementById("newLocType")?.value || "";
+    const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
+    const warnings = regData ? (regData['WARNINGS'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+
+    // Create movement with COMPLETED status
+    let movement = {
+      status: "COMPLETED",
+      callsignCode: callsign,
+      callsignLabel: "",
+      callsignVoice: voiceCallsign,
+      registration: regValue,
+      operator: operator,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      depAd: "EGOW",
+      depName: "RAF Woodvale",
+      arrAd: "EGOW",
+      arrName: "RAF Woodvale",
+      depPlanned: depPlanned,
+      depActual: depPlanned || currentTime,
+      arrPlanned: arrPlanned,
+      arrActual: arrPlanned || currentTime,
+      dof: dof,
+      rules: "VFR",
+      flightType: "LOC",
+      isLocal: true,
+      tngCount: parseInt(tng, 10),
+      osCount: 0,
+      fisCount: 0,
+      egowCode: document.getElementById("newLocEgowCode")?.value || "",
+      egowDesc: "",
+      unitCode: document.getElementById("newLocUnitCode")?.value || "",
+      unitDesc: "",
+      captain: "",
+      pob: parseInt(pob, 10),
+      remarks: document.getElementById("newLocRemarks")?.value || "",
+      warnings: warnings,
+      notes: notes,
+      squawk: "",
+      route: "",
+      clearance: "",
+      formation: null
+    };
+
+    movement = enrichMovementData(movement);
+
+    createMovement(movement);
+    renderLiveBoard();
+    renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
+    showToast("Local flight created and completed", 'success');
+
     const modalRoot = document.getElementById("modalRoot");
     if (modalRoot) modalRoot.innerHTML = "";
   });
@@ -2849,7 +3077,10 @@ function openEditMovementModal(m) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
-      <button class="btn btn-primary js-save-edit" type="button">Save Changes</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary-modal js-save-complete-edit" type="button">Save & Complete</button>
+        <button class="btn btn-primary js-save-edit" type="button">Save Changes</button>
+      </div>
     </div>
   `);
 
@@ -3246,9 +3477,127 @@ function openEditMovementModal(m) {
     updateMovement(m.id, updates);
     renderLiveBoard();
     renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement updated successfully", 'success');
 
     // Close modal
+    const modalRoot = document.getElementById("modalRoot");
+    if (modalRoot) modalRoot.innerHTML = "";
+  });
+
+  // Bind "Save & Complete" handler for edit modal
+  document.querySelector(".js-save-complete-edit")?.addEventListener("click", () => {
+    // Get current time for actual times if not set
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Get form values
+    const dof = document.getElementById("editDOF")?.value || getTodayDateString();
+    let depPlanned = document.getElementById("editDepPlanned")?.value || "";
+    let depActual = document.getElementById("editDepActual")?.value || "";
+    let arrPlanned = document.getElementById("editArrPlanned")?.value || "";
+    let arrActual = document.getElementById("editArrActual")?.value || "";
+    const pob = document.getElementById("editPob")?.value || "0";
+    const tng = document.getElementById("editTng")?.value || "0";
+    const callsignCode = document.getElementById("editCallsignCode")?.value || "";
+    const flightNumber = document.getElementById("editFlightNumber")?.value || "";
+    const callsign = callsignCode + flightNumber;
+
+    // Basic validation
+    const callsignValidation = validateRequired(callsignCode, "Callsign Code");
+    if (!callsignValidation.valid) {
+      showToast(callsignValidation.error, 'error');
+      return;
+    }
+
+    // Validate EGOW Code
+    const egowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
+    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+      showToast("Valid EGOW Code is required", 'error');
+      return;
+    }
+
+    // Normalize times
+    const depPlannedValidation = validateTime(depPlanned);
+    if (depPlannedValidation.normalized) depPlanned = depPlannedValidation.normalized;
+    const depActualValidation = validateTime(depActual);
+    if (depActualValidation.normalized) depActual = depActualValidation.normalized;
+    const arrPlannedValidation = validateTime(arrPlanned);
+    if (arrPlannedValidation.normalized) arrPlanned = arrPlannedValidation.normalized;
+    const arrActualValidation = validateTime(arrActual);
+    if (arrActualValidation.normalized) arrActual = arrActualValidation.normalized;
+
+    // Set actual times if not provided
+    if (!depActual) depActual = depPlanned || currentTime;
+    if (!arrActual) arrActual = arrPlanned || currentTime;
+
+    // Get VKB data
+    const regValue = document.getElementById("editReg")?.value || "";
+    const regData = lookupRegistration(regValue);
+    const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
+    const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
+    const aircraftType = document.getElementById("editType")?.value || "";
+    const selectedFlightType = document.getElementById("editFlightType")?.value || m.flightType;
+    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
+    const depAd = document.getElementById("editDepAd")?.value || "";
+    const arrAd = document.getElementById("editArrAd")?.value || "";
+    const depName = getLocationName(depAd);
+    const arrName = getLocationName(arrAd);
+
+    const editPriorityEnabledCheck = document.getElementById("editPriorityEnabled")?.checked || false;
+    const editPriorityLetterValue = editPriorityEnabledCheck ? (document.getElementById("editPriorityLetter")?.value || "") : "";
+    const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
+    const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
+    const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
+    const editFisCountValue = parseInt(document.getElementById("editFisCount")?.value || "0", 10);
+    const editSquawkValue = document.getElementById("editAtcSquawk")?.value || "";
+    const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
+    const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
+
+    const updates = {
+      status: "COMPLETED",
+      callsignCode: callsign,
+      callsignVoice: voiceCallsign,
+      registration: regValue,
+      operator: operator,
+      type: aircraftType,
+      popularName: popularName,
+      wtc: wtc,
+      flightType: selectedFlightType,
+      rules: document.getElementById("editRules")?.value || "VFR",
+      depAd: depAd,
+      depName: depName,
+      arrAd: arrAd,
+      arrName: arrName,
+      depPlanned: depPlanned,
+      depActual: depActual,
+      arrPlanned: arrPlanned,
+      arrActual: arrActual,
+      dof: dof,
+      tngCount: parseInt(tng, 10),
+      pob: parseInt(pob, 10),
+      osCount: editOsCountValue,
+      fisCount: editFisCountValue,
+      egowCode: egowCode,
+      unitCode: document.getElementById("editUnitCode")?.value || "",
+      priorityLetter: editPriorityLetterValue,
+      remarks: editRemarksValue,
+      warnings: editWarningsValue,
+      squawk: editSquawkValue,
+      route: editRouteValue,
+      clearance: editClearanceValue
+    };
+
+    updateMovement(m.id, updates);
+    renderLiveBoard();
+    renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
+    showToast("Movement saved and completed", 'success');
+
     const modalRoot = document.getElementById("modalRoot");
     if (modalRoot) modalRoot.innerHTML = "";
   });
@@ -3534,6 +3883,8 @@ function openDuplicateMovementModal(m) {
     createMovement(movement);
     renderLiveBoard();
     renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
     showToast("Duplicate movement created successfully", 'success');
 
     // Close modal
@@ -3620,6 +3971,8 @@ function openReciprocalStripModal(m, targetType) {
   const newMovement = createMovement(movement);
   renderLiveBoard();
   renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
+  if (window.updateFisCounters) window.updateFisCounters();
   showToast(`Reciprocal ${targetType} strip created`, 'success');
 
   // Open edit modal for the new movement so user can adjust
@@ -3659,6 +4012,7 @@ function transitionToActive(id) {
 
   renderLiveBoard();
   renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
 }
 
 /**
@@ -3678,6 +4032,7 @@ function transitionToCompleted(id) {
 
   renderLiveBoard();
   renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
 }
 
 /**
@@ -3701,6 +4056,7 @@ function transitionToCancelled(id) {
   showToast(`${callsign} cancelled`, 'info');
   renderLiveBoard();
   renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
 }
 
 /* -----------------------------
@@ -3750,6 +4106,15 @@ export function initLiveBoard() {
   safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
 
   renderLiveBoard();
+
+  // Periodic auto-activation check every 60 seconds
+  // This ensures arrivals are auto-activated even without user interaction
+  setInterval(() => {
+    const config = getConfig();
+    if (config.autoActivateEnabled) {
+      autoActivatePlannedArrivals();
+    }
+  }, 60000);
 }
 
 /* -----------------------------
@@ -4115,16 +4480,17 @@ function renderTimelineScale() {
 
   scale.innerHTML = '';
 
-  const { startHour, endHour, pixelsPerHour } = getTimelineConfig();
-  const totalWidth = (endHour - startHour) * pixelsPerHour;
+  const { startHour, endHour } = getTimelineConfig();
+  const totalHours = endHour - startHour;
 
-  scale.style.width = `${totalWidth}px`;
-  scale.style.minWidth = '100%';
+  // Use 100% width with percentage positioning
+  scale.style.width = '100%';
 
   for (let hour = startHour; hour <= endHour; hour++) {
     const marker = document.createElement('div');
     marker.className = `timeline-hour-marker${hour % 3 === 0 ? ' hour-major' : ''}`;
-    marker.style.left = `${(hour - startHour) * pixelsPerHour}px`;
+    const leftPercent = ((hour - startHour) / totalHours) * 100;
+    marker.style.left = `${leftPercent}%`;
     marker.textContent = `${String(hour).padStart(2, '0')}:00`;
     scale.appendChild(marker);
   }
