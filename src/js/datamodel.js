@@ -19,7 +19,7 @@ const defaultConfig = {
   arrFlightDurationMinutes: 60, // ARR: Default flight duration for timeline display
   ovrFlightDurationMinutes: 5,  // OVR: ELFT = EOFT + this (time on frequency, default 5 min)
   ovrOffsetMinutes: 0,          // OVR: EOFT = now + this (when creating new OVR)
-  ovrAutoActivateMinutes: 30,   // OVR: Auto-activate this many minutes before EOFT
+  ovrAutoActivateMinutes: 30,   // Legacy - kept for backwards compatibility
   timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
   showLocalTime: false,   // Show local time conversions alongside UTC
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
@@ -27,8 +27,17 @@ const defaultConfig = {
   enableAlertTooltips: true, // Show alert tooltips on hover over highlighted strips
   wtcSystem: "ICAO",        // Wake turbulence system: "ICAO", "UK", or "RECAT"
   wtcAlertThreshold: "off", // ICAO: "off","M","H" | UK: "off","S","LM","UM","H","J" | RECAT: "off","E","D","C","B","A"
-  autoActivateEnabled: true, // Automatically activate PLANNED arrivals before ETA
-  autoActivateMinutesBeforeEta: 30, // Minutes before ETA to auto-activate (max: 120)
+  autoActivateEnabled: true, // Legacy - kept for backwards compatibility
+  autoActivateMinutesBeforeEta: 30, // Legacy - kept for backwards compatibility
+  // Auto-activation settings per flight type
+  autoActivateDepEnabled: false,  // DEP: Auto-activate before ETD (off by default - usually manual)
+  autoActivateDepMinutes: 30,     // DEP: Minutes before ETD to auto-activate
+  autoActivateArrEnabled: true,   // ARR: Auto-activate before ETA (on by default)
+  autoActivateArrMinutes: 30,     // ARR: Minutes before ETA to auto-activate
+  autoActivateLocEnabled: false,  // LOC: Auto-activate before ETD (off by default - usually manual)
+  autoActivateLocMinutes: 30,     // LOC: Minutes before ETD to auto-activate
+  autoActivateOvrEnabled: true,   // OVR: Auto-activate before EOFT (on by default)
+  autoActivateOvrMinutes: 30,     // OVR: Minutes before EOFT to auto-activate
   // History tab alert visibility settings
   historyShowTimeAlerts: false,      // Show time-based alerts (stale, overdue) in History - off by default
   historyShowEmergencyAlerts: true,  // Show emergency alerts (7500/7600/7700) in History

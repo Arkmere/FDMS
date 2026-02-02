@@ -1070,70 +1070,128 @@ function renderExpandedRow(tbody, m, context = 'live') {
 }
 
 /**
- * Auto-activate PLANNED arrivals and overflights when they reach the configured time before ETA/EOFT
- * Note: Only ARR and OVR flights are auto-activated. DEP and LOC flights must be manually activated.
- * For OVR: ETA field = EOFT (Expected On Frequency Time)
+ * Determine initial status for a new movement based on whether its time is in the past
+ * Movements with times already past are set to ACTIVE immediately
+ * @param {string} flightType - Flight type (DEP, ARR, LOC, OVR)
+ * @param {string} dof - Date of flight (YYYY-MM-DD)
+ * @param {string} depPlanned - Planned departure time (HH:MM)
+ * @param {string} arrPlanned - Planned arrival time (HH:MM)
+ * @returns {string} 'ACTIVE' if time is past, otherwise 'PLANNED'
  */
-function autoActivatePlannedArrivals() {
-  const config = getConfig();
+function determineInitialStatus(flightType, dof, depPlanned, arrPlanned) {
+  const ft = (flightType || '').toUpperCase();
+  let timeToCheck = '';
 
-  // Check if auto-activation is enabled
-  if (!config.autoActivateEnabled) {
-    return;
+  // Determine which time field to check based on flight type
+  if (ft === 'DEP' || ft === 'LOC') {
+    timeToCheck = depPlanned;
+  } else if (ft === 'ARR' || ft === 'OVR') {
+    timeToCheck = arrPlanned;
   }
 
-  const now = new Date();
-  const minutesBeforeEtaArr = Math.min(config.autoActivateMinutesBeforeEta || 30, 120); // For ARR
-  const minutesBeforeEoftOvr = Math.min(config.ovrAutoActivateMinutes || 30, 120); // For OVR
+  // If no time provided, default to PLANNED
+  if (!timeToCheck || timeToCheck.trim() === '') {
+    return 'PLANNED';
+  }
 
-  // Get all PLANNED arrivals and overflights
-  const plannedMovements = getMovements().filter(m =>
-    m.status === 'PLANNED' &&
-    (m.flightType === 'ARR' || m.flightType === 'OVR')
-  );
+  // Check if time is in the past
+  const { isPast } = checkPastTime(timeToCheck, dof);
+  return isPast ? 'ACTIVE' : 'PLANNED';
+}
+
+/**
+ * Auto-activate PLANNED movements when they reach the configured time before their planned time
+ * Supports all 4 flight types with individual enable/minutes config:
+ * - DEP: Activates before ETD (useful for pre-departure checks)
+ * - ARR: Activates before ETA (default enabled)
+ * - LOC: Activates before ETD (useful for local flights)
+ * - OVR: Activates before EOFT (default enabled)
+ */
+function autoActivatePlannedMovements() {
+  const config = getConfig();
+  const now = new Date();
+
+  // Get activation settings for each flight type (with fallback to legacy settings)
+  const activationSettings = {
+    DEP: {
+      enabled: config.autoActivateDepEnabled ?? false,
+      minutes: Math.min(config.autoActivateDepMinutes || 30, 120)
+    },
+    ARR: {
+      enabled: config.autoActivateArrEnabled ?? config.autoActivateEnabled ?? true,
+      minutes: Math.min(config.autoActivateArrMinutes || config.autoActivateMinutesBeforeEta || 30, 120)
+    },
+    LOC: {
+      enabled: config.autoActivateLocEnabled ?? false,
+      minutes: Math.min(config.autoActivateLocMinutes || 30, 120)
+    },
+    OVR: {
+      enabled: config.autoActivateOvrEnabled ?? config.autoActivateEnabled ?? true,
+      minutes: Math.min(config.autoActivateOvrMinutes || config.ovrAutoActivateMinutes || 30, 120)
+    }
+  };
+
+  // Get all PLANNED movements
+  const plannedMovements = getMovements().filter(m => m.status === 'PLANNED');
 
   for (const movement of plannedMovements) {
-    // For OVR, ETA is actually EOFT (Expected On Frequency Time)
-    const eta = getETA(movement);
+    const ft = (movement.flightType || '').toUpperCase();
+    const settings = activationSettings[ft];
 
-    // Skip if no valid ETA or DOF
-    if (!eta || eta === '-' || !movement.dof) {
+    // Skip if this flight type's auto-activation is not enabled
+    if (!settings || !settings.enabled) {
       continue;
     }
 
-    // Parse ETA time (HH:MM format)
-    const etaParts = eta.split(':');
-    if (etaParts.length !== 2) {
+    // Get the appropriate time field based on flight type
+    // DEP/LOC use ETD (depPlanned), ARR uses ETA (arrPlanned), OVR uses EOFT (arrPlanned)
+    let timeStr;
+    if (ft === 'DEP' || ft === 'LOC') {
+      timeStr = getETD(movement);
+    } else {
+      timeStr = getETA(movement);
+    }
+
+    // Skip if no valid time or DOF
+    if (!timeStr || timeStr === '-' || !movement.dof) {
       continue;
     }
 
-    const etaHours = parseInt(etaParts[0], 10);
-    const etaMinutes = parseInt(etaParts[1], 10);
+    // Parse time (HH:MM format)
+    const timeParts = timeStr.split(':');
+    if (timeParts.length !== 2) {
+      continue;
+    }
 
-    // Create ETA date object
-    const etaDate = new Date(movement.dof + 'T00:00:00Z');
-    etaDate.setUTCHours(etaHours, etaMinutes, 0, 0);
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
 
-    // Calculate minutes until ETA/EOFT
-    const minutesUntilEta = Math.floor((etaDate - now) / (1000 * 60));
+    // Create date object for the planned time
+    const plannedDate = new Date(movement.dof + 'T00:00:00Z');
+    plannedDate.setUTCHours(hours, minutes, 0, 0);
 
-    // Use appropriate activation window based on flight type
-    const activationWindow = movement.flightType === 'OVR' ? minutesBeforeEoftOvr : minutesBeforeEtaArr;
+    // Calculate minutes until planned time
+    const minutesUntil = Math.floor((plannedDate - now) / (1000 * 60));
 
     // Auto-activate if within the configured window
-    if (minutesUntilEta <= activationWindow && minutesUntilEta >= -60) {
-      // Don't auto-activate if more than 1 hour past ETA (probably stale)
+    // Don't auto-activate if more than 1 hour past (probably stale)
+    if (minutesUntil <= settings.minutes && minutesUntil >= -60) {
       transitionToActive(movement.id);
     }
   }
+}
+
+// Legacy alias for backwards compatibility
+function autoActivatePlannedArrivals() {
+  autoActivatePlannedMovements();
 }
 
 export function renderLiveBoard() {
   const tbody = byId("liveBody");
   if (!tbody) return;
 
-  // Auto-activate PLANNED arrivals before ETA if enabled
-  autoActivatePlannedArrivals();
+  // Auto-activate PLANNED movements before their planned time if enabled
+  autoActivatePlannedMovements();
 
   tbody.innerHTML = "";
 
@@ -2225,9 +2283,10 @@ function openNewFlightModal(flightType = "DEP") {
     const routeValue = document.getElementById("atcRoute")?.value || "";
     const clearanceValue = document.getElementById("atcClearance")?.value || "";
 
-    // Create movement
+    // Create movement - determine initial status based on whether time is past
+    const initialStatus = determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
     let movement = {
-      status: "PLANNED",
+      status: initialStatus,
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: voiceCallsign,
@@ -2702,9 +2761,10 @@ function openNewLocalModal() {
     const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
 
-    // Create movement
+    // Create movement - determine initial status based on whether time is past
+    const initialStatus = determineInitialStatus("LOC", dof, depPlanned, arrPlanned);
     let movement = {
-      status: "PLANNED",
+      status: initialStatus,
       callsignCode: callsign,
       callsignLabel: "",
       callsignVoice: voiceCallsign,
@@ -3836,9 +3896,11 @@ function openDuplicateMovementModal(m) {
     const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
 
-    // Create movement
+    // Create movement - determine initial status based on whether time is past
+    const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
+    const initialStatus = determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
     let movement = {
-      status: "PLANNED",
+      status: initialStatus,
       callsignCode: callsign,
       callsignLabel: m.callsignLabel || "",
       callsignVoice: voiceCallsign,
@@ -3857,7 +3919,7 @@ function openDuplicateMovementModal(m) {
       arrActual: "",
       dof: dof,
       rules: document.getElementById("dupRules")?.value || m.rules || "VFR",
-      flightType: document.getElementById("dupFlightType")?.value || flightType,
+      flightType: selectedFlightType,
       isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
       tngCount: parseInt(tng, 10),
       osCount: m.osCount || 0,
@@ -3928,9 +3990,17 @@ function openReciprocalStripModal(m, targetType) {
   // Get WTC for new flight type
   const wtc = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
 
+  // Determine time fields based on target type
+  const dof = getTodayDateString();
+  const depPlanned = targetType === "DEP" ? newTime : "";
+  const arrPlanned = targetType === "ARR" ? newTime : "";
+
+  // Determine initial status based on whether time is past
+  const initialStatus = determineInitialStatus(targetType, dof, depPlanned, arrPlanned);
+
   // Create the reciprocal movement
   let movement = {
-    status: "PLANNED",
+    status: initialStatus,
     flightType: targetType,
     callsignCode: m.callsignCode || "",
     callsignLabel: m.callsignLabel || "",
@@ -3945,7 +4015,9 @@ function openReciprocalStripModal(m, targetType) {
     arrAd: newArrAd,
     arrName: newArrName,
     wtc: wtc,
-    dof: getTodayDateString(),
+    dof: dof,
+    depPlanned: depPlanned,
+    arrPlanned: arrPlanned,
     pob: m.pob || 0,
     tngCount: 0,
     osCount: 0,
@@ -3956,13 +4028,6 @@ function openReciprocalStripModal(m, targetType) {
     warnings: m.warnings || "",
     notes: m.notes || ""
   };
-
-  // Set appropriate time fields
-  if (targetType === "ARR") {
-    movement.arrPlanned = newTime;
-  } else if (targetType === "DEP") {
-    movement.depPlanned = newTime;
-  }
 
   // Enrich with auto-populated fields
   movement = enrichMovementData(movement);
@@ -4108,12 +4173,9 @@ export function initLiveBoard() {
   renderLiveBoard();
 
   // Periodic auto-activation check every 60 seconds
-  // This ensures arrivals are auto-activated even without user interaction
+  // This ensures movements are auto-activated even without user interaction
   setInterval(() => {
-    const config = getConfig();
-    if (config.autoActivateEnabled) {
-      autoActivatePlannedArrivals();
-    }
+    autoActivatePlannedMovements();
   }, 60000);
 }
 
