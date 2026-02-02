@@ -3897,7 +3897,6 @@ function openDuplicateMovementModal(m) {
     const operator = regData ? (regData['OPERATOR'] || "") : "";
 
     // Create movement - determine initial status based on whether time is past
-    const selectedFlightType = document.getElementById("dupFlightType")?.value || flightType;
     const initialStatus = determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
     let movement = {
       status: initialStatus,
