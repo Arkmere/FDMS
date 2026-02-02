@@ -77,16 +77,16 @@
                 <!-- FIS Counter Section -->
                 <div class="fis-stats-section" title="FIS (Flight Information Service) statistics">
                   <div class="stats-row">
-                    <div class="stat-item" title="Generic FIS (non-strip counted)">
-                      <span class="stat-label">Gen</span>
+                    <div class="stat-item" title="Manual FIS (non-strip counted)">
+                      <span class="stat-label">Manual FIS</span>
                       <div class="stat-counter">
                         <button class="counter-btn-sm" id="btnDecGenericOvr" type="button" aria-label="Decrease generic FIS">−</button>
                         <span class="stat-value" id="genericOvrCount">0</span>
                         <button class="counter-btn-sm" id="btnIncGenericOvr" type="button" aria-label="Increase generic FIS">+</button>
                       </div>
                     </div>
-                    <div class="stat-item" title="Strip-based FIS count">
-                      <span class="stat-label">Strips</span>
+                    <div class="stat-item" title="Strip FIS count">
+                      <span class="stat-label">Strip FIS</span>
                       <span class="stat-value" id="stripFisCount">0</span>
                     </div>
                     <div class="stat-item stat-fis-total" title="Total FIS count">
@@ -1040,26 +1040,58 @@
 
             <div style="margin-top: 16px; margin-bottom: 12px;">
               <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Auto-Activate Arrivals
+                Auto-Activation
               </label>
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configAutoActivateEnabled" style="cursor: pointer;">
-                  <span style="font-size: 12px;">Automatically activate PLANNED arrivals before ETA</span>
+              <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                PLANNED movements will automatically transition to ACTIVE status when within the configured time window. Movements created with past times are always activated immediately.
+              </div>
+
+              <!-- DEP Row -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                  <input type="checkbox" id="configAutoActivateDepEnabled" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: 500;">Departures</span>
                 </label>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <input type="number" id="configAutoActivateDepMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                  <span style="font-size: 11px; color: #666;">min before ETD</span>
+                </div>
               </div>
-              <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-                <label style="font-size: 12px;">Minutes before ETA:</label>
-                <input
-                  type="number"
-                  id="configAutoActivateMinutes"
-                  min="5"
-                  max="120"
-                  style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                />
+
+              <!-- ARR Row -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                  <input type="checkbox" id="configAutoActivateArrEnabled" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: 500;">Arrivals</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <input type="number" id="configAutoActivateArrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                  <span style="font-size: 11px; color: #666;">min before ETA</span>
+                </div>
               </div>
-              <div style="font-size: 11px; color: #666; margin-top: 6px;">
-                When enabled, PLANNED arrival movements will automatically transition to ACTIVE status this many minutes before their ETA.
+
+              <!-- LOC Row -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                  <input type="checkbox" id="configAutoActivateLocEnabled" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: 500;">Local Flights</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <input type="number" id="configAutoActivateLocMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                  <span style="font-size: 11px; color: #666;">min before ETD</span>
+                </div>
+              </div>
+
+              <!-- OVR Row -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                  <input type="checkbox" id="configAutoActivateOvrEnabled" style="cursor: pointer;">
+                  <span style="font-size: 12px; font-weight: 500;">Overflights</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <input type="number" id="configAutoActivateOvrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                  <span style="font-size: 11px; color: #666;">min before EOFT</span>
+                </div>
               </div>
             </div>
 

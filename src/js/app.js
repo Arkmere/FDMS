@@ -449,8 +449,15 @@ function initAdminPanelHandlers() {
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
-  const configAutoActivateEnabled = document.getElementById("configAutoActivateEnabled");
-  const configAutoActivateMinutes = document.getElementById("configAutoActivateMinutes");
+  // Auto-activation settings per flight type
+  const configAutoActivateDepEnabled = document.getElementById("configAutoActivateDepEnabled");
+  const configAutoActivateDepMinutes = document.getElementById("configAutoActivateDepMinutes");
+  const configAutoActivateArrEnabled = document.getElementById("configAutoActivateArrEnabled");
+  const configAutoActivateArrMinutes = document.getElementById("configAutoActivateArrMinutes");
+  const configAutoActivateLocEnabled = document.getElementById("configAutoActivateLocEnabled");
+  const configAutoActivateLocMinutes = document.getElementById("configAutoActivateLocMinutes");
+  const configAutoActivateOvrEnabled = document.getElementById("configAutoActivateOvrEnabled");
+  const configAutoActivateOvrMinutes = document.getElementById("configAutoActivateOvrMinutes");
   const configWtcSystem = document.getElementById("configWtcSystem");
   const configWtcThreshold = document.getElementById("configWtcThreshold");
   // History alert visibility settings
@@ -533,8 +540,15 @@ function initAdminPanelHandlers() {
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
-  if (configAutoActivateEnabled) configAutoActivateEnabled.checked = currentConfig.autoActivateEnabled !== false;
-  if (configAutoActivateMinutes) configAutoActivateMinutes.value = currentConfig.autoActivateMinutesBeforeEta || 30;
+  // Auto-activation settings per flight type
+  if (configAutoActivateDepEnabled) configAutoActivateDepEnabled.checked = currentConfig.autoActivateDepEnabled || false;
+  if (configAutoActivateDepMinutes) configAutoActivateDepMinutes.value = currentConfig.autoActivateDepMinutes || 30;
+  if (configAutoActivateArrEnabled) configAutoActivateArrEnabled.checked = currentConfig.autoActivateArrEnabled ?? currentConfig.autoActivateEnabled ?? true;
+  if (configAutoActivateArrMinutes) configAutoActivateArrMinutes.value = currentConfig.autoActivateArrMinutes || currentConfig.autoActivateMinutesBeforeEta || 30;
+  if (configAutoActivateLocEnabled) configAutoActivateLocEnabled.checked = currentConfig.autoActivateLocEnabled || false;
+  if (configAutoActivateLocMinutes) configAutoActivateLocMinutes.value = currentConfig.autoActivateLocMinutes || 30;
+  if (configAutoActivateOvrEnabled) configAutoActivateOvrEnabled.checked = currentConfig.autoActivateOvrEnabled ?? currentConfig.autoActivateEnabled ?? true;
+  if (configAutoActivateOvrMinutes) configAutoActivateOvrMinutes.value = currentConfig.autoActivateOvrMinutes || currentConfig.ovrAutoActivateMinutes || 30;
 
   // Initialize WTC system and threshold
   if (configWtcSystem) {
@@ -576,8 +590,15 @@ function initAdminPanelHandlers() {
       const hideLocalIfSame = configHideLocalIfSame?.checked || false;
       const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
       const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
-      const autoActivateEnabled = configAutoActivateEnabled?.checked !== false;
-      const autoActivateMinutes = parseInt(configAutoActivateMinutes?.value || "30", 10);
+      // Auto-activation settings per flight type
+      const autoActivateDepEnabled = configAutoActivateDepEnabled?.checked || false;
+      const autoActivateDepMinutes = parseInt(configAutoActivateDepMinutes?.value || "30", 10);
+      const autoActivateArrEnabled = configAutoActivateArrEnabled?.checked !== false;
+      const autoActivateArrMinutes = parseInt(configAutoActivateArrMinutes?.value || "30", 10);
+      const autoActivateLocEnabled = configAutoActivateLocEnabled?.checked || false;
+      const autoActivateLocMinutes = parseInt(configAutoActivateLocMinutes?.value || "30", 10);
+      const autoActivateOvrEnabled = configAutoActivateOvrEnabled?.checked !== false;
+      const autoActivateOvrMinutes = parseInt(configAutoActivateOvrMinutes?.value || "30", 10);
       const wtcSystem = configWtcSystem?.value || "ICAO";
       const wtcThreshold = configWtcThreshold?.value || "off";
       // History alert visibility settings
@@ -602,7 +623,10 @@ function initAdminPanelHandlers() {
           isNaN(ovrDuration) || ovrDuration < 1 || ovrDuration > 60 ||
           isNaN(ovrAutoActivate) || ovrAutoActivate < 5 || ovrAutoActivate > 120 ||
           isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
-          isNaN(autoActivateMinutes) || autoActivateMinutes < 5 || autoActivateMinutes > 120) {
+          isNaN(autoActivateDepMinutes) || autoActivateDepMinutes < 5 || autoActivateDepMinutes > 120 ||
+          isNaN(autoActivateArrMinutes) || autoActivateArrMinutes < 5 || autoActivateArrMinutes > 120 ||
+          isNaN(autoActivateLocMinutes) || autoActivateLocMinutes < 5 || autoActivateLocMinutes > 120 ||
+          isNaN(autoActivateOvrMinutes) || autoActivateOvrMinutes < 5 || autoActivateOvrMinutes > 120) {
         showToast("Please enter valid configuration values", 'error');
         return;
       }
@@ -619,8 +643,15 @@ function initAdminPanelHandlers() {
         hideLocalTimeInBannerIfSame: hideLocalIfSame,
         alwaysHideLocalTimeInBanner: alwaysHideLocal,
         enableAlertTooltips: enableAlertTooltips,
-        autoActivateEnabled: autoActivateEnabled,
-        autoActivateMinutesBeforeEta: autoActivateMinutes,
+        // Auto-activation settings per flight type
+        autoActivateDepEnabled: autoActivateDepEnabled,
+        autoActivateDepMinutes: autoActivateDepMinutes,
+        autoActivateArrEnabled: autoActivateArrEnabled,
+        autoActivateArrMinutes: autoActivateArrMinutes,
+        autoActivateLocEnabled: autoActivateLocEnabled,
+        autoActivateLocMinutes: autoActivateLocMinutes,
+        autoActivateOvrEnabled: autoActivateOvrEnabled,
+        autoActivateOvrMinutes: autoActivateOvrMinutes,
         wtcSystem: wtcSystem,
         wtcAlertThreshold: wtcThreshold,
         historyShowTimeAlerts: historyShowTimeAlerts,
@@ -646,12 +677,16 @@ function initAdminPanelHandlers() {
  * without creating individual strips
  */
 /**
- * Calculate total FIS count from all strips on the board
- * @returns {number} Total FIS count from strips
+ * Calculate total FIS count from today's strips only
+ * @returns {number} Total FIS count from today's strips
  */
 function calculateStripFisCount() {
   const movements = getMovements();
-  return movements.reduce((total, m) => total + (m.fisCount || 0), 0);
+  const today = getTodayDateString();
+  // Only count FIS from movements with today's date of flight
+  return movements
+    .filter(m => m.dof === today)
+    .reduce((total, m) => total + (m.fisCount || 0), 0);
 }
 
 /**
