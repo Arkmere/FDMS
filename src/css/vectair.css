@@ -2478,3 +2478,123 @@ tr.strip.ft-ovr > td {
 .drawer-overlay.open {
   display: block;
 }
+
+/* ============================================
+   Booking Profile & System Notes Styles
+   ============================================ */
+
+/* Profile indicator badge next to registration field */
+.profile-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.profile-indicator.profile-loaded {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+.profile-indicator.profile-loaded::before {
+  content: "✓";
+}
+
+.profile-indicator.vkb-autofill {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+}
+
+.profile-indicator.vkb-autofill::before {
+  content: "VKB";
+}
+
+/* System notes block (read-only display) */
+.system-notes-block {
+  background: #fffef0;
+  border: 1px solid #e0d090;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 60px;
+  color: var(--va-text-main);
+}
+
+.system-notes-block:empty::after {
+  content: "No system notes";
+  color: #999;
+  font-style: italic;
+}
+
+.system-notes-item {
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 3px solid transparent;
+}
+
+.system-notes-item:last-child {
+  margin-bottom: 0;
+}
+
+.system-notes-item.note-warning {
+  border-left-color: #f57f17;
+  background: rgba(255, 152, 0, 0.08);
+  padding: 4px 8px;
+  border-radius: 0 3px 3px 0;
+}
+
+.system-notes-item.note-info {
+  border-left-color: #1976d2;
+  background: rgba(33, 150, 243, 0.08);
+  padding: 4px 8px;
+  border-radius: 0 3px 3px 0;
+}
+
+.system-notes-label {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 6px;
+}
+
+.system-notes-label.label-warning {
+  color: #e65100;
+}
+
+.system-notes-label.label-info {
+  color: #0d47a1;
+}
+
+/* Profile actions (export/import buttons) */
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-actions .btn-small {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+/* Autofill field styling */
+.modal-input.autofilled,
+.modal-select.autofilled {
+  background: linear-gradient(to right, #f0f9ff, #ffffff);
+  border-color: #90caf9;
+}
+
+.modal-input.autofilled:focus,
+.modal-select.autofilled:focus {
+  background: #ffffff;
+  border-color: var(--va-link);
+}

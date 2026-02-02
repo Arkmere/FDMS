@@ -13,12 +13,20 @@ import { showToast } from "./app.js";
 
 import { renderLiveBoard, renderTimeline } from "./ui_liveboard.js";
 
+// VKB imports for autofill functionality
+import {
+  lookupRegistration,
+  lookupAircraftType,
+  getLocationName
+} from "./vkb.js";
+
 /* -----------------------------
    Storage for Bookings
 ------------------------------ */
 
 const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
 const CALENDAR_EVENTS_STORAGE_KEY = "vectair_fdms_calendar_events_v1";
+const BOOKING_PROFILES_STORAGE_KEY = "fdms_booking_profiles_v1";
 
 let bookings = [];
 let bookingsInitialised = false;
@@ -28,6 +36,233 @@ let nextBookingId = 1;
 let calendarEvents = [];
 let calendarEventsInitialised = false;
 let nextCalendarEventId = 1;
+
+/* -----------------------------
+   Booking Profiles Storage
+   Saves contact/aircraft info per registration for repeat visitors
+   Precedence: saved profile > VKB registrations DB
+------------------------------ */
+
+let bookingProfiles = {};
+let bookingProfilesInitialised = false;
+
+/**
+ * Normalize registration for profile lookup
+ * Uppercase, trim, remove spaces/hyphens
+ * @param {string} reg - Registration string
+ * @returns {string} Normalized registration
+ */
+function normalizeRegistration(reg) {
+  if (!reg) return '';
+  return reg.toUpperCase().trim().replace(/[-\s]/g, '');
+}
+
+/**
+ * Load booking profiles from localStorage
+ */
+function loadBookingProfiles() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(BOOKING_PROFILES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.profiles && typeof parsed.profiles === 'object') {
+        bookingProfiles = parsed.profiles;
+      }
+    }
+  } catch (e) {
+    console.warn("FDMS Booking: failed to load profiles from storage", e);
+  }
+  bookingProfilesInitialised = true;
+}
+
+/**
+ * Save booking profiles to localStorage
+ */
+function saveBookingProfiles() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const payload = JSON.stringify({
+      schema_version: 1,
+      timestamp: new Date().toISOString(),
+      profiles: bookingProfiles
+    });
+    window.localStorage.setItem(BOOKING_PROFILES_STORAGE_KEY, payload);
+  } catch (e) {
+    console.warn("FDMS Booking: failed to save profiles to storage", e);
+  }
+}
+
+/**
+ * Ensure profiles are initialized
+ */
+function ensureProfilesInitialised() {
+  if (bookingProfilesInitialised) return;
+  loadBookingProfiles();
+}
+
+/**
+ * Get a booking profile by registration
+ * @param {string} reg - Registration
+ * @returns {Object|null} Profile data or null
+ */
+export function getBookingProfile(reg) {
+  ensureProfilesInitialised();
+  const normalized = normalizeRegistration(reg);
+  return bookingProfiles[normalized] || null;
+}
+
+/**
+ * Save a booking profile for a registration
+ * @param {string} reg - Registration
+ * @param {Object} profileData - Profile fields to save
+ */
+export function saveBookingProfile(reg, profileData) {
+  ensureProfilesInitialised();
+  const normalized = normalizeRegistration(reg);
+  bookingProfiles[normalized] = {
+    ...profileData,
+    registration_display: reg.toUpperCase().trim(),
+    last_saved: new Date().toISOString(),
+    schema_version: 1
+  };
+  saveBookingProfiles();
+}
+
+/**
+ * Delete a booking profile
+ * @param {string} reg - Registration
+ */
+export function deleteBookingProfile(reg) {
+  ensureProfilesInitialised();
+  const normalized = normalizeRegistration(reg);
+  if (bookingProfiles[normalized]) {
+    delete bookingProfiles[normalized];
+    saveBookingProfiles();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get all booking profiles
+ * @returns {Object} All profiles keyed by normalized registration
+ */
+export function getAllBookingProfiles() {
+  ensureProfilesInitialised();
+  return { ...bookingProfiles };
+}
+
+/**
+ * Import booking profiles from JSON data (merges with existing, import wins on conflict)
+ * @param {Object} importData - Imported JSON data
+ * @returns {Object} Result with counts
+ */
+export function importBookingProfiles(importData) {
+  ensureProfilesInitialised();
+  let imported = 0;
+  let skipped = 0;
+
+  try {
+    const profiles = importData.profiles || importData;
+    if (typeof profiles !== 'object') {
+      throw new Error('Invalid import format');
+    }
+
+    for (const [key, profile] of Object.entries(profiles)) {
+      if (profile && typeof profile === 'object') {
+        const normalized = normalizeRegistration(key);
+        bookingProfiles[normalized] = {
+          ...profile,
+          last_saved: profile.last_saved || new Date().toISOString(),
+          schema_version: profile.schema_version || 1
+        };
+        imported++;
+      } else {
+        skipped++;
+      }
+    }
+
+    saveBookingProfiles();
+    return { success: true, imported, skipped };
+  } catch (e) {
+    console.error("Failed to import profiles:", e);
+    return { success: false, error: e.message, imported: 0, skipped: 0 };
+  }
+}
+
+/**
+ * Export all booking profiles as JSON
+ * @returns {string} JSON string of all profiles
+ */
+export function exportBookingProfiles() {
+  ensureProfilesInitialised();
+  return JSON.stringify({
+    schema_version: 1,
+    exported_at: new Date().toISOString(),
+    profiles: bookingProfiles
+  }, null, 2);
+}
+
+/* -----------------------------
+   Autofill State Tracking
+   Tracks last autofilled values to prevent stomping user edits
+------------------------------ */
+
+const autofillState = {
+  // Field ID -> { value: lastAutofilledValue, source: 'profile'|'vkb' }
+  lastAutofill: {}
+};
+
+/**
+ * Set autofill value for a field and track it
+ * @param {HTMLElement} field - Input element
+ * @param {string} value - Value to set
+ * @param {string} source - Source of value ('profile' or 'vkb')
+ */
+function setAutofillValue(field, value, source) {
+  if (!field) return;
+  const currentValue = field.value.trim();
+  const lastAutofill = autofillState.lastAutofill[field.id];
+
+  // Anti-stomp: Only autofill if field is empty OR still shows previous autofill
+  if (!currentValue || (lastAutofill && currentValue === lastAutofill.value)) {
+    field.value = value;
+    autofillState.lastAutofill[field.id] = { value, source };
+    field.dataset.autofillValue = value;
+    field.dataset.autofillSource = source;
+  }
+}
+
+/**
+ * Clear autofill tracking for a field
+ * @param {string} fieldId - Field ID to clear
+ */
+function clearAutofillTracking(fieldId) {
+  delete autofillState.lastAutofill[fieldId];
+  const field = byId(fieldId);
+  if (field) {
+    delete field.dataset.autofillValue;
+    delete field.dataset.autofillSource;
+  }
+}
+
+/**
+ * Check if a field was user-edited (value differs from last autofill)
+ * @param {HTMLElement} field - Input element
+ * @returns {boolean} True if user edited the field
+ */
+function isFieldUserEdited(field) {
+  if (!field) return false;
+  const currentValue = field.value.trim();
+  const lastAutofill = autofillState.lastAutofill[field.id];
+
+  // If no autofill tracking, and field has value, treat as user-edited
+  if (!lastAutofill) return currentValue !== '';
+
+  // User edited if current value differs from last autofill
+  return currentValue !== lastAutofill.value;
+}
 
 function loadBookingsFromStorage() {
   if (typeof window === "undefined" || !window.localStorage) return null;
@@ -625,8 +860,332 @@ function updateSubmitButton() {
   }
 }
 
+/* -----------------------------
+   Registration-driven Autofill Chain
+   Precedence: Saved Profile > VKB Registrations DB > VKB Aircraft Types
+
+   Chain:
+   1. Registration entered
+   2. Check saved booking profile first (repeat visitor)
+   3. If no profile, lookup VKB registrations for: callsign, type, warnings, notes
+   4. Type -> MTOW lookup from VKB aircraft types
+   5. System notes updated with WARNINGS/NOTES from either source
+------------------------------ */
+
+// Track last processed registration to avoid redundant lookups
+let lastProcessedRegistration = '';
+
+// Track current system notes from VKB lookup (for saving with profile)
+let currentSystemWarnings = '';
+let currentSystemNotes = '';
+
+/**
+ * Main autofill chain triggered when registration changes
+ * Implements precedence: profile > VKB
+ */
+function runRegistrationAutofill() {
+  const regInput = byId('bookingRegistration');
+  if (!regInput) return;
+
+  const reg = regInput.value.toUpperCase().trim();
+  const normalizedReg = normalizeRegistration(reg);
+
+  // Skip if registration unchanged
+  if (normalizedReg === lastProcessedRegistration) return;
+  lastProcessedRegistration = normalizedReg;
+
+  // Clear system notes if registration cleared
+  if (!normalizedReg) {
+    updateSystemNotes('', '');
+    return;
+  }
+
+  // Get references to form fields
+  const callsignInput = byId('bookingCallsign');
+  const typeInput = byId('bookingAircraftType');
+  const mtowInput = byId('bookingMtow');
+  const mtowUnitSelect = byId('bookingMtowUnit');
+  const cuiwCheckbox = byId('bookingHasCuiw');
+  const contactNameInput = byId('bookingContactName');
+  const contactPhoneInput = byId('bookingContactPhone');
+  const departureAdInput = byId('bookingDepartureAd');
+  const notesInput = byId('bookingNotes');
+
+  // System notes variables
+  let systemWarnings = '';
+  let systemNotes = '';
+
+  // 1. Check for saved booking profile first (highest precedence)
+  const profile = getBookingProfile(reg);
+
+  if (profile) {
+    // Profile found - use profile data with anti-stomp
+    if (profile.callsign) {
+      setAutofillValue(callsignInput, profile.callsign, 'profile');
+    }
+    if (profile.aircraftType) {
+      setAutofillValue(typeInput, profile.aircraftType, 'profile');
+    }
+    if (profile.mtow) {
+      setAutofillValue(mtowInput, String(profile.mtow), 'profile');
+      if (mtowUnitSelect && profile.mtowUnit) {
+        mtowUnitSelect.value = profile.mtowUnit;
+      }
+    }
+    if (cuiwCheckbox && profile.hasCuiw !== undefined) {
+      cuiwCheckbox.checked = profile.hasCuiw;
+    }
+    if (profile.contactName) {
+      setAutofillValue(contactNameInput, profile.contactName, 'profile');
+    }
+    if (profile.contactPhone) {
+      setAutofillValue(contactPhoneInput, profile.contactPhone, 'profile');
+    }
+    if (profile.departureAd) {
+      setAutofillValue(departureAdInput, profile.departureAd, 'profile');
+    }
+    if (profile.notes) {
+      setAutofillValue(notesInput, profile.notes, 'profile');
+    }
+
+    // Profile may also have system notes from original VKB lookup
+    systemWarnings = profile.systemWarnings || '';
+    systemNotes = profile.systemNotes || '';
+
+    // Store for potential profile save later
+    currentSystemWarnings = systemWarnings;
+    currentSystemNotes = systemNotes;
+
+    // Show indicator that profile was loaded
+    showProfileLoadedIndicator('profile', profile.last_saved);
+  } else {
+    // No profile - use VKB registration lookup
+    const regData = lookupRegistration(reg);
+    let vkbUsed = false;
+
+    if (regData) {
+      // Auto-fill fixed callsign if different from registration
+      const fixedCallsign = regData['FIXED C/S'];
+      if (fixedCallsign && fixedCallsign !== '-' && fixedCallsign !== '' &&
+          fixedCallsign.toUpperCase() !== normalizedReg) {
+        setAutofillValue(callsignInput, fixedCallsign, 'vkb');
+        vkbUsed = true;
+      }
+
+      // Auto-fill aircraft type
+      const regType = regData['TYPE'];
+      if (regType && regType !== '-') {
+        setAutofillValue(typeInput, regType, 'vkb');
+        vkbUsed = true;
+      }
+
+      // Extract warnings and notes for system notes block
+      systemWarnings = regData['WARNINGS'] || '';
+      if (systemWarnings === '-') systemWarnings = '';
+
+      systemNotes = regData['NOTES'] || '';
+      if (systemNotes === '-') systemNotes = '';
+
+      if (systemWarnings || systemNotes) vkbUsed = true;
+
+      // Store for potential profile save later
+      currentSystemWarnings = systemWarnings;
+      currentSystemNotes = systemNotes;
+    }
+
+    // Show VKB indicator if data was found, otherwise hide
+    showProfileLoadedIndicator(vkbUsed ? 'vkb' : false);
+  }
+
+  // 2. Type -> MTOW chain (runs after type is set from profile or VKB)
+  runTypeMtowAutofill();
+
+  // 3. Update system notes display
+  updateSystemNotes(systemWarnings, systemNotes);
+}
+
+/**
+ * Type -> MTOW autofill from VKB aircraft types
+ * Only runs if MTOW field is empty or still shows previous autofill
+ */
+function runTypeMtowAutofill() {
+  const typeInput = byId('bookingAircraftType');
+  const mtowInput = byId('bookingMtow');
+  const mtowUnitSelect = byId('bookingMtowUnit');
+
+  if (!typeInput || !mtowInput) return;
+
+  const aircraftType = typeInput.value.toUpperCase().trim();
+  if (!aircraftType) return;
+
+  // Lookup MTOW from aircraft types
+  const typeData = lookupAircraftType(aircraftType);
+  if (typeData) {
+    const mctomKg = parseFloat(typeData['MCTOM (Kg)']) || 0;
+    if (mctomKg > 0) {
+      // Only autofill if MTOW is empty or shows previous autofill
+      setAutofillValue(mtowInput, String(Math.round(mctomKg)), 'vkb');
+
+      // Set unit to kg when autofilling from MCTOM
+      if (mtowUnitSelect) {
+        mtowUnitSelect.value = 'kg';
+      }
+    }
+  }
+}
+
+/**
+ * Update the system notes display block
+ * Shows WARNINGS and NOTES from VKB or profile
+ * Does not overwrite user's notes/special requirements
+ */
+function updateSystemNotes(warnings, notes) {
+  const systemNotesBlock = byId('bookingSystemNotes');
+  const systemNotesContainer = byId('bookingSystemNotesContainer');
+  if (!systemNotesBlock || !systemNotesContainer) return;
+
+  let html = '';
+  if (warnings) {
+    html += `<div class="system-notes-item note-warning">
+      <span class="system-notes-label label-warning">WARNING:</span>${escapeHtml(warnings)}
+    </div>`;
+  }
+  if (notes) {
+    html += `<div class="system-notes-item note-info">
+      <span class="system-notes-label label-info">NOTE:</span>${escapeHtml(notes)}
+    </div>`;
+  }
+
+  if (html) {
+    systemNotesBlock.innerHTML = html;
+    systemNotesContainer.style.display = '';
+  } else {
+    systemNotesBlock.innerHTML = '';
+    systemNotesContainer.style.display = 'none';
+  }
+}
+
+/**
+ * Show/hide indicator that a saved profile was loaded or VKB was used
+ * @param {boolean|string} source - false to hide, 'profile' for saved profile, 'vkb' for VKB data
+ * @param {string|null} lastSavedDate - ISO date string for profile
+ */
+function showProfileLoadedIndicator(source, lastSavedDate = null) {
+  const indicator = byId('profileLoadedIndicator');
+  if (!indicator) return;
+
+  // Reset classes
+  indicator.className = 'profile-indicator';
+
+  if (source === 'profile' || source === true) {
+    let text = ' Profile loaded';
+    if (lastSavedDate) {
+      const date = new Date(lastSavedDate);
+      text += ` (${date.toLocaleDateString()})`;
+    }
+    indicator.textContent = text;
+    indicator.classList.add('profile-loaded');
+    indicator.style.display = 'inline-flex';
+  } else if (source === 'vkb') {
+    indicator.textContent = ' VKB data';
+    indicator.classList.add('vkb-autofill');
+    indicator.style.display = 'inline-flex';
+  } else {
+    indicator.textContent = '';
+    indicator.style.display = 'none';
+  }
+}
+
+/**
+ * Save current form data as booking profile
+ * @param {boolean} silent - If true, don't show toast notification
+ */
+function saveCurrentAsProfile(silent = false) {
+  const regInput = byId('bookingRegistration');
+  if (!regInput || !regInput.value.trim()) {
+    if (!silent) showToast('Enter a registration to save profile', 'error');
+    return false;
+  }
+
+  const reg = regInput.value.toUpperCase().trim();
+  const data = getFormData();
+
+  const profileData = {
+    callsign: data.aircraft.callsign,
+    aircraftType: data.aircraft.type,
+    mtow: data.aircraft.mtowValue,
+    mtowUnit: data.aircraft.mtowUnit,
+    hasCuiw: data.aircraft.hasCuiw,
+    contactName: data.contact.name,
+    contactPhone: data.contact.phone,
+    departureAd: data.ops.departureAd,
+    notes: data.ops.notes,
+    // Use tracked system notes from VKB/profile lookup
+    systemWarnings: currentSystemWarnings,
+    systemNotes: currentSystemNotes
+  };
+
+  saveBookingProfile(reg, profileData);
+  if (!silent) {
+    showToast(`Profile saved for ${reg}`, 'success');
+  }
+  showProfileLoadedIndicator('profile', new Date().toISOString());
+  return true;
+}
+
+/**
+ * Handle profile export - downloads JSON file
+ */
+function handleProfileExport() {
+  const json = exportBookingProfiles();
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fdms_booking_profiles_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Profiles exported', 'success');
+}
+
+/**
+ * Handle profile import - opens file picker
+ */
+function handleProfileImport() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+
+  input.onchange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        const result = importBookingProfiles(data);
+
+        if (result.success) {
+          showToast(`Imported ${result.imported} profiles`, 'success');
+        } else {
+          showToast(`Import failed: ${result.error}`, 'error');
+        }
+      } catch (err) {
+        showToast('Invalid JSON file', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  input.click();
+}
+
 function updateAll() {
   updateZzzzField();
+  runRegistrationAutofill();
   updateChargesDisplay();
   updateStripPreview();
   updateSubmitButton();
@@ -661,7 +1220,10 @@ function fallbackCopyToClipboard(text) {
   document.body.removeChild(textArea);
 }
 
-function normalizeRegistration(reg) {
+/**
+ * Normalize registration for registry URL lookup (strips G- prefix for CAA)
+ */
+function normalizeRegistrationForRegistry(reg) {
   let normalized = (reg || '').toUpperCase().trim();
   if (normalized.startsWith('G-')) {
     return normalized.substring(2);
@@ -671,7 +1233,7 @@ function normalizeRegistration(reg) {
 
 function openCaaGinfo() {
   const reg = byId('bookingRegistration')?.value || '';
-  const searchKey = normalizeRegistration(reg);
+  const searchKey = normalizeRegistrationForRegistry(reg);
 
   if (searchKey) {
     copyToClipboard(searchKey);
@@ -706,6 +1268,9 @@ function resetForm() {
   if (form) {
     form.querySelectorAll('input[type="text"], input[type="tel"], input[type="date"], input[type="time"], input[type="number"], textarea').forEach(el => {
       el.value = '';
+      // Clear autofill tracking
+      delete el.dataset.autofillValue;
+      delete el.dataset.autofillSource;
     });
     form.querySelectorAll('input[type="checkbox"]').forEach(el => {
       if (el.id === 'bookingParkingRequired' || el.id === 'bookingHasCuiw') {
@@ -718,6 +1283,18 @@ function resetForm() {
       el.selectedIndex = 0;
     });
   }
+
+  // Reset autofill tracking state
+  Object.keys(autofillState.lastAutofill).forEach(key => {
+    delete autofillState.lastAutofill[key];
+  });
+  lastProcessedRegistration = '';
+  currentSystemWarnings = '';
+  currentSystemNotes = '';
+
+  // Hide profile indicator and system notes
+  showProfileLoadedIndicator(false);
+  updateSystemNotes('', '');
 
   const dofInput = byId('bookingDof');
   if (dofInput) {
@@ -856,6 +1433,12 @@ function createBookingAndStrip() {
     formation: null,
     bookingId: booking.id
   });
+
+  // Auto-save profile if checkbox is checked
+  const saveProfileCheckbox = byId('bookingSaveProfile');
+  if (saveProfileCheckbox?.checked) {
+    saveCurrentAsProfile(true); // Silent save
+  }
 
   showToast(`Booking created! Strip added to Live Board.`, 'success', 5000);
 
@@ -1174,6 +1757,9 @@ function renderBookingDetails(booking) {
 ------------------------------ */
 
 export function initBookingPage() {
+  // Initialize booking profiles
+  ensureProfilesInitialised();
+
   // Set default date to today
   const dofInput = byId('bookingDof');
   if (dofInput) {
@@ -1206,9 +1792,29 @@ export function initBookingPage() {
     }
   });
 
+  // Registration input - add special handler for autofill on blur
+  // This ensures autofill runs when user tabs away from registration field
+  const regInput = byId('bookingRegistration');
+  if (regInput) {
+    regInput.addEventListener('blur', () => {
+      lastProcessedRegistration = ''; // Force re-process on blur
+      runRegistrationAutofill();
+    });
+  }
+
+  // Type input - trigger MTOW autofill when type changes manually
+  const typeInput = byId('bookingAircraftType');
+  if (typeInput) {
+    typeInput.addEventListener('blur', runTypeMtowAutofill);
+  }
+
   // Registry lookup buttons
   byId('btnCaaGinfo')?.addEventListener('click', openCaaGinfo);
   byId('btnFaaRegistry')?.addEventListener('click', openFaaRegistry);
+
+  // Profile export/import buttons
+  byId('btnExportProfiles')?.addEventListener('click', handleProfileExport);
+  byId('btnImportProfiles')?.addEventListener('click', handleProfileImport);
 
   // Action buttons
   byId('btnResetBooking')?.addEventListener('click', resetForm);
