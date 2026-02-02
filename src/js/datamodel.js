@@ -435,10 +435,12 @@ function ensureInitialised() {
   loadConfig();
 
   const loaded = loadFromStorage();
-  if (loaded && loaded.length) {
+  if (loaded) {
+    // Use stored data (may be empty array)
     movements = loaded;
   } else {
-    movements = cloneDemoMovements();
+    // No stored data - start fresh with empty movements
+    movements = [];
     saveToStorage();
   }
 

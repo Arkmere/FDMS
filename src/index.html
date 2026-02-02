@@ -14,7 +14,7 @@
           <div class="va-logo-box">VA</div>
           <div>
             <div class="va-title-main">Vectair FDMS Lite</div>
-            <div class="va-title-sub">EGOW / RAF Woodvale — Demo</div>
+            <div class="va-title-sub">EGOW / RAF Woodvale</div>
           </div>
         </div>
         <div class="header-right">
@@ -713,10 +713,12 @@
           <!-- Session Management -->
           <div class="panel">
             <h3>Session Management</h3>
+            <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
+              Backup your movement data to a JSON file or restore from a previous backup.
+            </p>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Export session data to JSON file">Export Session JSON</button>
-              <button class="btn btn-primary" id="btnImportSession" type="button" aria-label="Import session data from JSON file">Import Session JSON</button>
-              <button class="btn btn-secondary" id="btnResetDemo" type="button" aria-label="Reset session to demo data">Reset to Demo Data</button>
+              <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Backup session data to JSON file">Backup to JSON</button>
+              <button class="btn btn-primary" id="btnImportSession" type="button" aria-label="Restore session data from JSON file">Restore from JSON</button>
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
           </div>

@@ -371,7 +371,7 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
       VIS_MIL: 0,
       TOTAL_MIL: 0,
       VIS_CIV_FW: 0,
-      OW_FW: 0, // TODO: Define rule if needed
+      OW_FW: 0, // BC (EGOW-based civilian fixed-wing)
       TOTAL_CIV_FW: 0,
       NVY_HEL: 0,
       CIV_HEL: 0,
@@ -446,6 +446,9 @@ export function computeMonthlyReturn(movements, year, month, hoursMap = null) {
 
     // Civil Fixed-Wing (using weighted counting)
     if (classification.isVisitingCivFixedWing) row.VIS_CIV_FW += totalCount;
+
+    // OW F/W = BC (EGOW-based civilian fixed-wing)
+    if (classification.isBasedCivil) row.OW_FW += totalCount;
 
     // Helicopters (using weighted counting)
     if (classification.isNavyHeli) row.NVY_HEL += totalCount;

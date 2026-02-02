@@ -26,7 +26,6 @@ import {
 } from "./ui_booking.js";
 
 import {
-  resetMovementsToDemo,
   exportSessionJSON,
   importSessionJSON,
   getStorageInfo,
@@ -222,6 +221,11 @@ function setActiveTab(panelId) {
     const isTarget = targetId && panel.id === targetId;
     panel.classList.toggle(TAB.HIDDEN_CLASS, !isTarget);
   });
+
+  // Re-render reports when Reports tab is opened to ensure data freshness
+  if (targetId === 'tab-reports') {
+    renderReports();
+  }
 }
 
 function initTabs() {
@@ -377,24 +381,9 @@ function updateInitStatus(message, isComplete = false) {
 }
 
 function initAdminPanelHandlers() {
-  const btnReset = document.getElementById("btnResetDemo");
   const btnExport = document.getElementById("btnExportSession");
   const btnImport = document.getElementById("btnImportSession");
   const fileInput = document.getElementById("importFileInput");
-
-  if (btnReset) {
-    btnReset.addEventListener("click", () => {
-      if (confirm("Reset to demo data? This will overwrite your current session.")) {
-        resetMovementsToDemo();
-        renderLiveBoard();
-        renderHistoryBoard();
-        renderReports();
-        diagnostics.lastRenderTime = new Date().toISOString();
-        updateDiagnostics();
-        showToast("Session reset to demo data", 'success');
-      }
-    });
-  }
 
   if (btnExport) {
     btnExport.addEventListener("click", () => {
@@ -404,12 +393,12 @@ function initAdminPanelHandlers() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `fdms-session-${new Date().toISOString().split("T")[0]}.json`;
+        a.download = `fdms-backup-${new Date().toISOString().split("T")[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast("Session exported successfully", 'success');
+        showToast("Backup created successfully", 'success');
       } catch (e) {
-        showToast(`Export failed: ${e.message}`, 'error');
+        showToast(`Backup failed: ${e.message}`, 'error');
       }
     });
   }
@@ -435,12 +424,12 @@ function initAdminPanelHandlers() {
             renderReports();
             diagnostics.lastRenderTime = new Date().toISOString();
             updateDiagnostics();
-            showToast(`Import successful! Loaded ${result.count} movements`, 'success');
+            showToast(`Restore successful! Loaded ${result.count} movements`, 'success');
           } else {
-            showToast(`Import failed: ${result.error}`, 'error');
+            showToast(`Restore failed: ${result.error}`, 'error');
           }
         } catch (e) {
-          showToast(`Import failed: ${e.message}`, 'error');
+          showToast(`Restore failed: ${e.message}`, 'error');
         }
         fileInput.value = "";
       };
@@ -710,8 +699,8 @@ function calculateDailyStats() {
   const active = todaysMovements.filter(m => m.status === 'ACTIVE').length;
   const completed = todaysMovements.filter(m => m.status === 'COMPLETED').length;
 
-  // Count VFR movements
-  const vfrMovements = todaysMovements.filter(m => m.flightRules === 'V' || m.flightRules === 'VFR');
+  // Count VFR movements (field is 'm.rules', not 'm.flightRules')
+  const vfrMovements = todaysMovements.filter(m => m.rules === 'V' || m.rules === 'VFR');
   const vfrPlannedActive = vfrMovements.filter(m => m.status === 'PLANNED' || m.status === 'ACTIVE').length;
   const vfrCompleted = vfrMovements.filter(m => m.status === 'COMPLETED').length;
 
