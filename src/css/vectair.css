@@ -614,11 +614,11 @@ tr.strip.ft-ovr > td {
 
 /* Cancelled strip styling - brown background to distinguish from completed */
 .cancelled-strip {
-  background-color: rgba(117, 47, 0, 0.50) !important;
+  background-color: rgba(0, 0, 0, 0.33) !important;
 }
 
 .cancelled-strip:hover {
-  background-color: rgba(139, 90, 43, 0.50) !important;
+  background-color: rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Edit dropdown menus — base chrome only; positioning is handled by
