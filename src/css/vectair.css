@@ -614,7 +614,7 @@ tr.strip.ft-ovr > td {
 
 /* Cancelled strip styling - brown background to distinguish from completed */
 .cancelled-strip {
-  background-color: rgba(139, 90, 43, 0.40) !important;
+  background-color: rgba(117, 47, 0, 0.50) !important;
 }
 
 .cancelled-strip:hover {
