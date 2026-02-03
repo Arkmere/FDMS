@@ -621,28 +621,15 @@ tr.strip.ft-ovr > td {
   background-color: rgba(139, 90, 43, 0.50) !important;
 }
 
-/* Edit dropdown menu styling */
+/* Edit dropdown menus — base chrome only; positioning is handled by
+   the portal (position:fixed on document.body) in ui_liveboard.js */
 .js-edit-menu,
 .js-history-edit-menu {
-  position: absolute !important;
-  right: 0 !important;
-  top: 100% !important;
-  background: #ffffff !important;
-  border: 1px solid #ccc !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-  z-index: 9999 !important;
-  min-width: 120px !important;
-  margin-top: 2px !important;
-}
-
-/* Last few rows in table: dropdowns open upward to avoid clipping */
-.table-container tbody tr:nth-last-child(-n+2) .js-edit-menu,
-.table-container tbody tr:nth-last-child(-n+2) .js-history-edit-menu {
-  top: auto !important;
-  bottom: 100% !important;
-  margin-top: 0 !important;
-  margin-bottom: 2px !important;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  min-width: 120px;
 }
 
 .small-btn {

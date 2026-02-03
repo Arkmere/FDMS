@@ -54,77 +54,120 @@ import {
 let expandedId = null;
 let historyExpandedId = null;
 
-/**
- * Position a dropdown menu relative to its trigger, flipping up if clipped.
- * Call immediately after setting display:block so offsetHeight is measurable.
- */
-function positionDropdownMenu(menu, triggerBtn) {
-  // Reset to default down position
-  menu.style.top = '100%';
-  menu.style.bottom = 'auto';
-  menu.style.marginTop = '2px';
-  menu.style.marginBottom = '';
-  menu.style.maxHeight = '';
-  menu.style.overflowY = '';
-
-  const btnRect = triggerBtn.getBoundingClientRect();
-  const viewportH = window.innerHeight;
-  const headerEl = document.querySelector('.header');
-  const headerH = headerEl ? headerEl.getBoundingClientRect().height : 40;
-  const menuH = menu.offsetHeight || 120;
-
-  const spaceBelow = viewportH - btnRect.bottom;
-  const spaceAbove = btnRect.top - headerH;
-
-  if (spaceBelow >= menuH) {
-    // Default: open down — already set
-  } else if (spaceAbove >= menuH) {
-    // Flip up
-    menu.style.top = 'auto';
-    menu.style.bottom = '100%';
-    menu.style.marginTop = '0';
-    menu.style.marginBottom = '2px';
-  } else {
-    // Neither side is large enough — use larger side with scroll
-    if (spaceAbove > spaceBelow) {
-      menu.style.top = 'auto';
-      menu.style.bottom = '100%';
-      menu.style.marginTop = '0';
-      menu.style.marginBottom = '2px';
-      menu.style.maxHeight = Math.max(0, spaceAbove - 8) + 'px';
-    } else {
-      menu.style.maxHeight = Math.max(0, spaceBelow - 8) + 'px';
-    }
-    menu.style.overflowY = 'auto';
-  }
-}
-
 const state = {
   globalFilter: "",
   plannedWindowHours: 24, // Show PLANNED movements within this many hours
   showLocalTimeInModals: false // Show local time conversions in modals
 };
 
-// Handler for closing dropdown menus when clicking outside
-function closeDropdownsHandler(e) {
-  // Close Live Board dropdown menus
-  if (!e.target.closest(".js-edit-dropdown")) {
-    document.querySelectorAll(".js-edit-menu").forEach(menu => {
-      menu.style.display = "none";
-      // Reset row z-index
-      const row = menu.closest("tr");
-      if (row) row.style.zIndex = "";
-    });
+/* -----------------------------
+   Portal dropdown – overflow-proof
+   Menus are reparented to document.body (position:fixed) while open so they
+   escape any ancestor with overflow:auto/hidden (e.g. .table-container).
+   On close the menu node is moved back to its original parent.
+------------------------------ */
+
+let _portalMenu       = null;   // menu element currently portalled, or null
+let _portalOrigParent = null;   // original parentNode, saved for restore
+let _portalTrigger    = null;   // the trigger button that opened it
+
+function openDropdownPortal(menuEl, triggerBtn) {
+  if (_portalMenu) closeDropdownPortal();               // close any open menu first
+
+  _portalOrigParent = menuEl.parentNode;                // remember where it came from
+  _portalTrigger    = triggerBtn;
+
+  document.body.appendChild(menuEl);                    // reparent – escapes overflow
+  _portalMenu = menuEl;
+
+  // Arm for fixed positioning
+  menuEl.style.position  = 'fixed';
+  menuEl.style.display   = 'block';
+  menuEl.style.right     = 'auto';
+  menuEl.style.left      = 'auto';
+  menuEl.style.maxHeight = 'none';
+  menuEl.style.overflowY = 'visible';
+  menuEl.style.marginTop = '0';
+  menuEl.style.marginBottom = '0';
+
+  // --- measure natural height off-screen, then position ---
+  const btn       = triggerBtn.getBoundingClientRect();
+  const viewportH = window.innerHeight;
+  const headerEl  = document.querySelector('.header');
+  const headerH   = headerEl ? headerEl.getBoundingClientRect().bottom : 0;
+
+  menuEl.style.top = '-9999px';                         // hide while measuring
+  const menuH = menuEl.offsetHeight;
+
+  const spaceBelow = viewportH - btn.bottom - 4;
+  const spaceAbove = btn.top - headerH - 4;
+
+  let top;
+  if (spaceBelow >= menuH) {
+    top = btn.bottom + 2;                               // open down
+  } else if (spaceAbove >= menuH) {
+    top = btn.top - menuH - 2;                          // flip up
+  } else if (spaceAbove > spaceBelow) {
+    top = headerH + 4;                                  // above is larger – scroll
+    menuEl.style.maxHeight = spaceAbove + 'px';
+    menuEl.style.overflowY = 'auto';
+  } else {
+    top = btn.bottom + 2;                               // below is larger – scroll
+    menuEl.style.maxHeight = spaceBelow + 'px';
+    menuEl.style.overflowY = 'auto';
   }
-  // Close History dropdown menus
-  if (!e.target.closest(".js-history-edit-dropdown")) {
-    document.querySelectorAll(".js-history-edit-menu").forEach(menu => {
-      menu.style.display = "none";
-      // Reset row z-index
-      const row = menu.closest("tr");
-      if (row) row.style.zIndex = "";
-    });
+
+  menuEl.style.top   = top + 'px';
+  menuEl.style.right = (window.innerWidth - btn.right) + 'px';
+
+  // Attach close listeners (removed in closeDropdownPortal)
+  document.addEventListener('click',  _portalClickOutside);
+  document.addEventListener('keydown', _portalEscape);
+  window.addEventListener('resize',   closeDropdownPortal);
+  document.addEventListener('scroll',  closeDropdownPortal, true); // capture – catches scroll on any element
+}
+
+function closeDropdownPortal() {
+  if (!_portalMenu) return;
+
+  const menu   = _portalMenu;
+  const parent = _portalOrigParent;
+
+  // Restore into original parent; if that node was destroyed by a re-render just drop it
+  if (parent && parent.isConnected) {
+    parent.appendChild(menu);
+  } else {
+    menu.remove();
   }
+
+  menu.style.display    = 'none';
+  menu.style.position   = '';
+  menu.style.top        = '';
+  menu.style.right      = '';
+  menu.style.left       = '';
+  menu.style.maxHeight  = '';
+  menu.style.overflowY  = '';
+  menu.style.marginTop  = '';
+  menu.style.marginBottom = '';
+
+  _portalMenu       = null;
+  _portalOrigParent = null;
+  _portalTrigger    = null;
+
+  document.removeEventListener('click',  _portalClickOutside);
+  document.removeEventListener('keydown', _portalEscape);
+  window.removeEventListener('resize',   closeDropdownPortal);
+  document.removeEventListener('scroll',  closeDropdownPortal, true);
+}
+
+function _portalClickOutside(e) {
+  if (_portalTrigger && _portalTrigger.contains(e.target)) return; // toggle handler owns this
+  if (_portalMenu    && _portalMenu.contains(e.target))    return; // click inside menu
+  closeDropdownPortal();
+}
+
+function _portalEscape(e) {
+  if (e.key === 'Escape') closeDropdownPortal();
 }
 
 /* -----------------------------
@@ -1240,6 +1283,7 @@ export function renderLiveBoard() {
   // Auto-activate PLANNED movements before their planned time if enabled
   autoActivatePlannedMovements();
 
+  closeDropdownPortal();                                // restore any portalled menu before wiping DOM
   tbody.innerHTML = "";
 
   const movements = getMovements().filter(matchesFilters).slice().sort(compareForLiveBoard);
@@ -1437,30 +1481,15 @@ export function renderLiveBoard() {
       </td>
     `;
 
-    // Bind Edit dropdown toggle
+    // Bind Edit dropdown toggle (portal-based – escapes overflow)
     const editDropdownBtn = tr.querySelector(".js-edit-dropdown");
     const editMenu = tr.querySelector(".js-edit-menu");
     safeOn(editDropdownBtn, "click", (e) => {
       e.stopPropagation();
-      // Close all other open menus and reset their row z-index
-      document.querySelectorAll(".js-edit-menu").forEach(menu => {
-        if (menu !== editMenu) {
-          menu.style.display = "none";
-          const row = menu.closest("tr");
-          if (row) row.style.position = "relative";
-          if (row) row.style.zIndex = "";
-        }
-      });
-      // Toggle this menu
-      const isOpening = editMenu.style.display === "none";
-      editMenu.style.display = isOpening ? "block" : "none";
-      // Set z-index on this row when opening, reset when closing
-      if (isOpening) {
-        tr.style.position = "relative";
-        tr.style.zIndex = "10";
-        positionDropdownMenu(editMenu, editDropdownBtn);
+      if (_portalMenu === editMenu) {
+        closeDropdownPortal();
       } else {
-        tr.style.zIndex = "";
+        openDropdownPortal(editMenu, editDropdownBtn);
       }
     });
 
@@ -1468,8 +1497,7 @@ export function renderLiveBoard() {
     const editDetailsBtn = tr.querySelector(".js-edit-details");
     safeOn(editDetailsBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openEditMovementModal(m);
     });
 
@@ -1477,8 +1505,7 @@ export function renderLiveBoard() {
     const duplicateBtn = tr.querySelector(".js-duplicate");
     safeOn(duplicateBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openDuplicateMovementModal(m);
     });
 
@@ -1486,8 +1513,7 @@ export function renderLiveBoard() {
     const produceArrBtn = tr.querySelector(".js-produce-arr");
     safeOn(produceArrBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openReciprocalStripModal(m, "ARR");
     });
 
@@ -1495,8 +1521,7 @@ export function renderLiveBoard() {
     const produceDepBtn = tr.querySelector(".js-produce-dep");
     safeOn(produceDepBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openReciprocalStripModal(m, "DEP");
     });
 
@@ -1504,8 +1529,7 @@ export function renderLiveBoard() {
     const cancelBtn = tr.querySelector(".js-cancel");
     safeOn(cancelBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       transitionToCancelled(m.id);
     });
 
@@ -1629,10 +1653,6 @@ export function renderLiveBoard() {
     `;
     tbody.appendChild(empty);
   }
-
-  // Setup global click handler to close dropdown menus when clicking outside
-  document.removeEventListener("click", closeDropdownsHandler);
-  document.addEventListener("click", closeDropdownsHandler);
 
   // Update timeline when movements change
   renderTimeline();
@@ -4298,6 +4318,7 @@ export function renderHistoryBoard() {
   const tbody = byId("historyBody");
   if (!tbody) return;
 
+  closeDropdownPortal();                                // restore any portalled menu before wiping DOM
   tbody.innerHTML = "";
 
   // Get time period filter
@@ -4446,27 +4467,15 @@ export function renderHistoryBoard() {
       </td>
     `;
 
-    // Bind History Edit dropdown toggle
+    // Bind History Edit dropdown toggle (portal-based – escapes overflow)
     const editDropdownBtn = tr.querySelector(".js-history-edit-dropdown");
     const editMenu = tr.querySelector(".js-history-edit-menu");
     safeOn(editDropdownBtn, "click", (e) => {
       e.stopPropagation();
-      // Close all other open menus
-      document.querySelectorAll(".js-history-edit-menu").forEach(menu => {
-        if (menu !== editMenu) {
-          menu.style.display = "none";
-          const row = menu.closest("tr");
-          if (row) row.style.zIndex = "";
-        }
-      });
-      const isOpening = editMenu.style.display === "none";
-      editMenu.style.display = isOpening ? "block" : "none";
-      if (isOpening) {
-        tr.style.position = "relative";
-        tr.style.zIndex = "10";
-        positionDropdownMenu(editMenu, editDropdownBtn);
+      if (_portalMenu === editMenu) {
+        closeDropdownPortal();
       } else {
-        tr.style.zIndex = "";
+        openDropdownPortal(editMenu, editDropdownBtn);
       }
     });
 
@@ -4474,8 +4483,7 @@ export function renderHistoryBoard() {
     const editDetailsBtn = tr.querySelector(".js-history-edit-details");
     safeOn(editDetailsBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openEditMovementModal(m);
     });
 
@@ -4483,8 +4491,7 @@ export function renderHistoryBoard() {
     const duplicateBtn = tr.querySelector(".js-history-duplicate");
     safeOn(duplicateBtn, "click", (e) => {
       e.stopPropagation();
-      editMenu.style.display = "none";
-      tr.style.zIndex = "";
+      closeDropdownPortal();
       openDuplicateMovementModal(m);
     });
 
