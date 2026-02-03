@@ -2585,3 +2585,49 @@ tr.strip.ft-ovr > td {
   background: #ffffff;
   border-color: var(--va-link);
 }
+
+/* Calendar view-mode selector */
+.cal-view-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--va-border-dark);
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cal-view-btn:hover {
+  background: #f0f4f8;
+}
+.cal-view-btn.active {
+  background: var(--va-accent-brown, #6d4c30);
+  color: #fff;
+  border-color: var(--va-accent-brown, #6d4c30);
+  font-weight: 600;
+}
+
+/* Year-view month tiles */
+.calendar-year-month {
+  border: 1px solid var(--va-border-dark);
+  border-radius: 4px;
+  padding: 12px 8px;
+  text-align: center;
+  background: #fff;
+  transition: background 0.15s;
+}
+.calendar-year-month:hover {
+  background: #f0f4f8;
+}
+.calendar-year-month.is-today {
+  border-color: var(--va-accent-brown, #6d4c30);
+  background: #faf5f0;
+}
+.calendar-year-month-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.calendar-year-month-count {
+  font-size: 11px;
+  color: var(--va-accent-brown, #6d4c30);
+  margin-top: 2px;
+}

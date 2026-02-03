@@ -22,7 +22,8 @@ import {
 import {
   initBookingPage,
   initCalendarPage,
-  renderCalendar
+  renderCalendar,
+  initBookingProfilesAdmin
 } from "./ui_booking.js";
 
 import {
@@ -830,6 +831,7 @@ async function bootstrap() {
     initReports();
     initBookingPage();
     initCalendarPage();
+    initBookingProfilesAdmin();
 
     renderLiveBoard();
     renderTimeline();

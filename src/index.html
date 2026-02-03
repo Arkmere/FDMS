@@ -180,10 +180,15 @@
 
           <div class="calendar-toolbar">
             <div class="calendar-nav">
-              <button type="button" class="btn btn-secondary" id="btnCalendarPrev" title="Previous month">&lt;</button>
+              <button type="button" class="btn btn-secondary" id="btnCalendarPrev" title="Previous">&lt;</button>
               <span class="calendar-month-label" id="calendarMonthLabel">January 2026</span>
-              <button type="button" class="btn btn-secondary" id="btnCalendarNext" title="Next month">&gt;</button>
+              <button type="button" class="btn btn-secondary" id="btnCalendarNext" title="Next">&gt;</button>
               <button type="button" class="btn btn-secondary" id="btnCalendarToday">Today</button>
+            </div>
+            <div class="calendar-view-selector" style="display:flex;gap:4px;">
+              <button type="button" class="btn btn-ghost btn-small cal-view-btn active" data-view="month">Month</button>
+              <button type="button" class="btn btn-ghost btn-small cal-view-btn" data-view="week">Week</button>
+              <button type="button" class="btn btn-ghost btn-small cal-view-btn" data-view="year">Year</button>
             </div>
             <div class="calendar-actions">
               <button type="button" class="btn btn-primary" id="btnAddCalendarEvent">+ Add Event</button>
@@ -1119,6 +1124,33 @@
             </div>
 
             <button class="btn btn-primary" id="btnSaveConfig" type="button">Save Configuration</button>
+          </div>
+
+          <!-- Booking Profiles -->
+          <div class="panel" id="bookingProfilesPanel">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h3 style="margin:0;">Booking Profiles</h3>
+              <button class="btn btn-primary btn-small" id="btnNewProfile" type="button">+ New Profile</button>
+            </div>
+            <p style="font-size:11px;color:#666;margin:0 0 10px;">Saved aircraft/contact profiles for repeat visitors. Auto-filled when the same registration is entered on the Booking form.</p>
+            <input type="text" id="profileSearchInput" placeholder="Search by registration, type, callsign, contact…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;box-sizing:border-box;margin-bottom:10px;" />
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:#f5f5f5;border-bottom:2px solid #ddd;">
+                    <th style="text-align:left;padding:6px 8px;">Registration</th>
+                    <th style="text-align:left;padding:6px 8px;">Type</th>
+                    <th style="text-align:left;padding:6px 8px;">Callsign</th>
+                    <th style="text-align:left;padding:6px 8px;">Contact</th>
+                    <th style="text-align:left;padding:6px 8px;">Last saved</th>
+                    <th style="text-align:right;padding:6px 8px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="profilesTableBody">
+                  <tr><td colspan="6" style="color:#999;padding:12px;text-align:center;">No profiles saved.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>

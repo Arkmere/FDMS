@@ -5,6 +5,7 @@
 
 import {
   createMovement,
+  updateMovement,
   getMovements,
   getConfig
 } from "./datamodel.js";
@@ -396,6 +397,46 @@ export function deleteCalendarEvent(id) {
   if (index !== -1) {
     calendarEvents.splice(index, 1);
     saveCalendarEventsToStorage();
+    return true;
+  }
+  return false;
+}
+
+export function updateCalendarEvent(id, patch) {
+  ensureCalendarEventsInitialised();
+  const event = calendarEvents.find(e => e.id === id);
+  if (!event) return null;
+  Object.assign(event, patch);
+  event.updatedAt = new Date().toISOString();
+  saveCalendarEventsToStorage();
+  return event;
+}
+
+export function updateBooking(bookingId, patch) {
+  ensureBookingsInitialised();
+  const booking = bookings.find(b => b.id === bookingId);
+  if (!booking) return null;
+  // Deep-merge known nested keys so callers can do e.g. { schedule: { dateISO: '...' } }
+  const nestedKeys = ['contact', 'schedule', 'aircraft', 'movement', 'ops', 'charges'];
+  const flatPatch = { ...patch };
+  for (const key of nestedKeys) {
+    if (flatPatch[key] && typeof flatPatch[key] === 'object' && booking[key] && typeof booking[key] === 'object') {
+      booking[key] = { ...booking[key], ...flatPatch[key] };
+      delete flatPatch[key]; // handled; don't overwrite in the flat assign below
+    }
+  }
+  Object.assign(booking, flatPatch);
+  booking.updatedAtUtc = new Date().toISOString();
+  saveBookingsToStorage();
+  return booking;
+}
+
+export function deleteBooking(bookingId) {
+  ensureBookingsInitialised();
+  const index = bookings.findIndex(b => b.id === bookingId);
+  if (index !== -1) {
+    bookings.splice(index, 1);
+    saveBookingsToStorage();
     return true;
   }
   return false;
@@ -1459,6 +1500,7 @@ function createBookingAndStrip() {
 ------------------------------ */
 
 let calendarCurrentDate = new Date();
+let calendarViewMode = 'month'; // 'week' | 'month' | 'year'
 
 function getCalendarMonth() {
   return {
@@ -1474,7 +1516,7 @@ function setCalendarMonth(year, month) {
 
 function getBookingsForDate(dateStr) {
   ensureBookingsInitialised();
-  return bookings.filter(b => b.schedule?.dateISO === dateStr);
+  return bookings.filter(b => b.schedule?.dateISO === dateStr && b.status !== 'CANCELLED');
 }
 
 function getMovementsForDate(dateStr) {
@@ -1482,40 +1524,69 @@ function getMovementsForDate(dateStr) {
   return movements.filter(m => m.dof === dateStr);
 }
 
+/**
+ * Bind click handlers on all .calendar-event elements inside the grid.
+ * Handles bookings, movements, and general calendar events.
+ */
+function bindCalendarEventClicks(container) {
+  if (!container) return;
+  container.querySelectorAll('.calendar-event').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const bookingId = el.dataset.bookingId;
+      const movementId = el.dataset.movementId;
+      const eventId = el.dataset.eventId;
+
+      if (bookingId) {
+        openBookingDrawer(parseInt(bookingId));
+      } else if (movementId && window.openEditMovementModal) {
+        const m = getMovements().find(mv => mv.id === parseInt(movementId));
+        if (m) window.openEditMovementModal(m);
+      } else if (eventId) {
+        openEditCalendarEventModal(parseInt(eventId));
+      }
+    });
+  });
+}
+
 export function renderCalendar() {
   const grid = byId('calendarGrid');
-  const monthLabel = byId('calendarMonthLabel');
-
   if (!grid) return;
 
+  // Sync view-mode buttons
+  document.querySelectorAll('.cal-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === calendarViewMode);
+  });
+
+  switch (calendarViewMode) {
+    case 'week':  renderCalendarWeek(grid); break;
+    case 'year':  renderCalendarYear(grid); break;
+    default:      renderCalendarMonth(grid); break;
+  }
+
+  bindCalendarEventClicks(grid);
+}
+
+/* --- Month view (original grid) --- */
+function renderCalendarMonth(grid) {
+  const monthLabel = byId('calendarMonthLabel');
   const { year, month } = getCalendarMonth();
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  // Update month label
   if (monthLabel) {
-    monthLabel.textContent = firstDay.toLocaleDateString('en-GB', {
-      month: 'long',
-      year: 'numeric'
-    });
+    monthLabel.textContent = firstDay.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   }
 
-  // Build calendar HTML
   let html = '';
-
-  // Header row
   const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  dayNames.forEach(day => {
-    html += `<div class="calendar-header-cell">${day}</div>`;
-  });
+  dayNames.forEach(day => { html += `<div class="calendar-header-cell">${day}</div>`; });
 
-  // Calculate start day (Monday = 0)
   let startDayOfWeek = firstDay.getDay() - 1;
   if (startDayOfWeek < 0) startDayOfWeek = 6;
 
-  // Previous month days
   const prevMonthLastDay = new Date(year, month, 0);
   for (let i = startDayOfWeek - 1; i >= 0; i--) {
     const day = prevMonthLastDay.getDate() - i;
@@ -1523,14 +1594,11 @@ export function renderCalendar() {
     html += renderCalendarDay(day, dateStr, true, false);
   }
 
-  // Current month days
   for (let day = 1; day <= lastDay.getDate(); day++) {
     const dateStr = new Date(year, month, day).toISOString().split('T')[0];
-    const isToday = dateStr === todayStr;
-    html += renderCalendarDay(day, dateStr, false, isToday);
+    html += renderCalendarDay(day, dateStr, false, dateStr === todayStr);
   }
 
-  // Next month days to fill grid
   const totalCells = Math.ceil((startDayOfWeek + lastDay.getDate()) / 7) * 7;
   const remainingCells = totalCells - (startDayOfWeek + lastDay.getDate());
   for (let day = 1; day <= remainingCells; day++) {
@@ -1538,24 +1606,92 @@ export function renderCalendar() {
     html += renderCalendarDay(day, dateStr, true, false);
   }
 
+  grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+  grid.innerHTML = html;
+}
+
+/* --- Week view: Mon–Sun of the week containing calendarCurrentDate --- */
+function renderCalendarWeek(grid) {
+  const monthLabel = byId('calendarMonthLabel');
+  const ref = new Date(calendarCurrentDate);
+  // Find Monday of this week
+  const dow = ref.getDay(); // 0=Sun
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(ref);
+  monday.setDate(ref.getDate() + mondayOffset);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Label: "Week of DD Mon YYYY"
+  if (monthLabel) {
+    monthLabel.textContent = 'Week of ' + monday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  let html = '';
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  dayNames.forEach(d => { html += `<div class="calendar-header-cell">${d}</div>`; });
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    html += renderCalendarDay(d.getDate(), dateStr, false, dateStr === todayStr);
+  }
+
+  grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+  grid.innerHTML = html;
+}
+
+/* --- Year view: 12-month compact grid; clicking a month switches to that month --- */
+function renderCalendarYear(grid) {
+  const monthLabel = byId('calendarMonthLabel');
+  const year = calendarCurrentDate.getFullYear();
+
+  if (monthLabel) {
+    monthLabel.textContent = String(year);
+  }
+
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+
+  let html = '';
+  for (let m = 0; m < 12; m++) {
+    // Count items in this month
+    const firstOfMonth = new Date(year, m, 1);
+    const lastOfMonth = new Date(year, m + 1, 0);
+    let itemCount = 0;
+    for (let d = 1; d <= lastOfMonth.getDate(); d++) {
+      const ds = new Date(year, m, d).toISOString().split('T')[0];
+      itemCount += getBookingsForDate(ds).length + getCalendarEventsForDate(ds).length;
+    }
+
+    const isCurrentMonth = (year === todayYear && m === todayMonth);
+    const cls = isCurrentMonth ? ' is-today' : '';
+    html += `<div class="calendar-year-month${cls}" data-year="${year}" data-month="${m}" style="cursor:pointer;">
+      <div class="calendar-year-month-name">${monthNames[m]}</div>
+      ${itemCount > 0 ? `<div class="calendar-year-month-count">${itemCount} item${itemCount !== 1 ? 's' : ''}</div>` : ''}
+    </div>`;
+  }
+
+  grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
   grid.innerHTML = html;
 
-  // Add click handlers for events
-  grid.querySelectorAll('.calendar-event').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const bookingId = el.dataset.bookingId;
-      if (bookingId) {
-        openBookingDrawer(parseInt(bookingId));
-      }
+  // Click a month → switch to month view for that month
+  grid.querySelectorAll('.calendar-year-month').forEach(el => {
+    el.addEventListener('click', () => {
+      calendarViewMode = 'month';
+      calendarCurrentDate = new Date(parseInt(el.dataset.year), parseInt(el.dataset.month), 1);
+      renderCalendar();
     });
   });
 }
 
 function renderCalendarDay(day, dateStr, isOtherMonth, isToday) {
-  const bookings = getBookingsForDate(dateStr);
-  const movements = getMovementsForDate(dateStr);
-  const events = getCalendarEventsForDate(dateStr);
+  const bkgs = getBookingsForDate(dateStr);
+  const mvts = getMovementsForDate(dateStr);
+  const evts = getCalendarEventsForDate(dateStr);
 
   let classes = 'calendar-day-cell';
   if (isOtherMonth) classes += ' other-month';
@@ -1563,26 +1699,24 @@ function renderCalendarDay(day, dateStr, isOtherMonth, isToday) {
 
   let eventsHtml = '<div class="calendar-events">';
 
-  // Show bookings
-  bookings.forEach(b => {
+  bkgs.forEach(b => {
     const time = b.schedule?.arrivalTimeLocalHHMM || '';
     const reg = b.aircraft?.registration || 'Unknown';
-    eventsHtml += `<div class="calendar-event event-booking" data-booking-id="${b.id}" title="${reg} - ${time}">${time} ${reg}</div>`;
+    eventsHtml += `<div class="calendar-event event-booking" data-booking-id="${b.id}" title="${escapeHtml(reg)} - ${time}">${time} ${escapeHtml(reg)}</div>`;
   });
 
-  // Show calendar events
-  events.forEach(e => {
+  evts.forEach(e => {
     const time = e.time || '';
     const title = e.title || 'Event';
-    eventsHtml += `<div class="calendar-event event-general" data-event-id="${e.id}" title="${title}">${time ? time + ' ' : ''}${title}</div>`;
+    eventsHtml += `<div class="calendar-event event-general" data-event-id="${e.id}" title="${escapeHtml(title)}" style="cursor:pointer;">${time ? time + ' ' : ''}${escapeHtml(title)}</div>`;
   });
 
-  // Only show movements that have showOnCalendar flag set
-  movements.filter(m => m.showOnCalendar).forEach(m => {
+  // Show movements linked to bookings (they already show via booking entry) AND movements with showOnCalendar
+  mvts.filter(m => m.showOnCalendar && !m.bookingId).forEach(m => {
     const time = m.arrPlanned || m.depPlanned || '';
     const callsign = m.callsignCode || m.registration || 'Unknown';
     const ftClass = `event-${(m.flightType || 'loc').toLowerCase()}`;
-    eventsHtml += `<div class="calendar-event event-movement ${ftClass}" data-movement-id="${m.id}" title="${callsign} - ${time} (${m.flightType || ''})">${time} ${callsign}</div>`;
+    eventsHtml += `<div class="calendar-event event-movement ${ftClass}" data-movement-id="${m.id}" title="${escapeHtml(callsign)} - ${time} (${m.flightType || ''})" style="cursor:pointer;">${time} ${escapeHtml(callsign)}</div>`;
   });
 
   eventsHtml += '</div>';
@@ -1607,6 +1741,7 @@ function openBookingDrawer(bookingId) {
   content.innerHTML = renderBookingDetails(booking);
   drawer.classList.add('open');
   drawer.style.display = 'flex';
+  bindDrawerActions();
 }
 
 function closeBookingDrawer() {
@@ -1626,12 +1761,42 @@ function renderBookingDetails(booking) {
   const movement = booking.movement || {};
   const ops = booking.ops || {};
   const charges = booking.charges || {};
+  const status = booking.status || 'CONFIRMED';
 
   const departureDisplay = movement.departure === 'ZZZZ' && movement.departureName
     ? `ZZZZ (${escapeHtml(movement.departureName)})`
     : escapeHtml(movement.departure || '');
 
+  // Find linked strip(s)
+  const linkedStrips = getMovements().filter(m => m.bookingId === booking.id);
+  const linkedStripHtml = linkedStrips.length > 0
+    ? linkedStrips.map(s => `<span class="drawer-linked-strip" style="display:inline-block;background:#eef2f7;border-radius:3px;padding:2px 6px;font-size:11px;margin:2px 2px 2px 0;">Strip #${s.id} ${escapeHtml(s.callsignCode || '')} [${s.status}]</span>`).join('')
+    : '<span style="font-size:11px;color:#999;">None</span>';
+
+  // Action buttons – hide if already cancelled
+  const actionsHtml = status !== 'CANCELLED' ? `
+    <div class="drawer-section" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-secondary btn-small js-drawer-edit-booking" data-booking-id="${booking.id}">Edit</button>
+      <button type="button" class="btn btn-secondary btn-small js-drawer-cancel-booking" data-booking-id="${booking.id}" style="color:#d32f2f;">Cancel</button>
+      <button type="button" class="btn btn-ghost btn-small js-drawer-delete-booking" data-booking-id="${booking.id}" style="color:#d32f2f;">Delete</button>
+    </div>
+  ` : '<div class="drawer-section" style="font-size:12px;color:#d32f2f;font-weight:600;">This booking has been cancelled.</div>';
+
   return `
+    ${actionsHtml}
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">Status</div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Booking status</span>
+        <span class="drawer-field-value" style="font-weight:600;">${escapeHtml(status)}</span>
+      </div>
+      <div class="drawer-field">
+        <span class="drawer-field-label">Linked strip(s)</span>
+        <span class="drawer-field-value" style="flex-wrap:wrap;">${linkedStripHtml}</span>
+      </div>
+    </div>
+
     <div class="drawer-section">
       <div class="drawer-section-title">Contact</div>
       <div class="drawer-field">
@@ -1753,6 +1918,329 @@ function renderBookingDetails(booking) {
 }
 
 /* -----------------------------
+   Booking Drawer Action Handlers
+------------------------------ */
+
+/**
+ * Bind action-button click handlers inside the booking details drawer.
+ * Called each time the drawer content is refreshed.
+ */
+function bindDrawerActions() {
+  const drawer = byId('bookingDetailsDrawer');
+  if (!drawer) return;
+
+  drawer.querySelectorAll('.js-drawer-edit-booking').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.bookingId);
+      openEditBookingModal(id);
+    });
+  });
+
+  drawer.querySelectorAll('.js-drawer-cancel-booking').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.bookingId);
+      handleCancelBooking(id);
+    });
+  });
+
+  drawer.querySelectorAll('.js-drawer-delete-booking').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.bookingId);
+      handleDeleteBooking(id);
+    });
+  });
+}
+
+/**
+ * Open an edit modal pre-filled with booking data.
+ */
+function openEditBookingModal(bookingId) {
+  const booking = getBookingById(bookingId);
+  if (!booking) return;
+
+  const modalRoot = byId('modalRoot');
+  if (!modalRoot) return;
+
+  const schedule = booking.schedule || {};
+  const aircraft = booking.aircraft || {};
+  const contact = booking.contact || {};
+  const movement = booking.movement || {};
+  const ops = booking.ops || {};
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width: 520px;">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Edit Booking #${bookingId}</div>
+            <div class="modal-subtitle">${escapeHtml(aircraft.registration || '')}</div>
+          </div>
+          <button class="btn btn-ghost js-close-modal" type="button" title="Close">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Contact name</label>
+            <input id="ebContactName" class="modal-input" value="${escapeHtml(contact.name || '')}" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Contact phone</label>
+            <input id="ebContactPhone" class="modal-input" value="${escapeHtml(contact.phone || '')}" />
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;min-width:140px;">
+              <label class="modal-label">Date of flight</label>
+              <input id="ebDof" type="date" class="modal-input" value="${escapeHtml(schedule.dateISO || '')}" />
+            </div>
+            <div class="modal-field" style="flex:0 0 100px;">
+              <label class="modal-label">Arrival time</label>
+              <input id="ebArrTime" type="time" class="modal-input" value="${escapeHtml(schedule.arrivalTimeLocalHHMM || '')}" />
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Stay (hours)</label>
+            <input id="ebStayHours" type="number" class="modal-input" step="0.5" min="0" value="${schedule.stayHours || 0}" />
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Registration</label>
+              <input id="ebReg" class="modal-input" value="${escapeHtml(aircraft.registration || '')}" style="text-transform:uppercase;" />
+            </div>
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Type</label>
+              <input id="ebType" class="modal-input" value="${escapeHtml(aircraft.type || '')}" style="text-transform:uppercase;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Callsign</label>
+              <input id="ebCallsign" class="modal-input" value="${escapeHtml(aircraft.callsign || '')}" style="text-transform:uppercase;" />
+            </div>
+            <div class="modal-field" style="flex:0 0 80px;">
+              <label class="modal-label">POB</label>
+              <input id="ebPob" type="number" class="modal-input" min="1" value="${aircraft.pob || 1}" />
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure aerodrome</label>
+            <input id="ebDepAd" class="modal-input" value="${escapeHtml(movement.departure || '')}" style="text-transform:uppercase;" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Notes</label>
+            <textarea id="ebNotes" class="modal-textarea" rows="2">${escapeHtml(ops.notes || '')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+          <button class="btn btn-primary js-save-edit-booking" type="button" data-booking-id="${bookingId}">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Close handlers
+  modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
+    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  });
+
+  // Save handler
+  modalRoot.querySelector('.js-save-edit-booking')?.addEventListener('click', () => {
+    const patch = {
+      contact: {
+        name: document.getElementById('ebContactName')?.value?.trim() || '',
+        phone: document.getElementById('ebContactPhone')?.value?.trim() || ''
+      },
+      schedule: {
+        dateISO: document.getElementById('ebDof')?.value || schedule.dateISO,
+        arrivalTimeLocalHHMM: document.getElementById('ebArrTime')?.value || schedule.arrivalTimeLocalHHMM,
+        stayHours: parseFloat(document.getElementById('ebStayHours')?.value) || 0
+      },
+      aircraft: {
+        registration: (document.getElementById('ebReg')?.value || '').toUpperCase().trim(),
+        type: (document.getElementById('ebType')?.value || '').toUpperCase().trim(),
+        callsign: (document.getElementById('ebCallsign')?.value || '').toUpperCase().trim(),
+        pob: parseInt(document.getElementById('ebPob')?.value) || 1
+      },
+      movement: {
+        departure: (document.getElementById('ebDepAd')?.value || '').toUpperCase().trim()
+      },
+      ops: {
+        notes: document.getElementById('ebNotes')?.value?.trim() || ''
+      }
+    };
+
+    updateBooking(bookingId, patch);
+
+    // Sync shared fields to linked strip(s)
+    const linkedStrips = getMovements().filter(m => m.bookingId === bookingId);
+    linkedStrips.forEach(strip => {
+      const stripPatch = {
+        registration: patch.aircraft.registration || strip.registration,
+        type: patch.aircraft.type || strip.type,
+        callsignCode: patch.aircraft.callsign || strip.callsignCode,
+        callsignLabel: patch.aircraft.callsign || strip.callsignLabel,
+        pob: patch.aircraft.pob,
+        dof: patch.schedule.dateISO || strip.dof,
+        depAd: (patch.movement.departure || strip.depAd)
+      };
+      // Sync time based on flight type
+      const ft = (strip.flightType || '').toUpperCase();
+      if (ft === 'ARR' || ft === 'LOC') {
+        stripPatch.arrPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.arrPlanned;
+      }
+      if (ft === 'LOC' || ft === 'DEP') {
+        stripPatch.depPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.depPlanned;
+      }
+      // Append booking notes to remarks without clobbering controller notes
+      if (patch.ops.notes) {
+        const remarksBase = (strip.remarks || '').replace(/; ?Booking #\d+.*$/, '').trim();
+        stripPatch.remarks = remarksBase ? `${remarksBase}; ${patch.ops.notes}` : patch.ops.notes;
+      }
+      updateMovement(strip.id, stripPatch);
+    });
+
+    showToast('Booking updated', 'success');
+    modalRoot.innerHTML = '';
+    // Refresh drawer if still open
+    openBookingDrawer(bookingId);
+    renderCalendar();
+    renderLiveBoard();
+  });
+}
+
+/**
+ * Cancel a booking – prompts whether to also cancel linked strip(s).
+ */
+function handleCancelBooking(bookingId) {
+  const booking = getBookingById(bookingId);
+  if (!booking) return;
+
+  const linkedStrips = getMovements().filter(m => m.bookingId === bookingId);
+  const cancelStrips = linkedStrips.length > 0
+    ? confirm('Also cancel linked strip(s)? (default: Yes)')
+    : false;
+
+  updateBooking(bookingId, { status: 'CANCELLED', cancelledAt: new Date().toISOString() });
+
+  if (cancelStrips) {
+    linkedStrips.forEach(strip => {
+      if (strip.status !== 'CANCELLED' && strip.status !== 'COMPLETED') {
+        updateMovement(strip.id, { status: 'CANCELLED' });
+      }
+    });
+  }
+
+  showToast('Booking cancelled', 'info');
+  openBookingDrawer(bookingId); // refresh drawer
+  renderCalendar();
+  renderLiveBoard();
+}
+
+/**
+ * Delete a booking – prompts whether to also cancel linked strip(s) (default YES = cancel, not hard-delete).
+ */
+function handleDeleteBooking(bookingId) {
+  const booking = getBookingById(bookingId);
+  if (!booking) return;
+
+  if (!confirm(`Delete Booking #${bookingId}? This cannot be undone.`)) return;
+
+  const linkedStrips = getMovements().filter(m => m.bookingId === bookingId);
+  const cancelStrips = linkedStrips.length > 0
+    ? confirm('Cancel linked strip(s)? Strips will remain as CANCELLED in history.')
+    : false;
+
+  if (cancelStrips) {
+    linkedStrips.forEach(strip => {
+      if (strip.status !== 'CANCELLED' && strip.status !== 'COMPLETED') {
+        updateMovement(strip.id, { status: 'CANCELLED' });
+      }
+    });
+  }
+
+  deleteBooking(bookingId);
+  showToast('Booking deleted', 'info');
+  closeBookingDrawer();
+  renderCalendar();
+  renderLiveBoard();
+}
+
+/* -----------------------------
+   Calendar Event Edit Modal
+------------------------------ */
+
+function openEditCalendarEventModal(eventId) {
+  ensureCalendarEventsInitialised();
+  const event = calendarEvents.find(e => e.id === eventId);
+  if (!event) return;
+
+  const modalRoot = byId('modalRoot');
+  if (!modalRoot) return;
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width: 480px;">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Edit Calendar Event</div>
+          </div>
+          <button class="btn btn-ghost js-close-modal" type="button" title="Close">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Title</label>
+            <input id="eeTitle" class="modal-input" value="${escapeHtml(event.title || '')}" />
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;min-width:140px;">
+              <label class="modal-label">Date</label>
+              <input id="eeDate" type="date" class="modal-input" value="${escapeHtml(event.date || '')}" />
+            </div>
+            <div class="modal-field" style="flex:0 0 90px;">
+              <label class="modal-label">Time</label>
+              <input id="eeTime" type="time" class="modal-input" value="${escapeHtml(event.time || '')}" />
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Description</label>
+            <textarea id="eeDescription" class="modal-textarea" rows="2">${escapeHtml(event.description || '')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+          <button class="btn btn-ghost btn-small js-delete-calendar-event" type="button" style="color:#d32f2f;" data-event-id="${eventId}">Delete</button>
+          <button class="btn btn-primary js-save-calendar-event" type="button" data-event-id="${eventId}">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
+    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  });
+
+  modalRoot.querySelector('.js-save-calendar-event')?.addEventListener('click', () => {
+    updateCalendarEvent(eventId, {
+      title: document.getElementById('eeTitle')?.value?.trim() || event.title,
+      date: document.getElementById('eeDate')?.value || event.date,
+      time: document.getElementById('eeTime')?.value || event.time,
+      description: document.getElementById('eeDescription')?.value?.trim() || ''
+    });
+    showToast('Event updated', 'success');
+    modalRoot.innerHTML = '';
+    renderCalendar();
+  });
+
+  modalRoot.querySelector('.js-delete-calendar-event')?.addEventListener('click', () => {
+    if (confirm('Delete this calendar event?')) {
+      deleteCalendarEvent(eventId);
+      showToast('Event deleted', 'info');
+      modalRoot.innerHTML = '';
+      renderCalendar();
+    }
+  });
+}
+
+/* -----------------------------
    Initialization
 ------------------------------ */
 
@@ -1825,15 +2313,37 @@ export function initBookingPage() {
 }
 
 export function initCalendarPage() {
-  // Calendar navigation
+  // View mode selector buttons
+  document.querySelectorAll('.cal-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      calendarViewMode = btn.dataset.view;
+      renderCalendar();
+    });
+  });
+
+  // Calendar navigation – behaviour depends on current view
   byId('btnCalendarPrev')?.addEventListener('click', () => {
-    const { year, month } = getCalendarMonth();
-    setCalendarMonth(year, month - 1);
+    if (calendarViewMode === 'week') {
+      calendarCurrentDate.setDate(calendarCurrentDate.getDate() - 7);
+    } else if (calendarViewMode === 'year') {
+      calendarCurrentDate.setFullYear(calendarCurrentDate.getFullYear() - 1);
+    } else {
+      const { year, month } = getCalendarMonth();
+      calendarCurrentDate = new Date(year, month - 1, 1);
+    }
+    renderCalendar();
   });
 
   byId('btnCalendarNext')?.addEventListener('click', () => {
-    const { year, month } = getCalendarMonth();
-    setCalendarMonth(year, month + 1);
+    if (calendarViewMode === 'week') {
+      calendarCurrentDate.setDate(calendarCurrentDate.getDate() + 7);
+    } else if (calendarViewMode === 'year') {
+      calendarCurrentDate.setFullYear(calendarCurrentDate.getFullYear() + 1);
+    } else {
+      const { year, month } = getCalendarMonth();
+      calendarCurrentDate = new Date(year, month + 1, 1);
+    }
+    renderCalendar();
   });
 
   byId('btnCalendarToday')?.addEventListener('click', () => {
@@ -1851,6 +2361,176 @@ export function initCalendarPage() {
 
   // Initial render
   renderCalendar();
+}
+
+/* -----------------------------
+   Booking Profiles Admin Panel
+------------------------------ */
+
+export function initBookingProfilesAdmin() {
+  const panel = byId('bookingProfilesPanel');
+  if (!panel) return;
+
+  renderProfilesTable();
+
+  byId('btnNewProfile')?.addEventListener('click', () => {
+    openProfileModal(null);
+  });
+
+  byId('profileSearchInput')?.addEventListener('input', () => {
+    renderProfilesTable();
+  });
+}
+
+function renderProfilesTable() {
+  const tbody = byId('profilesTableBody');
+  if (!tbody) return;
+
+  ensureProfilesInitialised();
+  const searchVal = (byId('profileSearchInput')?.value || '').toLowerCase().trim();
+  const profiles = getAllBookingProfiles();
+
+  const entries = Object.entries(profiles).filter(([key, p]) => {
+    if (!searchVal) return true;
+    const haystack = `${key} ${p.aircraftType || ''} ${p.callsign || ''} ${p.contactName || ''}`.toLowerCase();
+    return haystack.includes(searchVal);
+  });
+
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#999;padding:12px;text-align:center;">No profiles found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = entries.map(([key, p]) => {
+    const saved = p.last_saved ? new Date(p.last_saved).toLocaleDateString() : '-';
+    return `<tr>
+      <td>${escapeHtml(p.registration_display || key)}</td>
+      <td>${escapeHtml(p.aircraftType || '-')}</td>
+      <td>${escapeHtml(p.callsign || '-')}</td>
+      <td>${escapeHtml(p.contactName || '-')}</td>
+      <td>${saved}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button type="button" class="btn btn-ghost btn-small js-edit-profile" data-reg="${escapeHtml(key)}">Edit</button>
+        <button type="button" class="btn btn-ghost btn-small js-delete-profile" data-reg="${escapeHtml(key)}" style="color:#d32f2f;">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Bind edit/delete
+  tbody.querySelectorAll('.js-edit-profile').forEach(btn => {
+    btn.addEventListener('click', () => openProfileModal(btn.dataset.reg));
+  });
+  tbody.querySelectorAll('.js-delete-profile').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (confirm(`Delete profile for ${btn.dataset.reg}?`)) {
+        deleteBookingProfile(btn.dataset.reg);
+        showToast('Profile deleted', 'info');
+        renderProfilesTable();
+      }
+    });
+  });
+}
+
+function openProfileModal(reg) {
+  const modalRoot = byId('modalRoot');
+  if (!modalRoot) return;
+
+  const profile = reg ? (getBookingProfile(reg) || {}) : {};
+  const isNew = !reg;
+  const title = isNew ? 'New Booking Profile' : `Edit Profile – ${reg}`;
+
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" style="max-width: 480px;">
+        <div class="modal-header">
+          <div><div class="modal-title">${escapeHtml(title)}</div></div>
+          <button class="btn btn-ghost js-close-modal" type="button" title="Close">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">Registration <span class="required-mark">*</span></label>
+            <input id="ppReg" class="modal-input" value="${escapeHtml(reg || '')}" ${!isNew ? 'readonly style="background:#f5f5f5;"' : 'style="text-transform:uppercase;"'} />
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Callsign</label>
+              <input id="ppCallsign" class="modal-input" value="${escapeHtml(profile.callsign || '')}" style="text-transform:uppercase;" />
+            </div>
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Aircraft type</label>
+              <input id="ppType" class="modal-input" value="${escapeHtml(profile.aircraftType || '')}" style="text-transform:uppercase;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">MTOW</label>
+              <input id="ppMtow" type="number" class="modal-input" value="${profile.mtow || ''}" step="1" />
+            </div>
+            <div class="modal-field" style="flex:0 0 80px;">
+              <label class="modal-label">Unit</label>
+              <select id="ppMtowUnit" class="modal-input">
+                <option value="kg" ${profile.mtowUnit === 'kg' ? 'selected' : ''}>kg</option>
+                <option value="t" ${profile.mtowUnit === 't' ? 'selected' : ''}>tonnes</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="booking-checkbox-label">
+              <input type="checkbox" id="ppCuiw" ${profile.hasCuiw ? 'checked' : ''} />
+              <span>Has CUIW</span>
+            </label>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Contact name</label>
+              <input id="ppContactName" class="modal-input" value="${escapeHtml(profile.contactName || '')}" />
+            </div>
+            <div class="modal-field" style="flex:1;">
+              <label class="modal-label">Contact phone</label>
+              <input id="ppContactPhone" class="modal-input" value="${escapeHtml(profile.contactPhone || '')}" />
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input id="ppDepAd" class="modal-input" value="${escapeHtml(profile.departureAd || '')}" style="text-transform:uppercase;" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Notes</label>
+            <textarea id="ppNotes" class="modal-textarea" rows="2">${escapeHtml(profile.notes || '')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
+          <button class="btn btn-primary js-save-profile" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
+    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  });
+
+  modalRoot.querySelector('.js-save-profile')?.addEventListener('click', () => {
+    const regVal = (document.getElementById('ppReg')?.value || '').toUpperCase().trim();
+    if (!regVal) { showToast('Registration is required', 'error'); return; }
+
+    saveBookingProfile(regVal, {
+      callsign: (document.getElementById('ppCallsign')?.value || '').toUpperCase().trim(),
+      aircraftType: (document.getElementById('ppType')?.value || '').toUpperCase().trim(),
+      mtow: parseFloat(document.getElementById('ppMtow')?.value) || 0,
+      mtowUnit: document.getElementById('ppMtowUnit')?.value || 'kg',
+      hasCuiw: document.getElementById('ppCuiw')?.checked || false,
+      contactName: document.getElementById('ppContactName')?.value?.trim() || '',
+      contactPhone: document.getElementById('ppContactPhone')?.value?.trim() || '',
+      departureAd: (document.getElementById('ppDepAd')?.value || '').toUpperCase().trim(),
+      notes: document.getElementById('ppNotes')?.value?.trim() || ''
+    });
+
+    showToast(`Profile saved for ${regVal}`, 'success');
+    modalRoot.innerHTML = '';
+    renderProfilesTable();
+  });
 }
 
 /**
