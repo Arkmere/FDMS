@@ -1770,7 +1770,7 @@ export function initBookingPage() {
   // Set default CUIW checkbox
   const cuiwCheckbox = byId('bookingHasCuiw');
   if (cuiwCheckbox) {
-    cuiwCheckbox.checked = true;
+    cuiwCheckbox.checked = false;
   }
 
   // Add input listeners for live updates
