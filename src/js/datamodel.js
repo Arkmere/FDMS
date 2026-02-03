@@ -696,6 +696,22 @@ export function createMovement(partial) {
   // Apply default times if not provided
   const withDefaults = applyDefaultTimes({ ...partial });
 
+  // If planned time is already past on today's dof, start as ACTIVE immediately
+  if (withDefaults.status === 'PLANNED') {
+    const today = new Date().toISOString().split('T')[0];
+    if (withDefaults.dof === today) {
+      const ft = (withDefaults.flightType || '').toUpperCase();
+      const checkTime = (ft === 'DEP' || ft === 'LOC') ? withDefaults.depPlanned
+                      : (ft === 'ARR')                 ? withDefaults.arrPlanned
+                      : (ft === 'OVR')                 ? withDefaults.depPlanned
+                      : null;
+      if (checkTime) {
+        const { isPast } = checkPastTime(checkTime, withDefaults.dof);
+        if (isPast) withDefaults.status = 'ACTIVE';
+      }
+    }
+  }
+
   const movement = {
     id: nextId++,
     ...withDefaults,

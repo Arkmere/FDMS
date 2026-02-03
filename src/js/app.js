@@ -43,6 +43,8 @@ import {
   getVKBStatus
 } from "./vkb.js";
 
+import { classifyMovement } from "./reporting.js";
+
 /* -----------------------------
    Toast Notification System
 ------------------------------ */
@@ -729,25 +731,22 @@ function calculateDailyStats() {
   // Filter movements for today (by DOF date of flight)
   const todaysMovements = movements.filter(m => m.dof === today);
 
-  // Count by status
-  const planned = todaysMovements.filter(m => m.status === 'PLANNED').length;
-  const active = todaysMovements.filter(m => m.status === 'ACTIVE').length;
-  const completed = todaysMovements.filter(m => m.status === 'COMPLETED').length;
-
-  // Count VFR movements (field is 'm.rules', not 'm.flightRules')
-  const vfrMovements = todaysMovements.filter(m => m.rules === 'V' || m.rules === 'VFR');
-  const vfrPlannedActive = vfrMovements.filter(m => m.status === 'PLANNED' || m.status === 'ACTIVE').length;
-  const vfrCompleted = vfrMovements.filter(m => m.status === 'COMPLETED').length;
-
-  // Booked movements (planned + active)
-  const bookedMovements = planned + active;
+  // Count by resolved EGOW flight type (mutually exclusive categories)
+  let bm = 0, bc = 0, vm = 0, vc = 0;
+  for (const m of todaysMovements) {
+    const { egowFlightType } = classifyMovement(m);
+    if (egowFlightType === 'BM') bm++;
+    else if (egowFlightType === 'BC') bc++;
+    else if (egowFlightType === 'VM') vm++;
+    else if (egowFlightType === 'VC') vc++;
+  }
 
   return {
-    bookedMovements: bookedMovements,      // BM - Planned + Active today
-    bookedCompleted: completed,            // BC - Completed today
-    vfrMovements: vfrPlannedActive,        // VM - VFR planned/active today
-    vfrCompleted: vfrCompleted,            // VC - VFR completed today
-    total: todaysMovements.length          // Total movements today
+    bookedMovements: bm,       // BM - Based Military
+    bookedCompleted: bc,       // BC - Based Civil
+    vfrMovements: vm,          // VM - Visiting Military
+    vfrCompleted: vc,          // VC - Visiting Civil
+    total: todaysMovements.length
   };
 }
 
@@ -796,6 +795,8 @@ function initLiveboardCounters() {
   });
 }
 
+let _lastTickDate = null;
+
 async function bootstrap() {
   updateInitStatus("Initialising app...");
 
@@ -841,6 +842,23 @@ async function bootstrap() {
     diagnostics.lastRenderTime = diagnostics.initTime;
     updateInitStatus("Init complete", true);
     updateDiagnostics();
+
+    // Low-frequency tick: refresh counters, stale highlights, and auto-activation
+    _lastTickDate = getTodayDateString();
+    setInterval(() => {
+      updateDailyStats();
+      updateFisCounters();
+      const currentDate = getTodayDateString();
+      const dayRolled = currentDate !== _lastTickDate;
+      const isLiveActive = !document.getElementById('tab-live')?.classList.contains('hidden');
+      if (isLiveActive || dayRolled) {
+        renderLiveBoard();
+        renderTimeline();
+      }
+      if (dayRolled) {
+        _lastTickDate = currentDate;
+      }
+    }, 45000); // 45-second tick
   } catch (e) {
     diagnostics.lastError = e.message || String(e);
     updateInitStatus("Init failed - check diagnostics", false);

@@ -54,6 +54,51 @@ import {
 let expandedId = null;
 let historyExpandedId = null;
 
+/**
+ * Position a dropdown menu relative to its trigger, flipping up if clipped.
+ * Call immediately after setting display:block so offsetHeight is measurable.
+ */
+function positionDropdownMenu(menu, triggerBtn) {
+  // Reset to default down position
+  menu.style.top = '100%';
+  menu.style.bottom = 'auto';
+  menu.style.marginTop = '2px';
+  menu.style.marginBottom = '';
+  menu.style.maxHeight = '';
+  menu.style.overflowY = '';
+
+  const btnRect = triggerBtn.getBoundingClientRect();
+  const viewportH = window.innerHeight;
+  const headerEl = document.querySelector('.header');
+  const headerH = headerEl ? headerEl.getBoundingClientRect().height : 40;
+  const menuH = menu.offsetHeight || 120;
+
+  const spaceBelow = viewportH - btnRect.bottom;
+  const spaceAbove = btnRect.top - headerH;
+
+  if (spaceBelow >= menuH) {
+    // Default: open down — already set
+  } else if (spaceAbove >= menuH) {
+    // Flip up
+    menu.style.top = 'auto';
+    menu.style.bottom = '100%';
+    menu.style.marginTop = '0';
+    menu.style.marginBottom = '2px';
+  } else {
+    // Neither side is large enough — use larger side with scroll
+    if (spaceAbove > spaceBelow) {
+      menu.style.top = 'auto';
+      menu.style.bottom = '100%';
+      menu.style.marginTop = '0';
+      menu.style.marginBottom = '2px';
+      menu.style.maxHeight = Math.max(0, spaceAbove - 8) + 'px';
+    } else {
+      menu.style.maxHeight = Math.max(0, spaceBelow - 8) + 'px';
+    }
+    menu.style.overflowY = 'auto';
+  }
+}
+
 const state = {
   globalFilter: "",
   plannedWindowHours: 24, // Show PLANNED movements within this many hours
@@ -1144,10 +1189,12 @@ function autoActivatePlannedMovements() {
     }
 
     // Get the appropriate time field based on flight type
-    // DEP/LOC use ETD (depPlanned), ARR uses ETA (arrPlanned), OVR uses EOFT (arrPlanned)
+    // DEP/LOC use ETD (depPlanned), ARR uses ETA (arrPlanned), OVR uses ECT/EOFT (depPlanned)
     let timeStr;
     if (ft === 'DEP' || ft === 'LOC') {
       timeStr = getETD(movement);
+    } else if (ft === 'OVR') {
+      timeStr = getECT(movement);
     } else {
       timeStr = getETA(movement);
     }
@@ -1411,6 +1458,7 @@ export function renderLiveBoard() {
       if (isOpening) {
         tr.style.position = "relative";
         tr.style.zIndex = "10";
+        positionDropdownMenu(editMenu, editDropdownBtn);
       } else {
         tr.style.zIndex = "";
       }
@@ -4417,6 +4465,7 @@ export function renderHistoryBoard() {
       if (isOpening) {
         tr.style.position = "relative";
         tr.style.zIndex = "10";
+        positionDropdownMenu(editMenu, editDropdownBtn);
       } else {
         tr.style.zIndex = "";
       }
@@ -4428,7 +4477,7 @@ export function renderHistoryBoard() {
       e.stopPropagation();
       editMenu.style.display = "none";
       tr.style.zIndex = "";
-      openEditModal(m);
+      openEditMovementModal(m);
     });
 
     // Bind Duplicate button
@@ -4437,7 +4486,7 @@ export function renderHistoryBoard() {
       e.stopPropagation();
       editMenu.style.display = "none";
       tr.style.zIndex = "";
-      openDuplicateModal(m);
+      openDuplicateMovementModal(m);
     });
 
     // Bind Info toggle (similar to Live Board)
@@ -4587,9 +4636,10 @@ function renderTimelineTracks() {
   const movements = getMovements();
   const { startHour, endHour } = getTimelineConfig();
 
-  // Filter to planned and active movements
+  // Filter to planned and active movements for today only
+  const todayUtcStr = new Date().toISOString().split('T')[0];
   const relevantMovements = movements.filter(m =>
-    m.status === 'PLANNED' || m.status === 'ACTIVE'
+    (m.status === 'PLANNED' || m.status === 'ACTIVE') && m.dof === todayUtcStr
   );
 
   // Sort by start time
