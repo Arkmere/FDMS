@@ -2003,12 +2003,14 @@ function openEditBookingModal(bookingId) {
         depAd: (patch.movement.departure || strip.depAd)
       };
       // Sync time based on flight type
+      // Prefer canonical plannedTimeLocalHHMM, fallback to arrivalTimeLocalHHMM for backward compat
+      const plannedTime = patch.schedule.plannedTimeLocalHHMM || patch.schedule.arrivalTimeLocalHHMM;
       const ft = (strip.flightType || '').toUpperCase();
       if (ft === 'ARR' || ft === 'LOC') {
-        stripPatch.arrPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.arrPlanned;
+        stripPatch.arrPlanned = plannedTime || strip.arrPlanned;
       }
       if (ft === 'LOC' || ft === 'DEP') {
-        stripPatch.depPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.depPlanned;
+        stripPatch.depPlanned = plannedTime || strip.depPlanned;
       }
       // Append booking notes to remarks without clobbering controller notes
       if (patch.ops.notes) {

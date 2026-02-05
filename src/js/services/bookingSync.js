@@ -23,10 +23,29 @@ export function onMovementUpdated(movement) {
   patch.schedule = { dateISO: movement.dof };
 
   const ft = (movement.flightType || '').toUpperCase();
-  if (ft === 'ARR' || ft === 'LOC') {
-    patch.schedule.arrivalTimeLocalHHMM = movement.arrPlanned;
+  let plannedTime = null;
+  let plannedKind = null;
+
+  if (ft === 'ARR') {
+    plannedTime = movement.arrPlanned;
+    plannedKind = 'ARR';
+  } else if (ft === 'LOC') {
+    plannedTime = movement.arrPlanned;
+    plannedKind = 'LOC';
   } else if (ft === 'DEP') {
-    patch.schedule.arrivalTimeLocalHHMM = movement.depPlanned;
+    plannedTime = movement.depPlanned;
+    plannedKind = 'DEP';
+  }
+
+  // Canonical planned time fields
+  if (plannedTime) {
+    patch.schedule.plannedTimeLocalHHMM = plannedTime;
+    patch.schedule.plannedTimeKind = plannedKind;
+
+    // Backward compatibility: only write arrivalTimeLocalHHMM for ARR/LOC
+    if (plannedKind === 'ARR' || plannedKind === 'LOC') {
+      patch.schedule.arrivalTimeLocalHHMM = plannedTime;
+    }
   }
 
   patch.aircraft = {

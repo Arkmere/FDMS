@@ -13,6 +13,24 @@ function ensureInitialised() {
   const loaded = loadFromStorage();
   if (loaded && loaded.bookings) {
     bookings = loaded.bookings;
+
+    // Migration: populate plannedTimeLocalHHMM from arrivalTimeLocalHHMM if missing
+    let migrated = false;
+    bookings.forEach(b => {
+      if (b.schedule && !b.schedule.plannedTimeLocalHHMM && b.schedule.arrivalTimeLocalHHMM) {
+        b.schedule.plannedTimeLocalHHMM = b.schedule.arrivalTimeLocalHHMM;
+        // Infer kind if possible (default to ARR for backward compatibility)
+        if (!b.schedule.plannedTimeKind) {
+          b.schedule.plannedTimeKind = 'ARR';
+        }
+        migrated = true;
+      }
+    });
+
+    if (migrated) {
+      saveToStorage(); // Persist migration
+    }
+
     nextBookingId = bookings.reduce((max, b) => Math.max(max, b.id || 0), 0) + 1;
   } else {
     bookings = [];
