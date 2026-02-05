@@ -14,6 +14,8 @@ import { showToast } from "./app.js";
 
 import { clearStripLinks } from "./services/bookingSync.js";
 
+import * as bookingsStore from "./stores/bookingsStore.js";
+
 // VKB imports for autofill functionality
 import {
   lookupRegistration,
@@ -25,13 +27,8 @@ import {
    Storage for Bookings
 ------------------------------ */
 
-const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
 const CALENDAR_EVENTS_STORAGE_KEY = "vectair_fdms_calendar_events_v1";
 const BOOKING_PROFILES_STORAGE_KEY = "fdms_booking_profiles_v1";
-
-let bookings = [];
-let bookingsInitialised = false;
-let nextBookingId = 1;
 
 // Calendar events storage
 let calendarEvents = [];
@@ -265,49 +262,7 @@ function isFieldUserEdited(field) {
   return currentValue !== lastAutofill.value;
 }
 
-function loadBookingsFromStorage() {
-  if (typeof window === "undefined" || !window.localStorage) return null;
-  try {
-    const raw = window.localStorage.getItem(BOOKINGS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.bookings)) {
-        return parsed;
-      }
-    }
-    return null;
-  } catch (e) {
-    console.warn("FDMS Booking: failed to load bookings from storage", e);
-    return null;
-  }
-}
-
-function saveBookingsToStorage() {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  try {
-    const payload = JSON.stringify({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      bookings: bookings
-    });
-    window.localStorage.setItem(BOOKINGS_STORAGE_KEY, payload);
-  } catch (e) {
-    console.warn("FDMS Booking: failed to save bookings to storage", e);
-  }
-}
-
-function ensureBookingsInitialised() {
-  if (bookingsInitialised) return;
-  const loaded = loadBookingsFromStorage();
-  if (loaded && loaded.bookings) {
-    bookings = loaded.bookings;
-    nextBookingId = bookings.reduce((max, b) => Math.max(max, b.id || 0), 0) + 1;
-  } else {
-    bookings = [];
-    nextBookingId = 1;
-  }
-  bookingsInitialised = true;
-}
+// Bookings now delegated to bookingsStore
 
 /* -----------------------------
    Storage for Calendar Events
@@ -413,57 +368,23 @@ export function updateCalendarEvent(id, patch) {
 }
 
 export function updateBooking(bookingId, patch) {
-  ensureBookingsInitialised();
-  const booking = bookings.find(b => b.id === bookingId);
-  if (!booking) return null;
-  // Deep-merge known nested keys so callers can do e.g. { schedule: { dateISO: '...' } }
-  const nestedKeys = ['contact', 'schedule', 'aircraft', 'movement', 'ops', 'charges'];
-  const flatPatch = { ...patch };
-  for (const key of nestedKeys) {
-    if (flatPatch[key] && typeof flatPatch[key] === 'object' && booking[key] && typeof booking[key] === 'object') {
-      booking[key] = { ...booking[key], ...flatPatch[key] };
-      delete flatPatch[key]; // handled; don't overwrite in the flat assign below
-    }
-  }
-  Object.assign(booking, flatPatch);
-  booking.updatedAtUtc = new Date().toISOString();
-  saveBookingsToStorage();
-  return booking;
+  return bookingsStore.updateBookingById(bookingId, patch);
 }
 
 export function deleteBooking(bookingId) {
-  ensureBookingsInitialised();
-  const index = bookings.findIndex(b => b.id === bookingId);
-  if (index !== -1) {
-    bookings.splice(index, 1);
-    saveBookingsToStorage();
-    return true;
-  }
-  return false;
+  return bookingsStore.deleteBookingById(bookingId);
 }
 
 export function getBookings() {
-  ensureBookingsInitialised();
-  return bookings;
+  return bookingsStore.loadBookings();
 }
 
 export function getBookingById(id) {
-  ensureBookingsInitialised();
-  return bookings.find(b => b.id === id) || null;
+  return bookingsStore.getBookingById(id);
 }
 
 export function createBooking(bookingData) {
-  ensureBookingsInitialised();
-  const now = new Date().toISOString();
-  const booking = {
-    id: nextBookingId++,
-    ...bookingData,
-    createdAtUtc: now,
-    updatedAtUtc: now
-  };
-  bookings.push(booking);
-  saveBookingsToStorage();
-  return booking;
+  return bookingsStore.createBooking(bookingData);
 }
 
 /* -----------------------------
@@ -2313,23 +2234,6 @@ export function initBookingPage() {
 
   // Initial update
   updateAll();
-
-  // Listen for booking patches dispatched by bookingSync (strip→booking sync)
-  window.addEventListener("fdms:booking-patch", (e) => {
-    const { bookingId, patch } = e.detail;
-    updateBooking(bookingId, patch);
-  });
-
-  // Reconcile dangling movement.bookingId pointers on request
-  window.addEventListener("fdms:reconcile-links", () => {
-    ensureBookingsInitialised();
-    const movements = getMovements();
-    movements.forEach(m => {
-      if (m.bookingId && !bookings.find(b => b.id === m.bookingId)) {
-        updateMovement(m.id, { bookingId: null });
-      }
-    });
-  });
 }
 
 export function initCalendarPage() {

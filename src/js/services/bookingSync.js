@@ -1,10 +1,9 @@
 // services/bookingSync.js
 // Centralised booking↔strip sync and referential-integrity helpers.
-// Imports only from datamodel.js — keeps this module free of UI-module cycles.
-// Communication back to ui_booking.js is via synchronous CustomEvents,
-// so no import of that module is required.
+// Imports only from datamodel.js and bookingsStore.js — free of UI-module cycles.
 
 import { getMovements, updateMovement } from "../datamodel.js";
+import { loadBookings, updateBookingById, getBookingById } from "../stores/bookingsStore.js";
 
 /* ──────────────────────────────────────────────
    Public API
@@ -79,20 +78,48 @@ export function clearStripLinks(bookingId) {
 
 /**
  * One-time startup reconciliation.
- * Dispatches fdms:reconcile-links; ui_booking.js listens and clears any
- * movement.bookingId that points to a booking that no longer exists.
- * Safe to call repeatedly – is a no-op when data is already consistent.
+ * Enforces referential integrity: clears any movement.bookingId pointing to
+ * a non-existent booking.
+ * Safe to call repeatedly – only fixes actual inconsistencies.
+ * @returns {object} Summary: { movementsFixed: number }
  */
 export function reconcileLinks() {
-  window.dispatchEvent(new CustomEvent("fdms:reconcile-links"));
+  const movements = getMovements();
+  const bookings = loadBookings();
+  const bookingIds = new Set(bookings.map(b => b.id));
+
+  let movementsFixed = 0;
+
+  movements.forEach(m => {
+    if (m.bookingId && !bookingIds.has(m.bookingId)) {
+      updateMovement(m.id, { bookingId: null });
+      movementsFixed++;
+    }
+  });
+
+  return { movementsFixed };
 }
 
 /* ──────────────────────────────────────────────
    Internal
 ───────────────────────────────────────────── */
 
+let _patchInProgress = false;
+
 function _dispatchBookingPatch(bookingId, patch) {
-  window.dispatchEvent(new CustomEvent("fdms:booking-patch", {
-    detail: { bookingId, patch }
-  }));
+  // Reentrancy guard: prevent event storms
+  if (_patchInProgress) return;
+
+  _patchInProgress = true;
+  try {
+    const updated = updateBookingById(bookingId, patch);
+    if (updated) {
+      // Trigger UI refresh (calendar, booking drawer, etc.)
+      window.dispatchEvent(new CustomEvent("fdms:data-changed", {
+        detail: { source: "bookingSync" }
+      }));
+    }
+  } finally {
+    _patchInProgress = false;
+  }
 }

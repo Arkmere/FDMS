@@ -821,7 +821,7 @@ async function bootstrap() {
       showToast('VKB data failed to load - lookup features unavailable', 'warning', 5000);
     }
 
-    // Feature modules: bind handlers first, then render
+    // Feature modules: bind handlers first
     initLiveBoard();
     initTimeline();
     initLiveboardCounters();
@@ -835,14 +835,15 @@ async function bootstrap() {
     initCalendarPage();
     initBookingProfilesAdmin();
 
+    // Reconcile any dangling booking↔strip links from previous sessions (before first render)
+    reconcileLinks();
+
+    // Initial renders
     renderLiveBoard();
     renderTimeline();
     renderHistoryBoard();
     renderReports();
     renderCalendar();
-
-    // Reconcile any dangling booking↔strip links from previous sessions
-    reconcileLinks();
 
     // Record init complete
     diagnostics.initTime = new Date().toISOString();
