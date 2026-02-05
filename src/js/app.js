@@ -26,6 +26,8 @@ import {
   initBookingProfilesAdmin
 } from "./ui_booking.js";
 
+import { reconcileLinks } from "./services/bookingSync.js";
+
 import {
   exportSessionJSON,
   importSessionJSON,
@@ -838,6 +840,9 @@ async function bootstrap() {
     renderHistoryBoard();
     renderReports();
     renderCalendar();
+
+    // Reconcile any dangling booking↔strip links from previous sessions
+    reconcileLinks();
 
     // Record init complete
     diagnostics.initTime = new Date().toISOString();

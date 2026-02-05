@@ -12,7 +12,7 @@ import {
 
 import { showToast } from "./app.js";
 
-import { renderLiveBoard, renderTimeline } from "./ui_liveboard.js";
+import { clearStripLinks } from "./services/bookingSync.js";
 
 // VKB imports for autofill functionality
 import {
@@ -1483,8 +1483,7 @@ function createBookingAndStrip() {
 
   showToast(`Booking created! Strip added to Live Board.`, 'success', 5000);
 
-  renderLiveBoard();
-  renderTimeline();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
   renderCalendar();
 
   const liveTab = document.querySelector('[data-tab="tab-live"]');
@@ -2103,7 +2102,7 @@ function openEditBookingModal(bookingId) {
     // Refresh drawer if still open
     openBookingDrawer(bookingId);
     renderCalendar();
-    renderLiveBoard();
+    window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
   });
 }
 
@@ -2127,12 +2126,14 @@ function handleCancelBooking(bookingId) {
         updateMovement(strip.id, { status: 'CANCELLED' });
       }
     });
+  } else {
+    clearStripLinks(bookingId);
   }
 
   showToast('Booking cancelled', 'info');
   openBookingDrawer(bookingId); // refresh drawer
   renderCalendar();
-  renderLiveBoard();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
 }
 
 /**
@@ -2155,13 +2156,15 @@ function handleDeleteBooking(bookingId) {
         updateMovement(strip.id, { status: 'CANCELLED' });
       }
     });
+  } else {
+    clearStripLinks(bookingId);
   }
 
   deleteBooking(bookingId);
   showToast('Booking deleted', 'info');
   closeBookingDrawer();
   renderCalendar();
-  renderLiveBoard();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
 }
 
 /* -----------------------------
@@ -2310,6 +2313,23 @@ export function initBookingPage() {
 
   // Initial update
   updateAll();
+
+  // Listen for booking patches dispatched by bookingSync (strip→booking sync)
+  window.addEventListener("fdms:booking-patch", (e) => {
+    const { bookingId, patch } = e.detail;
+    updateBooking(bookingId, patch);
+  });
+
+  // Reconcile dangling movement.bookingId pointers on request
+  window.addEventListener("fdms:reconcile-links", () => {
+    ensureBookingsInitialised();
+    const movements = getMovements();
+    movements.forEach(m => {
+      if (m.bookingId && !bookings.find(b => b.id === m.bookingId)) {
+        updateMovement(m.id, { bookingId: null });
+      }
+    });
+  });
 }
 
 export function initCalendarPage() {

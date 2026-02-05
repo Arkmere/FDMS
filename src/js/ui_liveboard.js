@@ -27,7 +27,7 @@ import {
 
 import { showToast } from "./app.js";
 
-import { updateBooking } from "./ui_booking.js";
+import { onMovementUpdated, onMovementStatusChanged } from "./services/bookingSync.js";
 
 import {
   searchAll,
@@ -3607,34 +3607,7 @@ function openEditMovementModal(m) {
     updateMovement(m.id, updates);
 
     // Sync back to booking if this strip is linked
-    if (m.bookingId) {
-      const bookingPatch = {};
-      bookingPatch.schedule = {
-        dateISO: updates.dof || m.dof
-      };
-      // Time: use arrPlanned for ARR/LOC, depPlanned for DEP
-      const ft = (updates.flightType || m.flightType || '').toUpperCase();
-      if (ft === 'ARR' || ft === 'LOC') {
-        bookingPatch.schedule.arrivalTimeLocalHHMM = updates.arrPlanned || m.arrPlanned;
-      } else if (ft === 'DEP') {
-        bookingPatch.schedule.arrivalTimeLocalHHMM = updates.depPlanned || m.depPlanned;
-      }
-      bookingPatch.aircraft = {
-        registration: updates.registration || m.registration,
-        type: updates.type || m.type,
-        callsign: updates.callsignCode || m.callsignCode,
-        pob: parseInt(updates.pob) || m.pob
-      };
-      bookingPatch.movement = {
-        departure: updates.depAd || m.depAd,
-        departureName: updates.depName || m.depName
-      };
-      // Only sync notes to ops.notesFromStrip to avoid clobbering booking-entered notes
-      if (updates.remarks !== undefined) {
-        bookingPatch.ops = { notesFromStrip: updates.remarks };
-      }
-      updateBooking(m.bookingId, bookingPatch);
-    }
+    onMovementUpdated(m);
 
     renderLiveBoard();
     renderHistoryBoard();
@@ -4198,9 +4171,7 @@ function transitionToCompleted(id) {
   });
 
   // Sync booking status
-  if (movement && movement.bookingId) {
-    updateBooking(movement.bookingId, { status: 'COMPLETED', completedAt: now.toISOString() });
-  }
+  onMovementStatusChanged(movement, 'COMPLETED');
 
   renderLiveBoard();
   renderHistoryBoard();
@@ -4226,9 +4197,7 @@ function transitionToCancelled(id) {
   });
 
   // Sync booking status
-  if (movement.bookingId) {
-    updateBooking(movement.bookingId, { status: 'CANCELLED', cancelledAt: new Date().toISOString() });
-  }
+  onMovementStatusChanged(movement, 'CANCELLED');
 
   showToast(`${callsign} cancelled`, 'info');
   renderLiveBoard();
@@ -4284,6 +4253,12 @@ export function initLiveBoard() {
   safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
   safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
   safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));
+
+  // Re-render when booking data changes (avoids importing ui_booking)
+  window.addEventListener("fdms:data-changed", () => {
+    renderLiveBoard();
+    renderTimeline();
+  });
 
   renderLiveBoard();
 
