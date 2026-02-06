@@ -12,7 +12,9 @@ import {
 
 import { showToast } from "./app.js";
 
-import { renderLiveBoard, renderTimeline } from "./ui_liveboard.js";
+import { clearStripLinks } from "./services/bookingSync.js";
+
+import * as bookingsStore from "./stores/bookingsStore.js";
 
 // VKB imports for autofill functionality
 import {
@@ -25,13 +27,8 @@ import {
    Storage for Bookings
 ------------------------------ */
 
-const BOOKINGS_STORAGE_KEY = "vectair_fdms_bookings_v1";
 const CALENDAR_EVENTS_STORAGE_KEY = "vectair_fdms_calendar_events_v1";
 const BOOKING_PROFILES_STORAGE_KEY = "fdms_booking_profiles_v1";
-
-let bookings = [];
-let bookingsInitialised = false;
-let nextBookingId = 1;
 
 // Calendar events storage
 let calendarEvents = [];
@@ -265,49 +262,7 @@ function isFieldUserEdited(field) {
   return currentValue !== lastAutofill.value;
 }
 
-function loadBookingsFromStorage() {
-  if (typeof window === "undefined" || !window.localStorage) return null;
-  try {
-    const raw = window.localStorage.getItem(BOOKINGS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.bookings)) {
-        return parsed;
-      }
-    }
-    return null;
-  } catch (e) {
-    console.warn("FDMS Booking: failed to load bookings from storage", e);
-    return null;
-  }
-}
-
-function saveBookingsToStorage() {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  try {
-    const payload = JSON.stringify({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      bookings: bookings
-    });
-    window.localStorage.setItem(BOOKINGS_STORAGE_KEY, payload);
-  } catch (e) {
-    console.warn("FDMS Booking: failed to save bookings to storage", e);
-  }
-}
-
-function ensureBookingsInitialised() {
-  if (bookingsInitialised) return;
-  const loaded = loadBookingsFromStorage();
-  if (loaded && loaded.bookings) {
-    bookings = loaded.bookings;
-    nextBookingId = bookings.reduce((max, b) => Math.max(max, b.id || 0), 0) + 1;
-  } else {
-    bookings = [];
-    nextBookingId = 1;
-  }
-  bookingsInitialised = true;
-}
+// Bookings now delegated to bookingsStore
 
 /* -----------------------------
    Storage for Calendar Events
@@ -413,57 +368,23 @@ export function updateCalendarEvent(id, patch) {
 }
 
 export function updateBooking(bookingId, patch) {
-  ensureBookingsInitialised();
-  const booking = bookings.find(b => b.id === bookingId);
-  if (!booking) return null;
-  // Deep-merge known nested keys so callers can do e.g. { schedule: { dateISO: '...' } }
-  const nestedKeys = ['contact', 'schedule', 'aircraft', 'movement', 'ops', 'charges'];
-  const flatPatch = { ...patch };
-  for (const key of nestedKeys) {
-    if (flatPatch[key] && typeof flatPatch[key] === 'object' && booking[key] && typeof booking[key] === 'object') {
-      booking[key] = { ...booking[key], ...flatPatch[key] };
-      delete flatPatch[key]; // handled; don't overwrite in the flat assign below
-    }
-  }
-  Object.assign(booking, flatPatch);
-  booking.updatedAtUtc = new Date().toISOString();
-  saveBookingsToStorage();
-  return booking;
+  return bookingsStore.updateBookingById(bookingId, patch);
 }
 
 export function deleteBooking(bookingId) {
-  ensureBookingsInitialised();
-  const index = bookings.findIndex(b => b.id === bookingId);
-  if (index !== -1) {
-    bookings.splice(index, 1);
-    saveBookingsToStorage();
-    return true;
-  }
-  return false;
+  return bookingsStore.deleteBookingById(bookingId);
 }
 
 export function getBookings() {
-  ensureBookingsInitialised();
-  return bookings;
+  return bookingsStore.loadBookings();
 }
 
 export function getBookingById(id) {
-  ensureBookingsInitialised();
-  return bookings.find(b => b.id === id) || null;
+  return bookingsStore.getBookingById(id);
 }
 
 export function createBooking(bookingData) {
-  ensureBookingsInitialised();
-  const now = new Date().toISOString();
-  const booking = {
-    id: nextBookingId++,
-    ...bookingData,
-    createdAtUtc: now,
-    updatedAtUtc: now
-  };
-  bookings.push(booking);
-  saveBookingsToStorage();
-  return booking;
+  return bookingsStore.createBooking(bookingData);
 }
 
 /* -----------------------------
@@ -1483,8 +1404,7 @@ function createBookingAndStrip() {
 
   showToast(`Booking created! Strip added to Live Board.`, 'success', 5000);
 
-  renderLiveBoard();
-  renderTimeline();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
   renderCalendar();
 
   const liveTab = document.querySelector('[data-tab="tab-live"]');
@@ -2083,12 +2003,14 @@ function openEditBookingModal(bookingId) {
         depAd: (patch.movement.departure || strip.depAd)
       };
       // Sync time based on flight type
+      // Prefer canonical plannedTimeLocalHHMM, fallback to arrivalTimeLocalHHMM for backward compat
+      const plannedTime = patch.schedule.plannedTimeLocalHHMM || patch.schedule.arrivalTimeLocalHHMM;
       const ft = (strip.flightType || '').toUpperCase();
       if (ft === 'ARR' || ft === 'LOC') {
-        stripPatch.arrPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.arrPlanned;
+        stripPatch.arrPlanned = plannedTime || strip.arrPlanned;
       }
       if (ft === 'LOC' || ft === 'DEP') {
-        stripPatch.depPlanned = patch.schedule.arrivalTimeLocalHHMM || strip.depPlanned;
+        stripPatch.depPlanned = plannedTime || strip.depPlanned;
       }
       // Append booking notes to remarks without clobbering controller notes
       if (patch.ops.notes) {
@@ -2103,7 +2025,7 @@ function openEditBookingModal(bookingId) {
     // Refresh drawer if still open
     openBookingDrawer(bookingId);
     renderCalendar();
-    renderLiveBoard();
+    window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
   });
 }
 
@@ -2127,12 +2049,14 @@ function handleCancelBooking(bookingId) {
         updateMovement(strip.id, { status: 'CANCELLED' });
       }
     });
+  } else {
+    clearStripLinks(bookingId);
   }
 
   showToast('Booking cancelled', 'info');
   openBookingDrawer(bookingId); // refresh drawer
   renderCalendar();
-  renderLiveBoard();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
 }
 
 /**
@@ -2155,13 +2079,15 @@ function handleDeleteBooking(bookingId) {
         updateMovement(strip.id, { status: 'CANCELLED' });
       }
     });
+  } else {
+    clearStripLinks(bookingId);
   }
 
   deleteBooking(bookingId);
   showToast('Booking deleted', 'info');
   closeBookingDrawer();
   renderCalendar();
-  renderLiveBoard();
+  window.dispatchEvent(new CustomEvent("fdms:data-changed", { detail: { source: "booking" } }));
 }
 
 /* -----------------------------
