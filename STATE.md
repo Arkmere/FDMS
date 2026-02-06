@@ -85,6 +85,21 @@ A lightweight, browser-based Flight Data Management System ("FDMS Lite") for loc
   - `booking.schedule.arrivalTimeLocalHHMM` for backwards compatibility
 - Migration introduced to populate canonical planned time for legacy bookings
 - DEP strip updates no longer overwrite `arrivalTimeLocalHHMM`
+- Store normalization ensures canonical fields always populated on create/update
+- UI form handlers write canonical fields explicitly
+
+**Bidirectional reconciliation + integrity enforcement**
+- `bookingSync.reconcileLinks()` fully bidirectional:
+  - Clears `movement.bookingId` if booking missing
+  - Clears `booking.linkedStripId` if movement missing
+  - Repairs `booking.linkedStripId` if single strip claims it (deterministic)
+  - Detects conflicts (multiple strips claiming same booking)
+- Returns detailed summary: `{ clearedMovementBookingId, clearedBookingLinkedStripId, repairedBookingLinkedStripId, conflicts }`
+- Runs before first render (app.js bootstrap)
+
+**No-op patch optimization**
+- `updateBookingById()` skips save/dispatch if patch makes no actual changes
+- Reduces write churn and event storms
 
 **Non-seeding + persistence**
 - Demo seeding should not re-appear
@@ -93,54 +108,60 @@ A lightweight, browser-based Flight Data Management System ("FDMS Lite") for loc
 ### 2.2 Backlog (known or suspected gaps)
 These are not confirmed resolved unless explicitly audited against a fresh zip.
 
-**Reconciliation completeness**
-- Ensure `reconcileLinks()` enforces *both directions*:
-  - clear `movement.bookingId` if booking missing ✅ (implemented)
-  - clear `booking.linkedStripId` if movement missing ❓ (must confirm)
-  - deterministic mismatch handling (booking points to strip A, strip points to booking B) ❓
-
-**Canonical planned-time write coverage**
-- Ensure *all* booking edits/creates write canonical fields:
-  - New/edited booking UI may still write only `arrivalTimeLocalHHMM` unless patched to also set planned fields ❓
-  - Migration only handles legacy-at-load; it won't fix new edits unless UI/store sets canonical fields
-
-**No-op write churn**
-- `updateBookingById()` should avoid unnecessary writes/dispatch if patch makes no actual change (quality/perf)
-
 **Event / refresh storm safety**
 - Confirm `fdms:data-changed` dispatch/listen does not cause loops or redundant re-renders in edge flows
+- Reentrancy guards in place; no-op optimization added
+- Risk mitigated but not exhaustively tested under all edge conditions
+
+**UI/UX quality improvements** (non-critical)
+- Booking edit form could display flight type explicitly (currently inferred as ARR)
+- Reconciliation summary could be logged or displayed to user (currently silent)
+- Strip→booking sync could validate more fields (pob, remarks, etc.)
 
 ---
 
 ## 3) Technical Debt & Risks
 
 ### 3.1 Data integrity / drift
-- Risk: orphan pointers (`movement.bookingId`, `booking.linkedStripId`) if reconciliation is not fully bidirectional.
-- Risk: schedule semantics drift if UI writes legacy fields only (canonical planned time absent).
+- ✅ RESOLVED: Bidirectional reconciliation now enforced
+- ✅ RESOLVED: Canonical planned time always populated (migration + normalization + UI)
+- Remaining risk: Multi-user concurrent edits not supported (localStorage is single-client)
 
 ### 3.2 Event-driven coupling
-- Risk: re-render storms or subtle reentrancy issues if patch application triggers cascading events.
-- Mitigation: reentrancy guards; avoid dispatching change events on no-op patches.
+- ✅ MITIGATED: Reentrancy guards in bookingSync._dispatchBookingPatch
+- ✅ MITIGATED: No-op optimization prevents unnecessary save/dispatch cycles
+- Remaining risk: Complex edge flows not exhaustively tested (recommend manual QA)
 
 ### 3.3 Schema evolution
 - Any schema additions must remain backwards compatible and migrate once, deterministically.
+- Migration pattern established: bookingsStore.ensureInitialised() runs once on load
 
 ---
 
 ## 4) Current Sprint (Immediate Objective)
 
-**Sprint goal:** Close remaining integrity and schedule-consistency gaps and confirm via audit.
+**Sprint goal:** ✅ COMPLETE - Integrity and schedule-consistency gaps closed and verified.
 
-### 4.1 Next concrete objective (the very next task)
-Perform a targeted audit/fix to ensure:
+### 4.1 Completed objective (Sprint 1)
+✅ Performed targeted audit/fix:
 1) `bookingSync.reconcileLinks()` is fully bidirectional and deterministic.
-2) Booking create/edit flows always set `schedule.plannedTimeLocalHHMM` + `schedule.plannedTimeKind` (and only set legacy `arrivalTimeLocalHHMM` where appropriate).
-3) No-op patches do not write/dispatch (optional quality improvement, only if low-risk).
+2) Booking create/edit flows always set `schedule.plannedTimeLocalHHMM` + `schedule.plannedTimeKind`.
+3) No-op patches skip write/dispatch (quality improvement implemented).
 
-Exit criteria:
-- PASS/FAIL checklist with exact file+function evidence.
-- Orphan pointers repaired on load both directions.
-- New/edited bookings always have canonical planned time populated.
+Exit criteria met:
+- ✅ PASS/FAIL checklist with file+function evidence (see commit c0002b2)
+- ✅ Orphan pointers repaired on load both directions
+- ✅ New/edited bookings always have canonical planned time populated
+- ✅ No import cycles; no console errors; persistence works
+
+### 4.2 Next concrete objective (Sprint 2)
+**Awaiting task ticket from Solutions Architect.**
+
+Potential priorities:
+- End-to-end QA testing (manual or automated)
+- Performance profiling under realistic data volumes
+- User documentation for booking workflow
+- Additional features (as scoped by PM/Architect)
 
 ---
 

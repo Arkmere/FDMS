@@ -97,26 +97,78 @@ export function clearStripLinks(bookingId) {
 
 /**
  * One-time startup reconciliation.
- * Enforces referential integrity: clears any movement.bookingId pointing to
- * a non-existent booking.
+ * Enforces bidirectional referential integrity between bookings and strips.
+ * Deterministic conflict resolution (conservative: clear stale pointers).
  * Safe to call repeatedly – only fixes actual inconsistencies.
- * @returns {object} Summary: { movementsFixed: number }
+ * @returns {object} Summary: { clearedMovementBookingId, clearedBookingLinkedStripId, repairedBookingLinkedStripId, conflicts }
  */
 export function reconcileLinks() {
   const movements = getMovements();
   const bookings = loadBookings();
   const bookingIds = new Set(bookings.map(b => b.id));
+  const movementIds = new Set(movements.map(m => m.id));
 
-  let movementsFixed = 0;
+  let clearedMovementBookingId = 0;
+  let clearedBookingLinkedStripId = 0;
+  let repairedBookingLinkedStripId = 0;
+  let conflicts = 0;
 
+  // Pass 1: Clear movement.bookingId if booking missing
   movements.forEach(m => {
     if (m.bookingId && !bookingIds.has(m.bookingId)) {
       updateMovement(m.id, { bookingId: null });
-      movementsFixed++;
+      clearedMovementBookingId++;
     }
   });
 
-  return { movementsFixed };
+  // Pass 2: Handle booking.linkedStripId integrity and mismatches
+  // Build map of bookingId -> [movements claiming it]
+  const bookingIdToMovements = new Map();
+  movements.forEach(m => {
+    if (m.bookingId) {
+      if (!bookingIdToMovements.has(m.bookingId)) {
+        bookingIdToMovements.set(m.bookingId, []);
+      }
+      bookingIdToMovements.get(m.bookingId).push(m);
+    }
+  });
+
+  bookings.forEach(b => {
+    if (!b.linkedStripId) {
+      // Booking has no linkedStripId but strips may claim it
+      const claimingMovements = bookingIdToMovements.get(b.id) || [];
+      if (claimingMovements.length === 1) {
+        // Repair: single strip claims this booking, set linkedStripId
+        updateBookingById(b.id, { linkedStripId: claimingMovements[0].id });
+        repairedBookingLinkedStripId++;
+      } else if (claimingMovements.length > 1) {
+        // Conflict: multiple strips claim same booking, cannot determine truth
+        conflicts++;
+      }
+    } else {
+      // Booking has linkedStripId
+      if (!movementIds.has(b.linkedStripId)) {
+        // linkedStripId points to non-existent movement
+        updateBookingById(b.id, { linkedStripId: null });
+        clearedBookingLinkedStripId++;
+      } else {
+        // linkedStripId exists; check if it points back
+        const linkedMovement = movements.find(m => m.id === b.linkedStripId);
+        if (linkedMovement && linkedMovement.bookingId !== b.id) {
+          // Mismatch: booking points to strip, but strip points elsewhere or nowhere
+          updateBookingById(b.id, { linkedStripId: null });
+          clearedBookingLinkedStripId++;
+        }
+      }
+    }
+  });
+
+  return {
+    clearedMovementBookingId,
+    clearedBookingLinkedStripId,
+    repairedBookingLinkedStripId,
+    conflicts
+  };
 }
 
 /* ──────────────────────────────────────────────
