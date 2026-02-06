@@ -66,6 +66,40 @@ function saveToStorage() {
   }
 }
 
+/**
+ * Normalize schedule fields: ensure canonical plannedTimeLocalHHMM is populated.
+ * @param {object} booking - Booking object to normalize (mutates in place)
+ */
+function normalizeScheduleFields(booking) {
+  if (!booking.schedule) return;
+
+  const schedule = booking.schedule;
+
+  // If arrivalTimeLocalHHMM is provided but plannedTimeLocalHHMM is missing, populate it
+  if (schedule.arrivalTimeLocalHHMM && !schedule.plannedTimeLocalHHMM) {
+    schedule.plannedTimeLocalHHMM = schedule.arrivalTimeLocalHHMM;
+
+    // Infer plannedTimeKind if not already set
+    if (!schedule.plannedTimeKind) {
+      // Try to infer from booking's flight type field if available
+      // Default to 'ARR' for backward compatibility
+      schedule.plannedTimeKind = 'ARR';
+    }
+  }
+
+  // If plannedTimeLocalHHMM exists and plannedTimeKind exists,
+  // ensure arrivalTimeLocalHHMM is NOT overwritten for DEP types
+  if (schedule.plannedTimeKind === 'DEP' && schedule.plannedTimeLocalHHMM && !schedule.arrivalTimeLocalHHMM) {
+    // DEP booking: do not create arrivalTimeLocalHHMM from plannedTime
+    // (keep it undefined/null)
+  } else if (schedule.plannedTimeLocalHHMM && (schedule.plannedTimeKind === 'ARR' || schedule.plannedTimeKind === 'LOC')) {
+    // ARR/LOC: ensure arrivalTimeLocalHHMM matches for backward compatibility
+    if (!schedule.arrivalTimeLocalHHMM) {
+      schedule.arrivalTimeLocalHHMM = schedule.plannedTimeLocalHHMM;
+    }
+  }
+}
+
 export function loadBookings() {
   ensureInitialised();
   return bookings;
@@ -94,6 +128,9 @@ export function updateBookingById(id, patch) {
   const booking = bookings.find(b => b.id === id);
   if (!booking) return null;
 
+  // Snapshot before changes for no-op detection (excluding updatedAtUtc)
+  const before = JSON.stringify({ ...booking, updatedAtUtc: null });
+
   // Deep-merge nested objects
   const nestedKeys = ['contact', 'schedule', 'aircraft', 'movement', 'ops', 'charges'];
   const flatPatch = { ...patch };
@@ -104,6 +141,16 @@ export function updateBookingById(id, patch) {
     }
   }
   Object.assign(booking, flatPatch);
+
+  // Normalize schedule fields to ensure canonical planned time is populated
+  normalizeScheduleFields(booking);
+
+  // No-op optimization: only save if actual changes were made (excluding updatedAtUtc)
+  const after = JSON.stringify({ ...booking, updatedAtUtc: null });
+  if (before === after) {
+    return booking; // No changes, skip save
+  }
+
   booking.updatedAtUtc = new Date().toISOString();
   saveToStorage();
   return booking;
@@ -127,6 +174,10 @@ export function createBooking(data) {
     updatedAtUtc: now,
     ...data
   };
+
+  // Normalize schedule fields to ensure canonical planned time is populated
+  normalizeScheduleFields(booking);
+
   bookings.push(booking);
   saveToStorage();
   return booking;

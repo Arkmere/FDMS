@@ -1293,6 +1293,8 @@ function createBookingAndStrip() {
     contact: data.contact,
     schedule: {
       dateISO: data.schedule.dof,
+      plannedTimeLocalHHMM: data.schedule.arrivalTime,
+      plannedTimeKind: 'ARR',
       arrivalTimeLocalHHMM: data.schedule.arrivalTime,
       stayHours: data.schedule.stayHours
     },
@@ -1971,6 +1973,8 @@ function openEditBookingModal(bookingId) {
       },
       schedule: {
         dateISO: document.getElementById('ebDof')?.value || schedule.dateISO,
+        plannedTimeLocalHHMM: document.getElementById('ebArrTime')?.value || schedule.plannedTimeLocalHHMM || schedule.arrivalTimeLocalHHMM,
+        plannedTimeKind: schedule.plannedTimeKind || 'ARR',
         arrivalTimeLocalHHMM: document.getElementById('ebArrTime')?.value || schedule.arrivalTimeLocalHHMM,
         stayHours: parseFloat(document.getElementById('ebStayHours')?.value) || 0
       },
