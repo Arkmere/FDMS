@@ -163,6 +163,23 @@ Potential priorities:
 - User documentation for booking workflow
 - Additional features (as scoped by PM/Architect)
 
+### 4.3 Hotfix (Admin panel init failure)
+**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor.
+
+**Change:** Removed the stale `ensureBookingsInitialised()` call from `src/js/ui_booking.js:1440` and replaced direct `bookings` variable access with canonical `getBookings()` method.
+
+**Verification (QA):**
+- `git grep -n "ensureBookingsInitialised"` returns no matches (exit code 1)
+- Function `getBookingsForDate()` now uses canonical store entrypoint
+- No direct `bookings` variable access remains in ui_booking.js
+- No import cycles introduced (ui_booking uses bookingsStore only)
+
+**Evidence Pack:**
+- Commit: f714fd9
+- File: src/js/ui_booking.js:1439-1441
+- Grep output: (no matches - exit code 1)
+- Change: -2 lines, +1 line (removed ensureBookingsInitialised() + replaced bookings with getBookings())
+
 ---
 
 ## 5) Operating Procedure (Manager–Worker)
