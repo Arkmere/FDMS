@@ -154,6 +154,25 @@ Exit criteria met:
 - ✅ New/edited bookings always have canonical planned time populated
 - ✅ No import cycles; no console errors; persistence works
 
+### 4.3 Hotfix (Admin panel init failure)
+
+**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor.
+
+**Change:** Removed the stale `ensureBookingsInitialised()` call from `src/js/ui_booking.js`.
+- If booking UI required explicit load, replaced with the canonical store entrypoint `bookingsStore.loadBookings()` (no legacy initializer names).
+- Confirmed no remaining references to `ensureBookingsInitialised()` in repo.
+
+**Verification (QA):**
+- Hard reload with cache disabled: admin panel renders and initializes normally.
+- Console: no uncaught exceptions; specifically no `ReferenceError` for `ensureBookingsInitialised`.
+- `git grep -n "ensureBookingsInitialised"` returns no matches.
+
+**Evidence Pack (Claude to fill):**
+- Commit: `<hash>`
+- Grep output: `<paste output>`
+- Console proof: `<screenshot or paste>`
+
+
 ### 4.2 Next concrete objective (Sprint 2)
 **Awaiting task ticket from Solutions Architect.**
 
