@@ -1437,8 +1437,7 @@ function setCalendarMonth(year, month) {
 }
 
 function getBookingsForDate(dateStr) {
-  ensureBookingsInitialised();
-  return bookings.filter(b => b.schedule?.dateISO === dateStr && b.status !== 'CANCELLED');
+  return getBookings().filter(b => b.schedule?.dateISO === dateStr && b.status !== 'CANCELLED');
 }
 
 function getMovementsForDate(dateStr) {
