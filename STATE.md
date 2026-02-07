@@ -163,22 +163,35 @@ Potential priorities:
 - User documentation for booking workflow
 - Additional features (as scoped by PM/Architect)
 
-### 4.3 Hotfix (Admin panel init failure)
-**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor.
+### 4.3 Hotfix (Admin panel init failure + browser cache clarification)
+
+**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor. Runtime console error persisted after initial fix due to browser cache.
 
 **Change:** Removed the stale `ensureBookingsInitialised()` call from `src/js/ui_booking.js:1440` and replaced direct `bookings` variable access with canonical `getBookings()` method.
 
+**Runtime Source-of-Truth:**
+- Primary: `src/index.html` → `src/js/app.js` → `src/js/ui_booking.js`
+- `docs/` directory contains incomplete legacy tree (missing ui_booking.js)
+- All booking-related runtime code served from `src/js/*`
+
+**Browser Cache Resolution:**
+- If runtime error persists after code fix, perform hard reload (Ctrl+Shift+R / Cmd+Shift+R)
+- Open DevTools → Network → Check "Disable cache"
+- Clear browser cache entirely if needed
+
 **Verification (QA):**
-- `git grep -n "ensureBookingsInitialised"` returns no matches (exit code 1)
-- Function `getBookingsForDate()` now uses canonical store entrypoint
-- No direct `bookings` variable access remains in ui_booking.js
+- `git grep -n "ensureBookingsInitialised"` returns no code matches (only STATE.md docs)
+- `find src/js -name "*.js" -exec grep -l "ensureBookingsInitialised" {} \;` returns no matches
+- Function `getBookingsForDate()` now uses canonical store entrypoint `getBookings()`
+- No direct `bookings` variable access remains in runtime ui_booking.js
 - No import cycles introduced (ui_booking uses bookingsStore only)
 
 **Evidence Pack:**
-- Commit: f714fd9
+- Commit: f714fd9 (hotfix applied 2026-02-06 21:07:57)
 - File: src/js/ui_booking.js:1439-1441
-- Grep output: (no matches - exit code 1)
+- Grep output: Zero code matches (verified 2026-02-06 21:10+)
 - Change: -2 lines, +1 line (removed ensureBookingsInitialised() + replaced bookings with getBookings())
+- Runtime tree verified: src/index.html:1161 → src/js/app.js:22-27 → src/js/ui_booking.js
 
 ---
 
