@@ -163,35 +163,42 @@ Potential priorities:
 - User documentation for booking workflow
 - Additional features (as scoped by PM/Architect)
 
-### 4.3 Hotfix (Admin panel init failure + browser cache clarification)
+### 4.3 Hotfix (Booking/Calendar ReferenceError)
 
-**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor. Runtime console error persisted after initial fix due to browser cache.
+**Issue:** Booking/Calendar crash due to a stale call to `ensureBookingsInitialised()` in `getBookingsForDate()` inside `src/js/ui_booking.js` after the bookings store refactor. This surfaced as a browser console `ReferenceError: ensureBookingsInitialised is not defined`.
 
-**Change:** Removed the stale `ensureBookingsInitialised()` call from `src/js/ui_booking.js:1440` and replaced direct `bookings` variable access with canonical `getBookings()` method.
+**Change:** Updated `getBookingsForDate()` to read bookings via the store (`getBookings().filter(...)`) and removed any legacy init helper usage. Architecture remains: all booking reads/writes go through `src/js/stores/bookingsStore.js` (initialise-once + in-memory array), not a local `bookings` array.
 
-**Runtime Source-of-Truth:**
-- Primary: `src/index.html` → `src/js/app.js` → `src/js/ui_booking.js`
-- `docs/` directory contains incomplete legacy tree (missing ui_booking.js)
-- All booking-related runtime code served from `src/js/*`
+**Verification (QA — code-level):** ✅ VERIFIED AT CODE LEVEL
+- Branch: `main` at commit `da1e0fd`
+- Repository state: clean working tree
+- Repo check: `git grep -n "ensureBookingsInitialised"` returns only STATE.md documentation references (no code matches)
+- Function `getBookingsForDate()` (src/js/ui_booking.js) uses canonical `getBookings()` accessor
+- No direct `bookings` variable access in ui_booking.js
+- Visiting Cars checkbox ID verified consistent: HTML + JS both use `bookingVisitingCars`
 
-**Browser Cache Resolution:**
-- If runtime error persists after code fix, perform hard reload (Ctrl+Shift+R / Cmd+Shift+R)
-- Open DevTools → Network → Check "Disable cache"
-- Clear browser cache entirely if needed
-
-**Verification (QA):**
-- `git grep -n "ensureBookingsInitialised"` returns no code matches (only STATE.md docs)
-- `find src/js -name "*.js" -exec grep -l "ensureBookingsInitialised" {} \;` returns no matches
-- Function `getBookingsForDate()` now uses canonical store entrypoint `getBookings()`
-- No direct `bookings` variable access remains in runtime ui_booking.js
-- No import cycles introduced (ui_booking uses bookingsStore only)
+**Browser verification required:** ⚠️ PM (Stuart) must complete
+- Open app locally (src/index.html via Live Server or http.server)
+- Chrome DevTools → Network → "Disable cache" → Hard reload
+- Clear Application → Storage → "Clear site data"
+- Visit Booking page → Calendar page (Month/Week/Year views)
+- Confirm Console: no `ReferenceError: ensureBookingsInitialised`
+- Confirm Network: ui_booking.js loaded (200, not disk-cached)
+- Capture screenshots/console output and update this section
 
 **Evidence Pack:**
-- Commit: f714fd9 (hotfix applied 2026-02-06 21:07:57)
-- File: src/js/ui_booking.js:1439-1441
-- Grep output: Zero code matches (verified 2026-02-06 21:10+)
-- Change: -2 lines, +1 line (removed ensureBookingsInitialised() + replaced bookings with getBookings())
-- Runtime tree verified: src/index.html:1161 → src/js/app.js:22-27 → src/js/ui_booking.js
+- Commit: da1e0fd (main branch HEAD)
+- `git grep -n "ensureBookingsInitialised"` output:
+  ```
+  STATE.md:159:**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` ...
+  STATE.md:161:**Change:** Removed the stale `ensureBookingsInitialised()` call ...
+  STATE.md:163:- Confirmed no remaining references to `ensureBookingsInitialised()` ...
+  STATE.md:167:- Console: no uncaught exceptions; specifically no `ReferenceError` for `ensureBookingsInitialised`.
+  STATE.md:168:- `git grep -n "ensureBookingsInitialised"` returns no matches.
+  ```
+  (Only documentation references; zero code matches)
+- Code verification: src/js/ui_booking.js:1439-1441 uses `getBookings().filter(...)` (canonical accessor)
+- Checkbox ID consistency: bookingVisitingCars verified across HTML + JS
 
 ---
 
