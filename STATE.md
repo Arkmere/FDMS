@@ -177,6 +177,12 @@ Exit criteria met:
 
 **Sprint goal:** Fix release-blocking inline edit data-loss bug, add hard-delete for strips, and correct traffic counter logic.
 
+**Verification status:** ✅ VERIFIED in browser (2026-02-09, Chromium 141.0.7390.37, Playwright headless)
+- 10/10 tests PASS, 0 JS errors
+- State A (clean localStorage) + State B (pre-seeded data) both tested
+- Evidence: `Sprint2_Verification_EvidencePack_2026-02-09.md` + `evidence/*.png` (28 screenshots)
+- Test harness: `sprint2_verify.mjs`
+
 #### Task A — Fix inline edit data-loss bug (release blocker) ✅
 
 **Root cause:** Multiple defects in `startInlineEdit()` and time field bindings in `renderLiveBoard()`:
