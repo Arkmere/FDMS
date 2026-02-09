@@ -1305,6 +1305,7 @@ function autoActivatePlannedArrivals() {
 }
 
 export function renderLiveBoard() {
+  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.renderLiveBoardCount++;
   const tbody = byId("liveBody");
   if (!tbody) return;
 
@@ -4323,6 +4324,7 @@ export function initLiveBoard() {
 
   // Re-render when booking data changes (avoids importing ui_booking)
   window.addEventListener("fdms:data-changed", () => {
+    if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.dataChangedReceived++;
     renderLiveBoard();
     renderTimeline();
   });
@@ -4405,6 +4407,7 @@ function sortHistoryMovements(movements, column, direction) {
  * Shows COMPLETED and CANCELLED movements
  */
 export function renderHistoryBoard() {
+  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.renderHistoryBoardCount++;
   const tbody = byId("historyBody");
   if (!tbody) return;
 
