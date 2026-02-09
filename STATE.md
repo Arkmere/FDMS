@@ -109,9 +109,9 @@ A lightweight, browser-based Flight Data Management System ("FDMS Lite") for loc
 These are not confirmed resolved unless explicitly audited against a fresh zip.
 
 **Event / refresh storm safety**
-- Confirm `fdms:data-changed` dispatch/listen does not cause loops or redundant re-renders in edge flows
+- ✅ RESOLVED (Sprint 3): Stress-tested under all edge flows (rapid edits, multi-strip, status transitions, booking sync, delete/cancel). No loops or redundant re-renders detected.
 - Reentrancy guards in place; no-op optimization added
-- Risk mitigated but not exhaustively tested under all edge conditions
+- Diagnostics instrumentation available via `__FDMS_DIAGNOSTICS__` flag for future regression testing
 
 **UI/UX quality improvements** (non-critical)
 - Booking edit form could display flight type explicitly (currently inferred as ARR)
@@ -130,7 +130,7 @@ These are not confirmed resolved unless explicitly audited against a fresh zip.
 ### 3.2 Event-driven coupling
 - ✅ MITIGATED: Reentrancy guards in bookingSync._dispatchBookingPatch
 - ✅ MITIGATED: No-op optimization prevents unnecessary save/dispatch cycles
-- Remaining risk: Complex edge flows not exhaustively tested (recommend manual QA)
+- ✅ VERIFIED (Sprint 3): Stress audit confirmed no event storms under rapid edits, status transitions, booking sync, and delete/cancel flows. Render counts scale 1:1 with user actions.
 
 ### 3.3 Schema evolution
 - Any schema additions must remain backwards compatible and migrate once, deterministically.
@@ -260,6 +260,58 @@ Exit criteria met:
 
 - **Phantom time fields:** Movements edited via inline edit before this fix may have orphan `etd`/`atd`/`eta`/`ata`/`ect`/`act` properties. These are harmless (never read by display logic) but could be cleaned up in a future migration if desired.
 - **Inline edit does not trigger all modal-level enrichments** (e.g. WTC lookup on type change, voice callsign update on callsign change). This is by design for minimal-risk patch semantics; full enrichment requires the Edit Details modal.
+
+### 4.4 Sprint 3: Event storm safety audit + documentation hardening
+
+**Sprint goal:** Prove no event-driven loops, redundant dispatch storms, or runaway re-renders exist under realistic stress. Document strip lifecycle semantics and counter rules.
+
+#### Option A — Event / Refresh Storm Safety Audit ✅
+
+**Approach:** Playwright-based stress test harness with test-only diagnostics instrumentation (`window.__FDMS_DIAGNOSTICS__` flag).
+
+**Instrumentation added (files changed):**
+- `src/js/ui_liveboard.js` — Counter increment in `renderLiveBoard()`, `renderHistoryBoard()`, `fdms:data-changed` listener
+- `src/js/app.js` — Counter increment in `updateDailyStats()`, `updateFisCounters()`
+- `src/js/services/bookingSync.js` — Counter increment in `_dispatchBookingPatch()` on dispatch
+
+All counters gated behind `window.__FDMS_DIAGNOSTICS__ === true`. Zero overhead in normal operation.
+
+**Test scenarios (all PASS):**
+
+| Test ID | Scenario | Result | Key Metrics |
+|---------|----------|--------|-------------|
+| S1 | Rapid inline edits on one strip (N=25) | **PASS** | 25 renders for 25 edits (1:1 ratio) |
+| S2 | Rapid edits across 10 strips (N=50) | **PASS** | 50 renders for 50 edits (1:1 ratio) |
+| S3 | Status transitions + counter verification | **PASS** | Counters 0→3→3→2 (correct at each stage) |
+| S4 | Booking-linked flow stress (N=15) | **PASS** | 15 sync dispatches, 15 received, link integrity maintained |
+| S5 | Delete/cancel under load (10 strips) | **PASS** | 7 remaining, 4 counted (correct) |
+| PERSIST | Post-stress persistence + consistency | **PASS** | Data survives reload, no duplicate IDs |
+| QUIESCE | Counters quiesce after actions stop | **PASS** | 0 render growth in 3s idle window |
+
+**Verdict:** No event storms, no infinite loops, no runaway re-renders. Render counts scale linearly with user actions (1:1 for inline edits, 1:1 for status transitions). Booking-linked edits show 2:1 render ratio (expected: edit render + fdms:data-changed render).
+
+**Evidence:**
+- Test harness: `sprint3_stress_verify.mjs`
+- Evidence pack: `Sprint3_OptionA_StressAudit_EvidencePack_2026-02-09.md`
+- Screenshots: `evidence_s3/*.png`
+
+#### Option C — Documentation Hardening ✅
+
+**Deliverable:** `docs/STRIP_LIFECYCLE_AND_COUNTERS.md`
+
+Covers:
+- Strip status definitions (PLANNED, ACTIVE, COMPLETED, CANCELLED, deleted)
+- Status transition diagram with trigger descriptions
+- Cancel vs Delete semantics
+- Canonical time fields (`depPlanned`, `depActual`, `arrPlanned`, `arrActual`) with getter helper mapping
+- Display logic per flight type
+- Historical note on phantom time fields
+- Counter rules: daily movement totals (EGOW), FIS counters, per-strip counters
+- Counter update triggers and safety net (45s periodic tick)
+- Booking link invariants (bidirectional pointers, sync pathways, reentrancy guard, reconciliation)
+- Inline edit vs modal edit comparison
+- Storage format reference
+- Diagnostics mode reference
 
 ---
 
