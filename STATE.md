@@ -3,7 +3,7 @@
 Last updated: 2026-02-09 (Europe/London)
 
 This file is the shared source of truth for the Manager–Worker workflow:
-- **Manager (PM)**: Stuart (coordination, priorities, releases)
+- **Manager (PM)**: User (coordination, priorities, releases)
 - **Solutions Architect & QA Lead**: ChatGPT (task tickets, audits, risk management)
 - **Production Engineer**: Claude Code (implements tickets, updates this ledger)
 
