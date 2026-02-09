@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-06 (Europe/London)
+Last updated: 2026-02-09 (Europe/London)
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: Stuart (coordination, priorities, releases)
@@ -173,14 +173,87 @@ Exit criteria met:
 - Console proof: `<screenshot or paste>`
 
 
-### 4.2 Next concrete objective (Sprint 2)
-**Awaiting task ticket from Solutions Architect.**
+### 4.2 Sprint 2: Live Board integrity + stats correctness
 
-Potential priorities:
-- End-to-end QA testing (manual or automated)
-- Performance profiling under realistic data volumes
-- User documentation for booking workflow
-- Additional features (as scoped by PM/Architect)
+**Sprint goal:** Fix release-blocking inline edit data-loss bug, add hard-delete for strips, and correct traffic counter logic.
+
+#### Task A — Fix inline edit data-loss bug (release blocker) ✅
+
+**Root cause:** Multiple defects in `startInlineEdit()` and time field bindings in `renderLiveBoard()`:
+
+1. **Wrong time field names:** Inline edit for time fields used phantom names (`atd`, `etd`, `ata`, `eta`, `act`, `ect`) instead of canonical movement fields (`depActual`, `depPlanned`, `arrActual`, `arrPlanned`). Edits wrote to non-existent properties; display reads from canonical fields, so edits appeared lost.
+2. **Blur/Enter double-fire:** Both Enter key handler and blur handler called `saveEdit()` without guard, causing duplicate updates and re-renders per interaction.
+3. **No required field validation:** Blanking required fields (e.g. `callsignCode`) set them to `null` without error, destroying data.
+4. **Missing booking sync:** `onMovementUpdated()` was not called after inline edit, so linked bookings drifted.
+5. **Missing counter updates:** `updateDailyStats()` / `updateFisCounters()` were not called after inline edit.
+
+**Fix (files changed):**
+- `src/js/ui_liveboard.js` — `startInlineEdit()` (lines ~239-345):
+  - Added `saved` guard flag to prevent double-fire from Enter + blur race
+  - Added required field validation (callsignCode): rejects blank with single error toast, reverts UI cell
+  - Added `onMovementUpdated()` call for booking sync after save
+  - Added `updateDailyStats()` / `updateFisCounters()` calls after save
+- `src/js/ui_liveboard.js` — inline edit bindings (lines ~1635-1647):
+  - Fixed time field names: `m.depActual ? "depActual" : "depPlanned"` (was `m.atd ? "atd" : "etd"`)
+  - Same fix for arrival times and OVR crossing times
+
+**QA test log:**
+- Callsign edit: double-click → edit → Enter → single update, no toast storm, value persists after reload
+- Registration edit: works, no other fields affected
+- Type edit: works, no other fields affected
+- Dep/Arr aerodrome edit: works, value persists
+- Time edit (dep/arr): writes to correct canonical field, persists after reload
+- Blank callsign: rejected with single "Callsign Code cannot be blank" toast, previous value retained
+- Escape: reverts without saving
+- No console errors
+
+#### Task B — Add "Delete strip" (hard delete) ✅
+
+**Feature:** Added permanent Delete action to strip Edit dropdown in both Live Board and History, distinct from Cancel (soft delete).
+
+**Files changed:**
+- `src/js/datamodel.js` — Added `deleteMovement(id)`: removes movement from in-memory array and persists to localStorage
+- `src/js/ui_liveboard.js`:
+  - Added `performDeleteStrip(movement)` function: confirmation prompt, booking link cleanup, delete, UI refresh
+  - Added Delete button HTML + event binding in Live Board edit dropdown
+  - Added Delete button HTML + event binding in History edit dropdown
+  - Imported `deleteMovement` from datamodel, `getBookingById`/`updateBookingById` from bookingsStore
+
+**Behaviour:**
+- Confirmation: `"Delete strip <callsign> (#<id>)? This cannot be undone."`
+- On confirm: clears `booking.linkedStripId` if linked, then removes movement from storage
+- UI refreshes immediately; reload confirms permanent deletion
+- Cancel action still works unchanged (marks as CANCELLED, preserves record)
+
+**QA test log:**
+- Delete unlinked strip: disappears from UI, gone after reload, no console errors
+- Delete linked strip: booking's linkedStripId cleared, booking views unaffected
+- Cancel button: still works as before (soft delete → History)
+
+#### Task C — Fix Live Board traffic counter logic ✅
+
+**Root cause:** `calculateDailyStats()` in `src/js/app.js` counted ALL movements for today including PLANNED and CANCELLED in the total. This violated requirements that:
+- PLANNED should not affect counters (not yet real traffic)
+- CANCELLED should not count in main movement totals
+- Each movement counted exactly once
+
+**Fix (files changed):**
+- `src/js/app.js` — `calculateDailyStats()`:
+  - Filters to only `ACTIVE` + `COMPLETED` status (excludes PLANNED and CANCELLED)
+  - Deduplicates by movement ID (defensive)
+  - Total computed from filtered+deduped set, not `todaysMovements.length`
+
+**QA test log:**
+- 1 PLANNED today: counter = 0 (correct, not counted)
+- 1 ACTIVE today: counter = 1
+- Mark ACTIVE → COMPLETED: counter still = 1 (same movement, not double-counted)
+- Cancel a movement: counter decreases (CANCELLED excluded)
+- View non-today history: today's counters unchanged
+
+### 4.3 Known risks discovered during Sprint 2
+
+- **Phantom time fields:** Movements edited via inline edit before this fix may have orphan `etd`/`atd`/`eta`/`ata`/`ect`/`act` properties. These are harmless (never read by display logic) but could be cleaned up in a future migration if desired.
+- **Inline edit does not trigger all modal-level enrichments** (e.g. WTC lookup on type change, voice callsign update on callsign change). This is by design for minimal-risk patch semantics; full enrichment requires the Edit Details modal.
 
 ---
 

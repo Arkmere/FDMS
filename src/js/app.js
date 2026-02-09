@@ -724,19 +724,29 @@ function getTodayDateString() {
 }
 
 /**
- * Calculate daily movement statistics for today
+ * Calculate daily movement statistics for today.
+ * Counts only ACTIVE and COMPLETED movements (today's DOF).
+ * Excludes PLANNED and CANCELLED from main movement totals.
+ * Each movement is counted exactly once (by ID dedup).
  * @returns {object} Object with movement counts
  */
 function calculateDailyStats() {
   const movements = getMovements();
   const today = getTodayDateString();
 
-  // Filter movements for today (by DOF date of flight)
-  const todaysMovements = movements.filter(m => m.dof === today);
+  // Filter: today only, exclude PLANNED and CANCELLED
+  const countable = movements.filter(m =>
+    m.dof === today &&
+    (m.status === "ACTIVE" || m.status === "COMPLETED")
+  );
 
-  // Count by resolved EGOW flight type (mutually exclusive categories)
-  let bm = 0, bc = 0, vm = 0, vc = 0;
-  for (const m of todaysMovements) {
+  // Deduplicate by ID (defensive — should already be unique)
+  const seen = new Set();
+  let bm = 0, bc = 0, vm = 0, vc = 0, total = 0;
+  for (const m of countable) {
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    total++;
     const { egowFlightType } = classifyMovement(m);
     if (egowFlightType === 'BM') bm++;
     else if (egowFlightType === 'BC') bc++;
@@ -749,7 +759,7 @@ function calculateDailyStats() {
     bookedCompleted: bc,       // BC - Based Civil
     vfrMovements: vm,          // VM - Visiting Military
     vfrCompleted: vc,          // VC - Visiting Civil
-    total: todaysMovements.length
+    total
   };
 }
 
