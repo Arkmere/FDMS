@@ -8,6 +8,7 @@ import {
   statusLabel,
   createMovement,
   updateMovement,
+  deleteMovement,
   inferTypeFromReg,
   getETD,
   getATD,
@@ -27,7 +28,8 @@ import {
 
 import { showToast } from "./app.js";
 
-import { onMovementUpdated, onMovementStatusChanged } from "./services/bookingSync.js";
+import { onMovementUpdated, onMovementStatusChanged, clearStripLinks } from "./services/bookingSync.js";
+import { getBookingById, updateBookingById } from "./stores/bookingsStore.js";
 
 import {
   searchAll,
@@ -286,9 +288,23 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
   input.focus();
   input.select();
 
+  // Guard: prevent double-fire from Enter + blur race
+  let saved = false;
+
   // Save function
   const saveEdit = () => {
+    if (saved) return;
+    saved = true;
+
     let newValue = input.value.trim();
+
+    // Required field validation: reject blanking required fields
+    const requiredFields = ['callsignCode'];
+    if (requiredFields.includes(fieldName) && !newValue) {
+      showToast(`${fieldName === 'callsignCode' ? 'Callsign Code' : fieldName} cannot be blank`, 'error');
+      el.innerHTML = originalContent;
+      return;
+    }
 
     // Validate and normalize time format if time type
     if (inputType === 'time' && newValue) {
@@ -296,6 +312,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       const validation = validateTime(newValue);
       if (!validation.valid) {
         showToast(validation.error || 'Invalid time format', 'error');
+        saved = false; // Allow retry
         input.focus();
         return;
       }
@@ -303,20 +320,29 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       newValue = validation.normalized || newValue;
     }
 
-    // Update movement
+    // Patch semantics: update only the edited field, preserving all others
     const updateData = {};
     updateData[fieldName] = newValue || null;
-    updateMovement(movementId, updateData);
+    const updatedMovement = updateMovement(movementId, updateData);
+
+    // Sync back to booking if this strip is linked
+    if (updatedMovement) {
+      onMovementUpdated(updatedMovement);
+    }
 
     // Re-render
     renderLiveBoard();
     renderHistoryBoard();
+    if (window.updateDailyStats) window.updateDailyStats();
+    if (window.updateFisCounters) window.updateFisCounters();
 
     if (onSave) onSave();
   };
 
   // Cancel function
   const cancelEdit = () => {
+    if (saved) return;
+    saved = true;
     el.innerHTML = originalContent;
   };
 
@@ -324,7 +350,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
   input.addEventListener('blur', () => {
     // Small delay to allow click events to register first
     setTimeout(() => {
-      if (document.activeElement !== input) {
+      if (!saved && document.activeElement !== input) {
         saveEdit();
       }
     }, 100);
@@ -1476,6 +1502,7 @@ export function renderLiveBoard() {
                   ? '<button class="js-cancel" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; white-space: nowrap;" onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'">Cancel</button>'
                   : ""
               }
+              <button class="js-delete-strip" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; font-weight: 600; white-space: nowrap; border-top: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Delete</button>
             </div>
           </div>
           <button class="small-btn js-toggle-details" type="button" aria-label="Toggle details for ${escapeHtml(m.callsignCode)}">Info ▾</button>
@@ -1533,6 +1560,14 @@ export function renderLiveBoard() {
       e.stopPropagation();
       closeDropdownPortal();
       transitionToCancelled(m.id);
+    });
+
+    // Bind Delete option (hard delete)
+    const deleteBtn = tr.querySelector(".js-delete-strip");
+    safeOn(deleteBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      performDeleteStrip(m);
     });
 
     // Bind status transition buttons
@@ -1617,16 +1652,17 @@ export function renderLiveBoard() {
     enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
 
     // Time field mapping depends on flight type
+    // Use canonical field names: depActual/depPlanned/arrActual/arrPlanned
     const depTimeEl = tr.querySelector(".js-edit-dep-time");
     const arrTimeEl = tr.querySelector(".js-edit-arr-time");
     if (ft === "DEP" || ft === "LOC") {
-      enableInlineEdit(depTimeEl, m.id, m.atd ? "atd" : "etd", "time");
+      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time");
     }
     if (ft === "ARR" || ft === "LOC") {
-      enableInlineEdit(arrTimeEl, m.id, m.ata ? "ata" : "eta", "time");
+      enableInlineEdit(arrTimeEl, m.id, m.arrActual ? "arrActual" : "arrPlanned", "time");
     }
     if (ft === "OVR") {
-      enableInlineEdit(depTimeEl, m.id, m.act ? "act" : "ect", "time");
+      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time");
     }
 
     // Hover sync with timeline bar
@@ -4205,6 +4241,37 @@ function transitionToCancelled(id) {
   if (window.updateDailyStats) window.updateDailyStats();
 }
 
+/**
+ * Permanently delete a strip (hard delete).
+ * Removes the movement from storage entirely.
+ * If linked to a booking, clears the booking linkage.
+ */
+function performDeleteStrip(movement) {
+  if (!movement) return;
+
+  const callsign = movement.callsignCode || 'this flight';
+  if (!confirm(`Delete strip ${callsign} (#${movement.id})? This cannot be undone.`)) {
+    return;
+  }
+
+  // If linked to a booking, clear the booking's linkedStripId
+  if (movement.bookingId) {
+    const booking = getBookingById(movement.bookingId);
+    if (booking && booking.linkedStripId === movement.id) {
+      updateBookingById(movement.bookingId, { linkedStripId: null });
+    }
+  }
+
+  // Permanently remove from storage
+  deleteMovement(movement.id);
+
+  showToast(`${callsign} deleted`, 'info');
+  renderLiveBoard();
+  renderHistoryBoard();
+  if (window.updateDailyStats) window.updateDailyStats();
+  if (window.updateFisCounters) window.updateFisCounters();
+}
+
 /* -----------------------------
    Live Board init
 ------------------------------ */
@@ -4483,6 +4550,7 @@ export function renderHistoryBoard() {
             <div class="js-history-edit-menu" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; min-width: 120px; margin-top: 2px;">
               <button class="js-history-edit-details" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">View/Edit</button>
               <button class="js-history-duplicate" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Duplicate</button>
+              <button class="js-history-delete-strip" type="button" style="display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; color: #dc3545; font-weight: 600; white-space: nowrap; border-top: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">Delete</button>
             </div>
           </div>
           <button class="small-btn js-history-toggle-details" type="button" aria-label="Toggle details">Info ▾</button>
@@ -4516,6 +4584,14 @@ export function renderHistoryBoard() {
       e.stopPropagation();
       closeDropdownPortal();
       openDuplicateMovementModal(m);
+    });
+
+    // Bind Delete option (hard delete) in History
+    const histDeleteBtn = tr.querySelector(".js-history-delete-strip");
+    safeOn(histDeleteBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      performDeleteStrip(m);
     });
 
     // Bind Info toggle (similar to Live Board)

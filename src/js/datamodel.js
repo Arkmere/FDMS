@@ -764,6 +764,21 @@ export function updateMovement(id, patch) {
   return movement;
 }
 
+/**
+ * Permanently delete a movement from storage.
+ * Unlike cancel (soft delete), this removes the record entirely.
+ * @param {number} id - Movement ID to delete
+ * @returns {boolean} True if movement was found and deleted
+ */
+export function deleteMovement(id) {
+  ensureInitialised();
+  const index = movements.findIndex((m) => m.id === id);
+  if (index === -1) return false;
+  movements.splice(index, 1);
+  saveToStorage();
+  return true;
+}
+
 export function resetMovementsToDemo() {
   movements = cloneDemoMovements();
   nextId = computeNextId();
