@@ -698,6 +698,7 @@ function calculateStripFisCount() {
  * Update all FIS counter displays
  */
 function updateFisCounters() {
+  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.updateFisCountersCount++;
   const genericDisplay = document.getElementById("genericOvrCount");
   const stripFisDisplay = document.getElementById("stripFisCount");
   const totalFisDisplay = document.getElementById("totalFisCount");
@@ -767,6 +768,7 @@ function calculateDailyStats() {
  * Update daily movement statistics display
  */
 function updateDailyStats() {
+  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.updateDailyStatsCount++;
   const stats = calculateDailyStats();
 
   const bmDisplay = document.getElementById("statBookedMvmts");

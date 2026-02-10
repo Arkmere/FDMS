@@ -185,6 +185,7 @@ function _dispatchBookingPatch(bookingId, patch) {
   try {
     const updated = updateBookingById(bookingId, patch);
     if (updated) {
+      if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.dataChangedDispatched++;
       // Trigger UI refresh (calendar, booking drawer, etc.)
       window.dispatchEvent(new CustomEvent("fdms:data-changed", {
         detail: { source: "bookingSync" }
