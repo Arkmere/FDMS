@@ -1,0 +1,100 @@
+{
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0
+  },
+  "results": [
+    {
+      "id": "F1",
+      "title": "No formation → badge absent",
+      "status": "PASS",
+      "note": "badges=0 errors=0",
+      "refs": [
+        "S4_1_F1_no_badge.png"
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "Formation badge F×2 created and persists after reload",
+      "status": "PASS",
+      "note": "pre=\"F×2\" post=\"F×2\" errors=0",
+      "refs": [
+        "S4_2_F2_badge_before_reload.png",
+        "S4_3_F2_badge_after_reload.png"
+      ]
+    },
+    {
+      "id": "F3",
+      "title": "Seeded formation renders badge F×3",
+      "status": "PASS",
+      "note": "badge=\"F×3\" errors=0",
+      "refs": [
+        "S4_4_F3_seeded_badge.png"
+      ]
+    },
+    {
+      "id": "F4",
+      "title": "Formation panel renders: table + 3 Save buttons",
+      "status": "PASS",
+      "note": "tables=1 saveBtns=3 hasLabel=true",
+      "refs": [
+        "S4_5_F4_expanded_panel.png"
+      ]
+    },
+    {
+      "id": "F5",
+      "title": "Element 2 saved: status=ACTIVE depActual=13:20",
+      "status": "PASS",
+      "note": "status=ACTIVE dep=13:20",
+      "refs": [
+        "S4_6_F5_element_saved.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "title": "WTC recomputes: current=L max=M after EH10 completed",
+      "status": "PASS",
+      "note": "wtcCurrent=L wtcMax=M",
+      "refs": [
+        "S4_7_F6_wtc_recompute.png"
+      ]
+    },
+    {
+      "id": "F7",
+      "title": "Edit modal pre-populates formation count=3",
+      "status": "PASS",
+      "note": "count=3 visible=true",
+      "refs": [
+        "S4_8_F7_edit_modal.png"
+      ]
+    },
+    {
+      "id": "F8",
+      "title": "Formation removed via edit modal → null, badge gone",
+      "status": "PASS",
+      "note": "removed=true formationNull=true badge=0",
+      "refs": [
+        "S4_10_F8_formation_removed.png"
+      ]
+    },
+    {
+      "id": "F9",
+      "title": "Duplicate inherits formation, elements reset to PLANNED",
+      "status": "PASS",
+      "note": "dupId=2 elStatuses=[\"PLANNED\",\"PLANNED\",\"PLANNED\"]",
+      "refs": [
+        "S4_12_F9_dup_created.png"
+      ]
+    },
+    {
+      "id": "F10",
+      "title": "Malformed formation normalized on load",
+      "status": "PASS",
+      "note": "label=\"Formation of 0\" elemLen=0 errors=0",
+      "refs": [
+        "S4_13_F10_normalized.png"
+      ]
+    }
+  ]
+}

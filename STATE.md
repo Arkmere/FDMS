@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-10 (Europe/London)
+Last updated: 2026-02-10 (Europe/London) — Sprint 4 Formation v1
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -302,6 +302,66 @@ Covers:
 - Inline edit vs modal edit comparison
 - Storage format reference
 - Diagnostics mode reference
+
+### 4.5 Sprint 4: Formations v1 end-to-end
+
+**Sprint goal:** Implement user-facing create/edit/remove of `movement.formation` on a strip, Live Board badge `F×n`, expanded panel with inline element edits, WTC semantics, formation inheritance in duplicate flows, and a full Playwright regression suite.
+
+**Merged:** 2026-02-10 (Europe/London) on branch `claude/fdms-formations-documentation-v5on5`
+
+#### Deliverables
+
+**Data model (`src/js/datamodel.js`):**
+- `WTC_RANK` constant and `maxWtcString()` helper for WTC comparison
+- `computeFormationWTC(elements)` — returns `{ wtcCurrent, wtcMax }` where current = max WTC across PLANNED+ACTIVE elements, max = max across all elements
+- `normalizeFormation(formation)` — backward-compat repair called on every load; ensures `elements` is an array, fills missing fields, recomputes WTC; result saved back to localStorage
+- `updateFormationElement(id, elementIndex, patch)` — patches a single element (status, depActual, arrActual), recomputes WTC, persists
+- `ensureInitialised()` updated: runs `normalizeFormation` on any movement with a `formation` field; calls `saveToStorage()` if any formations were normalized
+
+**UI (`src/js/ui_liveboard.js`):**
+- Helper functions: `buildFormationElementRows`, `readFormationFromModal`, `wireFormationCountInput`
+- `renderFormationDetails(m)` — expanded row subsection showing label, current/max WTC, per-element table with inline status select, dep/arr inputs, and Save button per row
+- `renderLiveBoard()` — callsign cell now includes `<span class="badge badge-formation">F×n</span>` for strips with formations
+- New Flight modal: collapsible Formation section (count input + dynamic element rows)
+- Edit Details modal: collapsible Formation section (pre-populated from `m.formation`, with "Remove Formation" button)
+- `js-save-flight`, `js-save-edit`, `js-save-complete-edit` handlers: read formation from modal and persist
+- Duplicate modal: formation copy with elements reset to `status: "PLANNED"`, `depActual: ""`, `arrActual: ""`
+- Event delegation for `.fmn-el-save` buttons: reads row values, calls `updateFormationElement`, re-renders, shows toast
+
+**CSS (`src/css/vectair.css`):**
+- `.fmn-el-input`, `.fmn-el-dep`, `.fmn-el-arr`, `.fmn-el-select` — inline element edit controls
+
+**Documentation:**
+- `docs/FORMATIONS.md` — 13-section canonical reference for the formation system
+
+**Playwright regression (`sprint4_formation_verify.mjs`):**
+
+| Test | Scenario | Result |
+|------|----------|--------|
+| F1 | No formation → badge absent | **PASS** |
+| F2 | Create 2-element via UI → badge `F×2` persists after reload | **PASS** |
+| F3 | Seeded 3-element → badge `F×3` on Live Board | **PASS** |
+| F4 | Expanded panel: formation table + 3 Save buttons present | **PASS** |
+| F5 | Element inline save: status=ACTIVE, depActual=13:20 persists | **PASS** |
+| F6 | WTC recompute: EH10(M) completed → wtcCurrent=L, wtcMax=M | **PASS** |
+| F7 | Edit modal pre-populates formation count=3 | **PASS** |
+| F8 | Remove formation via edit modal → formation=null, badge gone | **PASS** |
+| F9 | Duplicate inherits formation, elements reset to PLANNED/no actuals | **PASS** |
+| F10 | Malformed formation `{ label: null }` normalized on load (no crash) | **PASS** |
+
+**Result: 10/10 PASS, 0 JS errors**
+
+**Evidence pack:**
+- Screenshots: `evidence_s4/S4_*.png` (14 screenshots)
+- Results JSON: `evidence_s4/sprint4_formation_results.json`
+- Test harness: `sprint4_formation_verify.mjs`
+- Linux kernel 4.4 workaround: `--single-process --no-zygote` Chromium flags
+- CDN stub: `page.route('**/xlsx.full.min.js', ...)` to prevent network failures
+
+#### Known issues discovered during Sprint 4
+
+- **Linux kernel 4.4 Playwright click interception:** `click({ force: true })` on buttons inside `expand-section` still hits the covering element (coordinate-based). Fixed by using `dispatchEvent('click')` which directly fires the event on the target element.
+- **normalizeFormation not persisted:** Initial implementation ran normalization in memory but skipped `saveToStorage()`. Fixed: `needsSave` flag triggers save when any formation is normalized.
 
 ---
 
