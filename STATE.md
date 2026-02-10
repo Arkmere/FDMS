@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-09 (Europe/London)
+Last updated: 2026-02-10 (Europe/London)
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -156,21 +156,7 @@ Exit criteria met:
 
 ### 4.3 Hotfix (Admin panel init failure)
 
-**Issue:** Admin panel init failed due to a stale call to `ensureBookingsInitialised()` still present in `src/js/ui_booking.js` after the bookings store refactor.
-
-**Change:** Removed the stale `ensureBookingsInitialised()` call from `src/js/ui_booking.js`.
-- If booking UI required explicit load, replaced with the canonical store entrypoint `bookingsStore.loadBookings()` (no legacy initializer names).
-- Confirmed no remaining references to `ensureBookingsInitialised()` in repo.
-
-**Verification (QA):**
-- Hard reload with cache disabled: admin panel renders and initializes normally.
-- Console: no uncaught exceptions; specifically no `ReferenceError` for `ensureBookingsInitialised`.
-- `git grep -n "ensureBookingsInitialised"` returns no matches.
-
-**Evidence Pack (Claude to fill):**
-- Commit: `<hash>`
-- Grep output: `<paste output>`
-- Console proof: `<screenshot or paste>`
+Hotfix closed (no further action); verified as part of Sprint 2/3 stability pass.
 
 
 ### 4.2 Sprint 2: Live Board integrity + stats correctness
@@ -264,6 +250,10 @@ Exit criteria met:
 ### 4.4 Sprint 3: Event storm safety audit + documentation hardening
 
 **Sprint goal:** Prove no event-driven loops, redundant dispatch storms, or runaway re-renders exist under realistic stress. Document strip lifecycle semantics and counter rules.
+
+**Merged to main:** 2026-02-10 (Europe/London)
+- Merge method: merge commit (--no-ff)
+- Commits: `c1bfee8`, `0c9e752`, `dd67acf`
 
 #### Option A — Event / Refresh Storm Safety Audit ✅
 
