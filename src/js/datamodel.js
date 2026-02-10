@@ -447,6 +447,12 @@ function ensureInitialised() {
   if (loaded) {
     // Use stored data (may be empty array)
     movements = loaded;
+    // Normalize any formation objects (backward compat + WTC recompute)
+    let needsSave = false;
+    movements.forEach(m => {
+      if (m.formation) { m.formation = normalizeFormation(m.formation); needsSave = true; }
+    });
+    if (needsSave) saveToStorage();
   } else {
     // No stored data - start fresh with empty movements
     movements = [];
@@ -653,6 +659,122 @@ export function getACT(movement) {
   const ft = (movement.flightType || "").toUpperCase();
   if (ft === "OVR") return movement.depActual || null;
   return null;
+}
+
+/* -----------------------------
+   Formation WTC Helpers
+------------------------------ */
+
+// WTC ordering for ICAO L < S < M < H < J
+// Used to determine max WTC across formation elements
+const WTC_RANK = { L: 1, S: 2, M: 3, H: 4, J: 5 };
+
+/**
+ * Return the higher-ranked of two WTC strings.
+ * Handles empty strings gracefully.
+ */
+function maxWtcString(a, b) {
+  const ra = WTC_RANK[(a || "").toUpperCase()] || 0;
+  const rb = WTC_RANK[(b || "").toUpperCase()] || 0;
+  if (ra === 0 && rb === 0) return a || b || "";
+  if (ra === 0) return b;
+  if (rb === 0) return a;
+  return ra >= rb ? a : b;
+}
+
+/**
+ * Compute wtcCurrent and wtcMax from a formation elements array.
+ * wtcCurrent = max WTC among PLANNED or ACTIVE elements only.
+ * wtcMax     = max WTC across all elements regardless of status.
+ * @param {Array} elements - Formation element objects
+ * @returns {{ wtcCurrent: string, wtcMax: string }}
+ */
+export function computeFormationWTC(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) {
+    return { wtcCurrent: "", wtcMax: "" };
+  }
+  let current = "";
+  let max = "";
+  for (const el of elements) {
+    const wtc = (el.wtc || "").toUpperCase().trim();
+    if (!wtc) continue;
+    max = maxWtcString(max, wtc);
+    const st = (el.status || "").toUpperCase();
+    if (st === "PLANNED" || st === "ACTIVE") {
+      current = maxWtcString(current, wtc);
+    }
+  }
+  return { wtcCurrent: current, wtcMax: max };
+}
+
+/**
+ * Normalize a formation object loaded from storage.
+ * Ensures required fields exist and recomputes WTC.
+ * Returns null if the argument is falsy.
+ * @param {object|null} formation
+ * @returns {object|null}
+ */
+function normalizeFormation(formation) {
+  if (!formation || typeof formation !== "object") return null;
+  if (!Array.isArray(formation.elements)) formation.elements = [];
+
+  // Ensure each element has required fields
+  formation.elements = formation.elements.map((el, idx) => ({
+    callsign:   el.callsign  || `ELEMENT ${idx + 1}`,
+    reg:        el.reg       || "",
+    type:       el.type      || "",
+    wtc:        el.wtc       || "",
+    status:     el.status    || "PLANNED",
+    depActual:  el.depActual || "",
+    arrActual:  el.arrActual || ""
+  }));
+
+  // Recompute derived WTC fields
+  const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements);
+  formation.label      = formation.label || `Formation of ${formation.elements.length}`;
+  formation.wtcCurrent = wtcCurrent;
+  formation.wtcMax     = wtcMax;
+  return formation;
+}
+
+/**
+ * Update a single element within a movement's formation and recompute WTC.
+ * @param {number} id           - Movement ID
+ * @param {number} elementIndex - 0-based index into formation.elements
+ * @param {object} patch        - Fields to update on the element
+ * @returns {object|null} Updated movement, or null if not found / invalid
+ */
+export function updateFormationElement(id, elementIndex, patch) {
+  ensureInitialised();
+  const movement = movements.find(m => m.id === id);
+  if (!movement || !movement.formation || !Array.isArray(movement.formation.elements)) {
+    return null;
+  }
+  if (elementIndex < 0 || elementIndex >= movement.formation.elements.length) {
+    return null;
+  }
+
+  Object.assign(movement.formation.elements[elementIndex], patch);
+
+  // Recompute formation WTC
+  const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements);
+  movement.formation.wtcCurrent = wtcCurrent;
+  movement.formation.wtcMax     = wtcMax;
+
+  // Update metadata
+  const now = new Date().toISOString();
+  movement.updatedAtUtc = now;
+  movement.updatedBy = "local user";
+  if (!movement.changeLog) movement.changeLog = [];
+  movement.changeLog.push({
+    timestamp: now,
+    user: "local user",
+    action: "updated",
+    changes: { [`formation.elements[${elementIndex}]`]: patch }
+  });
+
+  saveToStorage();
+  return movement;
 }
 
 /* -----------------------------

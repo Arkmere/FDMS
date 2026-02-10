@@ -740,6 +740,35 @@ tr.strip.ft-ovr > td {
   font-weight: 700;
 }
 
+/* Formation inline edit controls — used in expanded strip panel */
+.fmn-el-input {
+  font-size: 11px;
+  padding: 1px 4px;
+  border: 1px solid #b0b8bc;
+  border-radius: 2px;
+  background: #fff;
+  width: 70px;
+  font-family: inherit;
+}
+.fmn-el-input:focus {
+  outline: 2px solid var(--va-link);
+  border-color: var(--va-link);
+}
+/* Narrower dep/arr time inputs */
+.fmn-el-dep,
+.fmn-el-arr {
+  width: 52px;
+}
+.fmn-el-select {
+  font-size: 11px;
+  padding: 1px 2px;
+  border: 1px solid #b0b8bc;
+  border-radius: 2px;
+  background: #fff;
+  font-family: inherit;
+  max-width: 100px;
+}
+
 /* Alerts section in expanded strip */
 .expand-section-alerts {
   flex: 1 1 100%;
