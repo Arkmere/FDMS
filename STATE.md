@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-10 (Europe/London) — Sprint 4 Formation v1
+Last updated: 2026-02-11 (Europe/London) — Sprint 5 Formations v1.1
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -362,6 +362,77 @@ Covers:
 
 - **Linux kernel 4.4 Playwright click interception:** `click({ force: true })` on buttons inside `expand-section` still hits the covering element (coordinate-based). Fixed by using `dispatchEvent('click')` which directly fires the event on the target element.
 - **normalizeFormation not persisted:** Initial implementation ran normalization in memory but skipped `saveToStorage()`. Fixed: `needsSave` flag triggers save when any formation is normalized.
+
+### 4.6 Sprint 5: Formations v1.1 — element depAd/arrAd, editable callsign, validation, cascade, inheritance
+
+**Sprint goal:** Extend formation elements with per-element Dep AD / Arr AD fields, editable callsigns, input validation (WTC + ICAO 4-char), formation element count guard (min 2, max 12), master status cascade (COMPLETED/CANCELLED), and produce-arrival inheritance. Write a 12-test Playwright regression suite.
+
+**Merged:** 2026-02-11 (Europe/London) on branch `claude/fdms-formations-documentation-v5on5`
+
+#### Deliverables
+
+**Data model (`src/js/datamodel.js`):**
+- `isValidWtcChar(wtc)` — true iff WTC ∈ {L, S, M, H, J}
+- `isValidIcaoAd(ad)` — true iff ad is `""` or matches `/^[A-Z0-9]{4}$/`
+- `isValidElementStatus(status)` — true iff status ∈ {PLANNED, ACTIVE, COMPLETED, CANCELLED}
+- `normalizeFormation` updated: fills `element.depAd` and `element.arrAd` with `""` for legacy elements
+- `cascadeFormationStatus(id, newStatus)` — exported; COMPLETED cascades PLANNED/ACTIVE→COMPLETED; CANCELLED cascades all→CANCELLED; recomputes WTC and persists
+
+**UI (`src/js/ui_liveboard.js`):**
+- `buildFormationElementRows` — new columns: Callsign (editable), Dep AD, Arr AD; clamped to [2, 12]; callsign defaults to `${base} ${n}` but is editable
+- `readFormationFromModal` — reads callsign/depAd/arrAd; validates WTC and ICAO; returns `null` if formation section never opened (no rows rendered); returns `{ _error, message }` on validation failure; returns `null` if count < 2
+- `wireFormationCountInput` — clamps to [2, 12]
+- Callsign input listener in New Flight modal: only rebuilds rows if rows already exist (prevents phantom formation on normal saves)
+- New Flight + Edit Details modal: `min=2 max=12` on count input
+- `renderFormationDetails` — 10-column table: Status, Dep, Arr, Dep AD, Arr AD, Callsign, Reg, Type, WTC, Save; wrapped in scrollable `.formation-table-wrap`; empty depAd/arrAd shows master fallback in `.fmn-fallback` muted span
+- `.fmn-el-save` delegation: reads depAd/arrAd per row, validates ICAO, patches element
+- `transitionToCompleted` and `transitionToCancelled`: call `cascadeFormationStatus` after `updateMovement`
+- `js-save-complete-edit` handler: calls `cascadeFormationStatus` after `updateMovement`
+- `openReciprocalStripModal` (produce arrival/departure): copies formation with elements reset: `status="PLANNED"`, `depActual=""`, `arrActual=""`; recomputes WTC
+
+**CSS (`src/css/vectair.css`):**
+- `.formation-table-wrap` — `overflow-x: auto` for horizontal scroll on narrow screens
+- `.fmn-el-ad` — 52px wide, `text-transform: uppercase`
+- `.fmn-fallback` — 10px muted grey for inherited AD display
+- `.fmn-ad-cell` — `min-width: 72px`
+
+**Documentation:**
+- `docs/FORMATIONS.md` — "Formations v1.1 — Clarifications and Extensions" section prepended; covers element schema v1.1, depAd/arrAd empty-value semantics, validation rules, element count rules, WTC semantics, cascade rules, produce inheritance, and out-of-scope items
+
+**Playwright regression (`sprint5_formation_v11_verify.mjs`):**
+
+| Test | Scenario | Result |
+|------|----------|--------|
+| G1 | depAd/arrAd/callsign inputs present in New Flight modal (count=2) | **PASS** |
+| G2 | depAd/arrAd persist via New Flight modal save | **PASS** |
+| G3 | depAd/arrAd editable in expanded panel; persists after `.fmn-el-save` | **PASS** |
+| G4 | Empty depAd shows master fallback in `.fmn-fallback` | **PASS** |
+| G5 | Invalid 3-char depAd rejected; element unchanged | **PASS** |
+| G6 | Invalid WTC in New Flight modal blocks save; no movement created | **PASS** |
+| G7 | Overridden element callsign persists after save | **PASS** |
+| G8 | Formation count=1 → `movement.formation = null` | **PASS** |
+| G9 | Master COMPLETE cascade → all PLANNED/ACTIVE elements become COMPLETED, wtcCurrent="" | **PASS** |
+| G10 | Master CANCEL cascade → all elements become CANCELLED | **PASS** |
+| G11 | Produce-arrival inherits formation + resets elements (status=PLANNED, actuals cleared, depAd copied) | **PASS** |
+| G12 | Edit modal count input: `min=2 max=12` HTML attributes correct | **PASS** |
+
+**Result: 12/12 PASS, 0 JS errors**
+
+**Evidence pack:**
+- Screenshots: `evidence_s5/S5_*.png` (12 screenshots)
+- Results JSON: `evidence_s5/sprint5_formation_v11_results.json`
+- Test harness: `sprint5_formation_v11_verify.mjs`
+
+#### Bugs fixed during Sprint 5
+
+- **Callsign input listener phantom formation:** When count input defaulted to 2 and user typed in `#newCallsignCode`, the callsign `input` listener triggered `buildFormationElementRows`, rendering element rows silently. Subsequent `readFormationFromModal` found those rows and created a formation even though the user never opened the formation section. Fixed: listener only rebuilds if `[data-el-callsign="0"]` already exists in container.
+- **G10 dialog race:** Test registered `page.once('dialog', ...)` *after* clicking `.js-cancel`, so the `confirm()` dialog fired before the handler was attached (auto-dismissed as cancelled). Fixed: register handler *before* clicking.
+
+#### Known limitations (v1.1 out-of-scope, deferred to v1.2+)
+
+- Micro-strip fields (departure sheet per element) not implemented
+- No server-side or multi-client sync (localStorage remains single-client)
+- Formation cannot be added to a strip that is already COMPLETED or CANCELLED
 
 ---
 

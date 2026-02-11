@@ -5,6 +5,69 @@
 
 ---
 
+## Formations v1.1 — Clarifications and Extensions
+
+This section defines v1.1 behavior for formation elements, validation, and inheritance.
+
+### Formation storage
+Formations are stored only on the master movement:
+
+`movement.formation = { label, wtcCurrent, wtcMax, elements[] }`
+
+### Element schema (v1.1)
+Each element is stored as:
+
+- `callsign` (string) — editable in authoring UI (defaults auto-generated)
+- `reg` (string)
+- `type` (string)
+- `wtc` (string) — one of `{L,S,M,H,J}`
+- `status` (string) — one of `{PLANNED,ACTIVE,COMPLETED,CANCELLED}`
+- `depAd` (string) — element departure aerodrome ICAO; `""` means unset
+- `arrAd` (string) — element arrival aerodrome ICAO; `""` means unset
+- `depActual` (string) — actual departure time (HH:MM or empty)
+- `arrActual` (string) — actual arrival time (HH:MM or empty)
+
+Element `depAd/arrAd` may differ from the master movement's dep/arr.
+
+### Empty depAd/arrAd fallback (display behavior)
+If `element.depAd == ""`, the UI displays the master movement `depAd` as a muted fallback (display-only). The stored element value remains `""`. Same rule for `arrAd`.
+
+No automatic copying from the master movement into element `depAd/arrAd` occurs.
+
+### Validation (hard requirements)
+- `wtc` must be one of `{L,S,M,H,J}` (uppercase-coerced). Invalid values are rejected.
+- `depAd/arrAd` must be `""` or match `^[A-Z0-9]{4}$` (uppercase-coerced). Invalid values are rejected.
+- `status` must be one of `{PLANNED,ACTIVE,COMPLETED,CANCELLED}`.
+
+### Element count
+A formation exists only when `elements.length >= 2`.
+Authoring UI clamps formation count to `min=2`, `max=12`.
+If count < 2, `movement.formation` is treated as null (no formation).
+
+### WTC semantics
+- `wtcCurrent` = max WTC across elements whose status is `PLANNED` or `ACTIVE`.
+- `wtcMax` = max WTC across all elements regardless of status.
+
+### Master status cascade rules
+- When the master movement becomes `COMPLETED`, all formation elements in `{PLANNED,ACTIVE}` are set to `COMPLETED`.
+- When the master movement becomes `CANCELLED`, all formation elements are set to `CANCELLED`.
+- No cascade occurs on master activation (PLANNED→ACTIVE).
+
+### Produce-arrival / produce-departure inheritance
+When producing the opposite leg from a formation-bearing movement:
+- The produced movement inherits the formation structure including identity fields and `depAd/arrAd`.
+- The produced movement resets element operational state:
+  - `status = PLANNED`
+  - `depActual = ""`
+  - `arrActual = ""`
+
+### Out of scope (explicit)
+- Booking objects and booking sync are formation-agnostic in v1.1.
+- Element-level "micro-strip" operational fields (pob, tng/os/fis counts, remarks/warnings, ATC details) are not implemented in v1.1.
+- Future element-level counters, if added, must be informational-only and must not aggregate into master strip counters or daily stats.
+
+---
+
 ## 1. What is a Formation?
 
 A **formation** is a group of two or more aircraft operating under a single lead callsign.
