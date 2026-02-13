@@ -25,7 +25,10 @@ import {
   validateRequired,
   checkPastTime,
   computeFormationWTC,
-  updateFormationElement
+  updateFormationElement,
+  cascadeFormationStatus,
+  isValidWtcChar,
+  isValidIcaoAd
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -664,55 +667,90 @@ function matchesFilters(m) {
 function buildFormationElementRows(count, baseCallsign, containerId, existingElements) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  if (!count || count <= 1) { container.innerHTML = ""; return; }
+  // Formation requires >= 2 elements; clamp to [2, 12]
+  const clamped = Math.min(Math.max(count || 0, 0), 12);
+  if (clamped < 2) { container.innerHTML = ""; return; }
 
   const existing = Array.isArray(existingElements) ? existingElements : [];
-  let html = `<table class="formation-table" style="margin-top:6px;">
+  let html = `<div class="formation-table-wrap"><table class="formation-table" style="margin-top:6px;">
     <thead>
       <tr>
-        <th>Element</th>
+        <th>Callsign</th>
         <th>Reg</th>
         <th>Type</th>
         <th>WTC</th>
+        <th>Dep AD</th>
+        <th>Arr AD</th>
       </tr>
     </thead>
     <tbody>`;
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < clamped; i++) {
     const el = existing[i] || {};
-    const callsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
+    const defaultCallsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
     html += `<tr>
-      <td style="font-weight:600;">${escapeHtml(callsign)}</td>
-      <td><input class="fmn-el-input" data-el-reg="${i}"  value="${escapeHtml(el.reg  || "")}" placeholder="Reg" /></td>
-      <td><input class="fmn-el-input" data-el-type="${i}" value="${escapeHtml(el.type || "")}" placeholder="Type" /></td>
-      <td><input class="fmn-el-input" data-el-wtc="${i}"  value="${escapeHtml(el.wtc  || "")}" placeholder="L/M/H" style="width:52px;" /></td>
+      <td><input class="fmn-el-input" data-el-callsign="${i}" value="${escapeHtml(el.callsign || defaultCallsign)}" placeholder="Callsign" style="width:90px;" /></td>
+      <td><input class="fmn-el-input" data-el-reg="${i}"      value="${escapeHtml(el.reg      || "")}" placeholder="Reg" /></td>
+      <td><input class="fmn-el-input" data-el-type="${i}"     value="${escapeHtml(el.type     || "")}" placeholder="Type" /></td>
+      <td><input class="fmn-el-input" data-el-wtc="${i}"      value="${escapeHtml(el.wtc      || "")}" placeholder="L/M/H" style="width:52px;" /></td>
+      <td><input class="fmn-el-input fmn-el-ad" data-el-dep-ad="${i}" value="${escapeHtml(el.depAd || "")}" placeholder="ICAO" maxlength="4" /></td>
+      <td><input class="fmn-el-input fmn-el-ad" data-el-arr-ad="${i}" value="${escapeHtml(el.arrAd || "")}" placeholder="ICAO" maxlength="4" /></td>
     </tr>`;
   }
-  html += `</tbody></table>`;
+  html += `</tbody></table></div>`;
   container.innerHTML = html;
+
+  // Apply uppercase to all new inputs
+  container.querySelectorAll("[data-el-wtc], [data-el-dep-ad], [data-el-arr-ad]").forEach(inp => {
+    inp.addEventListener("input", () => { inp.value = inp.value.toUpperCase(); });
+  });
 }
 
 /**
  * Read formation data from a modal's formation inputs.
- * Returns null if count <= 1 (no formation).
- * @param {string} baseCallsign  - Lead callsign already typed in the modal
- * @param {string} countInputId  - ID of the "number of aircraft" input
- * @param {string} containerId   - ID of the element rows container
- * @returns {object|null} Formation object or null
+ * Returns null if count < 2 or no rows rendered (no formation).
+ * Returns { _error, message } if a validation error is found.
  */
 function readFormationFromModal(baseCallsign, countInputId, containerId) {
   const countInput = document.getElementById(countInputId);
-  const count = parseInt(countInput?.value || "1", 10);
-  if (!count || count <= 1) return null;
+  const rawCount = parseInt(countInput?.value || "0", 10);
+  const count = Math.min(Math.max(rawCount, 0), 12);
+  if (count < 2) return null;
 
+  // Return null if no element rows have been rendered (section never expanded/used)
   const container = document.getElementById(containerId);
+  if (!container || !container.querySelector('[data-el-callsign="0"]')) return null;
+
   const elements = [];
   for (let i = 0; i < count; i++) {
-    const callsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
-    const reg  = container?.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()  || "";
-    const type = container?.querySelector(`[data-el-type="${i}"]`)?.value?.trim() || "";
-    const wtc  = container?.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "";
-    elements.push({ callsign, reg, type, wtc, status: "PLANNED", depActual: "", arrActual: "" });
+    const defaultCallsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
+    const callsign = container?.querySelector(`[data-el-callsign="${i}"]`)?.value?.trim() || defaultCallsign;
+    const reg    = container?.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()   || "";
+    const type   = container?.querySelector(`[data-el-type="${i}"]`)?.value?.trim()  || "";
+    const wtcRaw = container?.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "";
+    const depAdRaw = container?.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
+    const arrAdRaw = container?.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
+
+    // Validate WTC — must be one of L/S/M/H/J or empty
+    if (wtcRaw && !isValidWtcChar(wtcRaw)) {
+      return { _error: true, message: `Element ${i + 1}: WTC "${wtcRaw}" is invalid. Use L, S, M, H, or J.` };
+    }
+    // Validate depAd/arrAd — "" or 4-char ICAO
+    if (!isValidIcaoAd(depAdRaw)) {
+      return { _error: true, message: `Element ${i + 1}: Dep AD "${depAdRaw}" must be a 4-character ICAO code (A–Z, 0–9).` };
+    }
+    if (!isValidIcaoAd(arrAdRaw)) {
+      return { _error: true, message: `Element ${i + 1}: Arr AD "${arrAdRaw}" must be a 4-character ICAO code (A–Z, 0–9).` };
+    }
+
+    elements.push({
+      callsign,
+      reg, type,
+      wtc: wtcRaw,
+      status: "PLANNED",
+      depAd: depAdRaw, arrAd: arrAdRaw,
+      depActual: "", arrActual: ""
+    });
   }
   const { wtcCurrent, wtcMax } = computeFormationWTC(elements);
   return {
@@ -735,7 +773,9 @@ function wireFormationCountInput(countInputId, containerId, getCallsign, existin
   const countInput = document.getElementById(countInputId);
   if (!countInput) return;
   countInput.addEventListener("input", () => {
-    const count = parseInt(countInput.value || "1", 10);
+    let count = parseInt(countInput.value || "0", 10);
+    // Clamp to [2, 12]; values < 2 clear rows (no formation)
+    count = Math.min(Math.max(count, 0), 12);
     buildFormationElementRows(count, getCallsign(), containerId, existingElements);
   });
 }
@@ -826,11 +866,25 @@ function renderFormationDetails(m) {
   if (!m.formation || !Array.isArray(m.formation.elements)) return "";
 
   const mvId = m.id;
+  const masterDepAd = escapeHtml(m.depAd || "");
+  const masterArrAd = escapeHtml(m.arrAd || "");
+
   const rows = m.formation.elements
     .map((el, idx) => {
       const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
         .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
         .join("");
+
+      // Dep AD / Arr AD: show element value or master fallback (muted) when empty
+      const elDepAd = el.depAd || "";
+      const elArrAd = el.arrAd || "";
+      const depAdDisplay = elDepAd
+        ? escapeHtml(elDepAd)
+        : `<span class="fmn-fallback" title="Inherited from master strip">${masterDepAd}</span>`;
+      const arrAdDisplay = elArrAd
+        ? escapeHtml(elArrAd)
+        : `<span class="fmn-fallback" title="Inherited from master strip">${masterArrAd}</span>`;
+
       return `
         <tr>
           <td>${escapeHtml(el.callsign)}</td>
@@ -838,24 +892,43 @@ function renderFormationDetails(m) {
           <td>${escapeHtml(el.type || "—")}</td>
           <td>${escapeHtml(el.wtc || "—")}</td>
           <td>
-            <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}">
+            <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}" aria-label="Status for ${escapeHtml(el.callsign)}">
               ${statusOptions}
             </select>
+          </td>
+          <td class="fmn-ad-cell">
+            <input class="fmn-el-input fmn-el-ad" type="text"
+              value="${escapeHtml(elDepAd)}"
+              placeholder="${masterDepAd || "ICAO"}" maxlength="4"
+              data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Dep AD for ${escapeHtml(el.callsign)}" />
+            ${!elDepAd && masterDepAd ? `<span class="fmn-fallback">${masterDepAd}</span>` : ""}
+          </td>
+          <td class="fmn-ad-cell">
+            <input class="fmn-el-input fmn-el-ad" type="text"
+              value="${escapeHtml(elArrAd)}"
+              placeholder="${masterArrAd || "ICAO"}" maxlength="4"
+              data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Arr AD for ${escapeHtml(el.callsign)}" />
+            ${!elArrAd && masterArrAd ? `<span class="fmn-fallback">${masterArrAd}</span>` : ""}
           </td>
           <td>
             <input class="fmn-el-input fmn-el-dep" type="text"
               value="${escapeHtml(el.depActual || "")}"
               placeholder="HHMM" maxlength="5"
-              data-mv-id="${mvId}" data-el-idx="${idx}" />
+              data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Dep actual for ${escapeHtml(el.callsign)}" />
           </td>
           <td>
             <input class="fmn-el-input fmn-el-arr" type="text"
               value="${escapeHtml(el.arrActual || "")}"
               placeholder="HHMM" maxlength="5"
-              data-mv-id="${mvId}" data-el-idx="${idx}" />
+              data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
           </td>
           <td>
-            <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}">Save</button>
+            <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Save element ${idx + 1} (${escapeHtml(el.callsign)})">Save</button>
           </td>
         </tr>
       `;
@@ -870,23 +943,27 @@ function renderFormationDetails(m) {
         <div class="kv-label">Current WTC</div><div class="kv-value">${escapeHtml(m.formation.wtcCurrent || "—")}</div>
         <div class="kv-label">Max WTC</div><div class="kv-value">${escapeHtml(m.formation.wtcMax || "—")}</div>
       </div>
-      <table class="formation-table">
-        <thead>
-          <tr>
-            <th>Element</th>
-            <th>Reg</th>
-            <th>Type</th>
-            <th>WTC</th>
-            <th>Status</th>
-            <th>Dep</th>
-            <th>Arr</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
+      <div class="formation-table-wrap">
+        <table class="formation-table">
+          <thead>
+            <tr>
+              <th>Element</th>
+              <th>Reg</th>
+              <th>Type</th>
+              <th>WTC</th>
+              <th>Status</th>
+              <th>Dep AD</th>
+              <th>Arr AD</th>
+              <th>Dep</th>
+              <th>Arr</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -2178,8 +2255,8 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-section-grid">
             <div class="modal-field">
               <label class="modal-label">Number of Aircraft</label>
-              <input id="newFormationCount" class="modal-input" type="number" value="1" min="1" max="20" style="width:80px;" />
-              <div style="font-size:11px;color:#666;margin-top:4px;">Enter 2 or more to create a formation. Elements are auto-named from the callsign.</div>
+              <input id="newFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
+              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Callsigns default to auto-generated but are editable.</div>
             </div>
           </div>
           <div id="newFormationElementsContainer"></div>
@@ -2327,9 +2404,12 @@ function openNewFlightModal(flightType = "DEP") {
     (document.getElementById("newFlightNumber")?.value?.trim() || "");
   wireFormationCountInput("newFormationCount", "newFormationElementsContainer", getNewFlightCallsign, []);
   // Also rebuild rows when callsign code changes (element labels update)
+  // Only rebuild if rows have already been rendered (formation section was explicitly used)
   callsignCodeInput?.addEventListener("input", () => {
-    const count = parseInt(document.getElementById("newFormationCount")?.value || "1", 10);
-    if (count > 1) buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", []);
+    const container = document.getElementById("newFormationElementsContainer");
+    if (!container?.querySelector('[data-el-callsign="0"]')) return;
+    const count = parseInt(document.getElementById("newFormationCount")?.value || "2", 10);
+    if (count >= 2) buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", []);
   });
 
   // Auto-fill Remarks and Warnings from registration data (FDMS_REGISTRATIONS.csv col 15 & 16)
@@ -2576,13 +2656,14 @@ function openNewFlightModal(flightType = "DEP") {
       squawk: squawkValue,
       route: routeValue,
       clearance: clearanceValue,
-      formation: readFormationFromModal(
-        (document.getElementById("newCallsignCode")?.value?.trim() || "") +
-        (document.getElementById("newFlightNumber")?.value?.trim() || ""),
-        "newFormationCount",
-        "newFormationElementsContainer"
-      )
     };
+
+    // Validate and read formation (must happen before enrichMovementData)
+    const newFormationBase = (document.getElementById("newCallsignCode")?.value?.trim() || "") +
+                             (document.getElementById("newFlightNumber")?.value?.trim() || "");
+    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer");
+    if (newFormation?._error) { showToast(newFormation.message, 'error'); return; }
+    movement.formation = newFormation;
 
     // Enrich with auto-populated fields
     movement = enrichMovementData(movement);
@@ -2813,6 +2894,25 @@ function openNewLocalModal() {
         <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
         <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
       </div>
+
+      <!-- Collapsible: Formation -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="newLocFormationSection">
+          <span class="expander-icon">▶</span>
+          Formation
+          <span class="expander-hint">(optional – multi-aircraft)</span>
+        </button>
+        <div id="newLocFormationSection" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Number of Aircraft</label>
+              <input id="newLocFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
+              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Callsigns default to auto-generated but are editable.</div>
+            </div>
+          </div>
+          <div id="newLocFormationElementsContainer"></div>
+        </div>
+      </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
@@ -2920,6 +3020,32 @@ function openNewLocalModal() {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
+  // Wire formation section for LOC modal
+  const getLocCallsign = () =>
+    (document.getElementById("newLocCallsignCode")?.value?.trim() || "") +
+    (document.getElementById("newLocFlightNumber")?.value?.trim() || "");
+  wireFormationCountInput("newLocFormationCount", "newLocFormationElementsContainer", getLocCallsign, []);
+  // Rebuild rows when callsign changes only if rows already exist (guard against phantom formation)
+  callsignCodeInput?.addEventListener("input", () => {
+    const container = document.getElementById("newLocFormationElementsContainer");
+    if (!container?.querySelector('[data-el-callsign="0"]')) return;
+    const count = parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10);
+    if (count >= 2) buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", []);
+  });
+
+  // Wire collapsible section expanders for LOC modal
+  document.querySelectorAll('.modal-expander').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const panel = document.getElementById(targetId);
+      if (!panel) return;
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', !isExpanded);
+      panel.hidden = isExpanded;
+      btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
+    });
+  });
+
   // Bind local time display handlers
   const depTimeInput = document.getElementById("newLocStart");
   const arrTimeInput = document.getElementById("newLocEnd");
@@ -3004,6 +3130,10 @@ function openNewLocalModal() {
       return;
     }
 
+    // Validate and read formation (must happen before movement creation)
+    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
+
     // Get voice callsign for display (only if different from contraction/registration)
     const regValue = document.getElementById("newLocReg")?.value || "";
     const regData = lookupRegistration(regValue);
@@ -3058,7 +3188,7 @@ function openNewLocalModal() {
       squawk: "",
       route: "",
       clearance: "",
-      formation: null
+      formation: locFormation || null
     };
 
     // Enrich with auto-populated fields
@@ -3098,6 +3228,10 @@ function openNewLocalModal() {
       showToast(callsignValidation.error, 'error');
       return;
     }
+
+    // Validate and read formation
+    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
     // Get voice callsign and other data
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -3148,12 +3282,14 @@ function openNewLocalModal() {
       squawk: "",
       route: "",
       clearance: "",
-      formation: null
+      formation: locCpFormation || null
     };
 
     movement = enrichMovementData(movement);
 
-    createMovement(movement);
+    const createdLoc = createMovement(movement);
+    // Cascade COMPLETED status to formation elements (if any)
+    if (createdLoc?.id && locCpFormation) cascadeFormationStatus(createdLoc.id, "COMPLETED");
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
@@ -3407,8 +3543,8 @@ function openEditMovementModal(m) {
             <div class="modal-field">
               <label class="modal-label">Number of Aircraft</label>
               <input id="editFormationCount" class="modal-input" type="number"
-                value="${m.formation?.elements?.length || 1}" min="1" max="20" style="width:80px;" />
-              <div style="font-size:11px;color:#666;margin-top:4px;">Set to 1 to remove formation. Elements are auto-named from callsign.</div>
+                value="${m.formation?.elements?.length || 2}" min="2" max="12" style="width:80px;" />
+              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Set below 2 or use Remove to clear formation.</div>
             </div>
             ${m.formation ? `<div class="modal-field" style="display:flex;align-items:flex-end;">
               <button type="button" class="btn btn-ghost js-remove-formation" style="color:#d32f2f;font-size:12px;">Remove Formation</button>
@@ -3836,13 +3972,14 @@ function openEditMovementModal(m) {
       squawk: editSquawkValue,
       route: editRouteValue,
       clearance: editClearanceValue,
-      formation: readFormationFromModal(
-        (document.getElementById("editCallsignCode")?.value?.trim() || "") +
-        (document.getElementById("editFlightNumber")?.value?.trim() || ""),
-        "editFormationCount",
-        "editFormationElementsContainer"
-      )
     };
+
+    // Validate and read formation
+    const editFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
+                       (document.getElementById("editFlightNumber")?.value?.trim() || "");
+    const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer");
+    if (editFm?._error) { showToast(editFm.message, 'error'); return; }
+    updates.formation = editFm;
 
     updateMovement(m.id, updates);
 
@@ -3963,15 +4100,18 @@ function openEditMovementModal(m) {
       squawk: editSquawkValue,
       route: editRouteValue,
       clearance: editClearanceValue,
-      formation: readFormationFromModal(
-        (document.getElementById("editCallsignCode")?.value?.trim() || "") +
-        (document.getElementById("editFlightNumber")?.value?.trim() || ""),
-        "editFormationCount",
-        "editFormationElementsContainer"
-      )
     };
 
+    // Validate and read formation
+    const saveCpFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
+                         (document.getElementById("editFlightNumber")?.value?.trim() || "");
+    const saveCpFm = readFormationFromModal(saveCpFmBase, "editFormationCount", "editFormationElementsContainer");
+    if (saveCpFm?._error) { showToast(saveCpFm.message, 'error'); return; }
+    updates.formation = saveCpFm;
+
     updateMovement(m.id, updates);
+    // Cascade formation elements on complete
+    cascadeFormationStatus(m.id, "COMPLETED");
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
@@ -4360,6 +4500,18 @@ function openReciprocalStripModal(m, targetType) {
     notes: m.notes || ""
   };
 
+  // Inherit formation (copy identity fields + depAd/arrAd; reset operational state)
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length >= 2) {
+    const resetElements = m.formation.elements.map(el => ({
+      ...el,
+      status:     "PLANNED",
+      depActual:  "",
+      arrActual:  ""
+    }));
+    const { wtcCurrent, wtcMax } = computeFormationWTC(resetElements);
+    movement.formation = { ...m.formation, elements: resetElements, wtcCurrent, wtcMax };
+  }
+
   // Enrich with auto-populated fields
   movement = enrichMovementData(movement);
 
@@ -4427,6 +4579,8 @@ function transitionToCompleted(id) {
     status: "COMPLETED",
     arrActual: currentTime
   });
+  // Cascade formation elements to COMPLETED
+  cascadeFormationStatus(id, "COMPLETED");
 
   // Sync booking status
   onMovementStatusChanged(movement, 'COMPLETED');
@@ -4453,6 +4607,8 @@ function transitionToCancelled(id) {
   updateMovement(id, {
     status: "CANCELLED"
   });
+  // Cascade formation elements to CANCELLED
+  cascadeFormationStatus(id, "CANCELLED");
 
   // Sync booking status
   onMovementStatusChanged(movement, 'CANCELLED');
@@ -4553,11 +4709,28 @@ export function initLiveBoard() {
     const row = btn.closest("tr");
     if (!row) return;
 
-    const statusSel = row.querySelector(".fmn-el-select");
-    const depInput  = row.querySelector(".fmn-el-dep");
-    const arrInput  = row.querySelector(".fmn-el-arr");
+    const statusSel  = row.querySelector(".fmn-el-select");
+    const depAdInputs = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
+    const depInput   = row.querySelector(".fmn-el-dep");
+    const arrInput   = row.querySelector(".fmn-el-arr");
 
-    const patch = { status: statusSel?.value || "PLANNED" };
+    // Validate and build patch
+    const rawStatus = statusSel?.value || "PLANNED";
+    const rawDepAd  = (depAdInputs[0]?.value || "").toUpperCase().trim();
+    const rawArrAd  = (depAdInputs[1]?.value || "").toUpperCase().trim();
+
+    // Validate WTC from element (already in storage; not re-entered here)
+    // Validate depAd/arrAd
+    if (!isValidIcaoAd(rawDepAd)) {
+      showToast(`Dep AD "${rawDepAd}" must be empty or a 4-character ICAO code.`, 'error');
+      return;
+    }
+    if (!isValidIcaoAd(rawArrAd)) {
+      showToast(`Arr AD "${rawArrAd}" must be empty or a 4-character ICAO code.`, 'error');
+      return;
+    }
+
+    const patch = { status: rawStatus, depAd: rawDepAd, arrAd: rawArrAd };
 
     if (depInput?.value?.trim()) {
       const vd = validateTime(depInput.value.trim());

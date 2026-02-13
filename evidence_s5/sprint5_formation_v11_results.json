@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-02-13T09:38:11.646Z",
+  "results": [
+    {
+      "id": "G1",
+      "title": "depAd/arrAd/callsign inputs present (count=2)",
+      "status": "PASS",
+      "note": "depAdInputs=2 arrAdInputs=2 callsignInputs=2",
+      "refs": [
+        "S5_1_G1_modal_inputs.png"
+      ]
+    },
+    {
+      "id": "G2",
+      "title": "depAd/arrAd persist after New Flight modal save",
+      "status": "PASS",
+      "note": "el0.depAd=EGOW el0.arrAd=EGOS el1.depAd=\"\" el1.arrAd=EGOM",
+      "refs": [
+        "S5_2_G2_after_save.png"
+      ]
+    },
+    {
+      "id": "G3",
+      "title": "depAd persists after inline panel save",
+      "status": "PASS",
+      "note": "el1.depAd=EGGP",
+      "refs": [
+        "S5_3_G3_dep_ad_saved.png"
+      ]
+    },
+    {
+      "id": "G4",
+      "title": "Empty depAd shows master fallback (EGOW)",
+      "status": "PASS",
+      "note": "fallbacks=3 text=\"EGOW\"",
+      "refs": [
+        "S5_4_G4_fallback_display.png"
+      ]
+    },
+    {
+      "id": "G5",
+      "title": "Invalid 3-char depAd rejected; element unchanged",
+      "status": "PASS",
+      "note": "el0.depAd=EGOW (should stay EGOW)",
+      "refs": [
+        "S5_5_G5_invalid_dep_ad.png"
+      ]
+    },
+    {
+      "id": "G6",
+      "title": "Invalid WTC blocks modal save; movement not created",
+      "status": "PASS",
+      "note": "movement=absent (correct)",
+      "refs": [
+        "S5_6_G6_invalid_wtc.png"
+      ]
+    },
+    {
+      "id": "G7",
+      "title": "Overridden callsign persists",
+      "status": "PASS",
+      "note": "el0.callsign=\"FOXTROT LEAD\"",
+      "refs": [
+        "S5_7_G7_callsign_override.png"
+      ]
+    },
+    {
+      "id": "G8",
+      "title": "Count=1 → formation=null",
+      "status": "PASS",
+      "note": "formation=null",
+      "refs": [
+        "S5_8_G8_no_formation.png"
+      ]
+    },
+    {
+      "id": "G9",
+      "title": "COMPLETE cascade: all elements COMPLETED, wtcCurrent=\"\"",
+      "status": "PASS",
+      "note": "statuses=[\"COMPLETED\",\"COMPLETED\",\"COMPLETED\"] wtcCurrent=\"\"",
+      "refs": [
+        "S5_9_G9_cascade_complete.png"
+      ]
+    },
+    {
+      "id": "G10",
+      "title": "CANCEL cascade: all elements CANCELLED",
+      "status": "PASS",
+      "note": "statuses=[\"CANCELLED\",\"CANCELLED\",\"CANCELLED\"]",
+      "refs": [
+        "S5_10_G10_cascade_cancel.png"
+      ]
+    },
+    {
+      "id": "G11",
+      "title": "Produce-arrival inherits formation; elements reset to PLANNED",
+      "status": "PASS",
+      "note": "hasFormation=true allReset=true depAdCopied=true",
+      "refs": [
+        "S5_11_G11_produce_arr.png"
+      ]
+    },
+    {
+      "id": "G12",
+      "title": "Edit modal count input: min=2 max=12",
+      "status": "PASS",
+      "note": "min=2 max=12",
+      "refs": [
+        "S5_12_G12_edit_modal_attrs.png"
+      ]
+    }
+  ]
+}

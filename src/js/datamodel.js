@@ -683,6 +683,21 @@ function maxWtcString(a, b) {
 }
 
 /**
+ * Validation helpers for formation element fields (exported for UI use).
+ */
+export function isValidWtcChar(wtc) {
+  return ["L", "S", "M", "H", "J"].includes((wtc || "").toUpperCase().trim());
+}
+export function isValidIcaoAd(ad) {
+  const v = (ad || "").toUpperCase().trim();
+  if (v === "") return true;                  // empty = unset, always valid
+  return /^[A-Z0-9]{4}$/.test(v);
+}
+export function isValidElementStatus(status) {
+  return ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"].includes(status);
+}
+
+/**
  * Compute wtcCurrent and wtcMax from a formation elements array.
  * wtcCurrent = max WTC among PLANNED or ACTIVE elements only.
  * wtcMax     = max WTC across all elements regardless of status.
@@ -718,13 +733,15 @@ function normalizeFormation(formation) {
   if (!formation || typeof formation !== "object") return null;
   if (!Array.isArray(formation.elements)) formation.elements = [];
 
-  // Ensure each element has required fields
+  // Ensure each element has required fields (backward-compat: add missing fields)
   formation.elements = formation.elements.map((el, idx) => ({
     callsign:   el.callsign  || `ELEMENT ${idx + 1}`,
     reg:        el.reg       || "",
     type:       el.type      || "",
     wtc:        el.wtc       || "",
     status:     el.status    || "PLANNED",
+    depAd:      el.depAd     || "",
+    arrAd:      el.arrAd     || "",
     depActual:  el.depActual || "",
     arrActual:  el.arrActual || ""
   }));
@@ -775,6 +792,44 @@ export function updateFormationElement(id, elementIndex, patch) {
 
   saveToStorage();
   return movement;
+}
+
+/**
+ * Cascade a master status change (COMPLETED or CANCELLED) to formation elements.
+ * COMPLETED → sets PLANNED/ACTIVE elements to COMPLETED.
+ * CANCELLED → sets all elements to CANCELLED.
+ * Recomputes WTC and persists if any elements were changed.
+ * No-op for other statuses or movements without a formation.
+ * @param {number} id        - Movement ID
+ * @param {string} newStatus - New master status
+ */
+export function cascadeFormationStatus(id, newStatus) {
+  if (newStatus !== "COMPLETED" && newStatus !== "CANCELLED") return;
+  ensureInitialised();
+  const movement = movements.find(m => m.id === id);
+  if (!movement?.formation?.elements?.length) return;
+
+  let changed = false;
+  movement.formation.elements.forEach(el => {
+    if (newStatus === "COMPLETED") {
+      if (el.status === "PLANNED" || el.status === "ACTIVE") {
+        el.status = "COMPLETED";
+        changed = true;
+      }
+    } else { // CANCELLED
+      if (el.status !== "CANCELLED") {
+        el.status = "CANCELLED";
+        changed = true;
+      }
+    }
+  });
+
+  if (changed) {
+    const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements);
+    movement.formation.wtcCurrent = wtcCurrent;
+    movement.formation.wtcMax     = wtcMax;
+    saveToStorage();
+  }
 }
 
 /* -----------------------------

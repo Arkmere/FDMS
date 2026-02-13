@@ -724,6 +724,10 @@ tr.strip.ft-ovr > td {
   font-weight: 600;
 }
 
+.formation-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .formation-table {
   width: 100%;
   border-collapse: collapse;
@@ -754,10 +758,25 @@ tr.strip.ft-ovr > td {
   outline: 2px solid var(--va-link);
   border-color: var(--va-link);
 }
+/* Aerodrome code inputs (4-char ICAO) */
+.fmn-el-ad {
+  width: 52px;
+  text-transform: uppercase;
+}
 /* Narrower dep/arr time inputs */
 .fmn-el-dep,
 .fmn-el-arr {
   width: 52px;
+}
+/* Muted fallback display when element depAd/arrAd is empty */
+.fmn-fallback {
+  font-size: 10px;
+  color: #8a9baa;
+  display: block;
+  line-height: 1.2;
+}
+.fmn-ad-cell {
+  min-width: 72px;
 }
 .fmn-el-select {
   font-size: 11px;
