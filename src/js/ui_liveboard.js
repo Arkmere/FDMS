@@ -2894,6 +2894,25 @@ function openNewLocalModal() {
         <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
         <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
       </div>
+
+      <!-- Collapsible: Formation -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="newLocFormationSection">
+          <span class="expander-icon">▶</span>
+          Formation
+          <span class="expander-hint">(optional – multi-aircraft)</span>
+        </button>
+        <div id="newLocFormationSection" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Number of Aircraft</label>
+              <input id="newLocFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
+              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Callsigns default to auto-generated but are editable.</div>
+            </div>
+          </div>
+          <div id="newLocFormationElementsContainer"></div>
+        </div>
+      </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
@@ -3001,6 +3020,32 @@ function openNewLocalModal() {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
+  // Wire formation section for LOC modal
+  const getLocCallsign = () =>
+    (document.getElementById("newLocCallsignCode")?.value?.trim() || "") +
+    (document.getElementById("newLocFlightNumber")?.value?.trim() || "");
+  wireFormationCountInput("newLocFormationCount", "newLocFormationElementsContainer", getLocCallsign, []);
+  // Rebuild rows when callsign changes only if rows already exist (guard against phantom formation)
+  callsignCodeInput?.addEventListener("input", () => {
+    const container = document.getElementById("newLocFormationElementsContainer");
+    if (!container?.querySelector('[data-el-callsign="0"]')) return;
+    const count = parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10);
+    if (count >= 2) buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", []);
+  });
+
+  // Wire collapsible section expanders for LOC modal
+  document.querySelectorAll('.modal-expander').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const panel = document.getElementById(targetId);
+      if (!panel) return;
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', !isExpanded);
+      panel.hidden = isExpanded;
+      btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
+    });
+  });
+
   // Bind local time display handlers
   const depTimeInput = document.getElementById("newLocStart");
   const arrTimeInput = document.getElementById("newLocEnd");
@@ -3085,6 +3130,10 @@ function openNewLocalModal() {
       return;
     }
 
+    // Validate and read formation (must happen before movement creation)
+    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
+
     // Get voice callsign for display (only if different from contraction/registration)
     const regValue = document.getElementById("newLocReg")?.value || "";
     const regData = lookupRegistration(regValue);
@@ -3139,7 +3188,7 @@ function openNewLocalModal() {
       squawk: "",
       route: "",
       clearance: "",
-      formation: null
+      formation: locFormation || null
     };
 
     // Enrich with auto-populated fields
@@ -3179,6 +3228,10 @@ function openNewLocalModal() {
       showToast(callsignValidation.error, 'error');
       return;
     }
+
+    // Validate and read formation
+    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
     // Get voice callsign and other data
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -3229,12 +3282,14 @@ function openNewLocalModal() {
       squawk: "",
       route: "",
       clearance: "",
-      formation: null
+      formation: locCpFormation || null
     };
 
     movement = enrichMovementData(movement);
 
-    createMovement(movement);
+    const createdLoc = createMovement(movement);
+    // Cascade COMPLETED status to formation elements (if any)
+    if (createdLoc?.id && locCpFormation) cascadeFormationStatus(createdLoc.id, "COMPLETED");
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();

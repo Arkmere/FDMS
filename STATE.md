@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-11 (Europe/London) — Sprint 5 Formations v1.1
+Last updated: 2026-02-13 (Europe/London) — Sprint 6 Formations v1.1 Parity (LOC)
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -433,6 +433,44 @@ Covers:
 - Micro-strip fields (departure sheet per element) not implemented
 - No server-side or multi-client sync (localStorage remains single-client)
 - Formation cannot be added to a strip that is already COMPLETED or CANCELLED
+
+### 4.7 Sprint 6: Formations v1.1 Parity — LOC (Local) strip creation
+
+**Sprint goal:** Complete formation parity across all creation paths. The Local flight modal (`openNewLocalModal`) previously had `formation: null` hardcoded and lacked an authoring UI for formations. This sprint adds the collapsible Formation section to the LOC modal, wires all handlers (count input, callsign listener guard, expander toggle), and updates both save handlers (Save and Save & Complete) to read and persist formation data with cascade.
+
+**Branch:** `claude/fdms-formations-documentation-v5on5`
+
+#### Deliverables
+
+**UI (`src/js/ui_liveboard.js`):**
+- `openNewLocalModal` — collapsible Formation section added (HTML): `newLocFormationSection`, `newLocFormationCount`, `newLocFormationElementsContainer`; mirrors the DEP/ARR modal section
+- LOC modal JS wiring: `wireFormationCountInput` for `newLocFormationCount`; callsign input listener with phantom-formation guard; `document.querySelectorAll('.modal-expander')` event binding (was missing from LOC modal — caused panel to stay hidden when clicked)
+- `.js-save-loc` handler: reads `locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer")`; validation errors block save; `movement.formation = locFormation || null`
+- `.js-save-complete-loc` handler: same formation read + validation; `formation: locCpFormation || null` in movement object; after `createMovement`, calls `cascadeFormationStatus(createdLoc.id, "COMPLETED")` if formation present
+
+**Playwright regression (`sprint6_loc_formation_verify.mjs`):**
+
+| Test | Scenario | Result |
+|------|----------|--------|
+| H1 | Formation created on LOC strip via New Local modal → badge F×2 appears | **PASS** |
+| H2 | depAd/arrAd per element persist on LOC strip | **PASS** |
+| H3 | Invalid WTC in LOC modal blocks save; no movement created | **PASS** |
+| H4 | Invalid 3-char ICAO code in LOC modal blocks save | **PASS** |
+| H5 | Formation section never opened → formation=null, no badge (phantom-formation guard) | **PASS** |
+| H6 | Save-and-Complete LOC with formation → all elements cascade to COMPLETED | **PASS** |
+
+**Result: 6/6 PASS, 0 JS errors**
+
+Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS (no regressions)
+
+**Evidence pack:**
+- Screenshots: `evidence_s6/S6_*.png` (6 screenshots)
+- Results JSON: `evidence_s6/sprint6_loc_formation_results.json`
+- Test harness: `sprint6_loc_formation_verify.mjs`
+
+#### Bug fixed during Sprint 6
+
+- **LOC modal expanders not wired:** The `openNewLocalModal` function did not include the `document.querySelectorAll('.modal-expander').forEach(...)` event binding that wires the collapsible section toggle. The Formation expander button had no click handler, so `panel.hidden` was never toggled and the Formation section remained permanently hidden. Fixed: added the same expander wiring block used in the DEP/ARR and Edit modals.
 
 ---
 

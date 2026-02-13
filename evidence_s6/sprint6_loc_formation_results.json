@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-02-13T09:39:04.383Z",
+  "results": [
+    {
+      "id": "H1",
+      "title": "LOC strip with formation → badge F×2",
+      "status": "PASS",
+      "note": "badge=1 elements=2 errors=0",
+      "refs": [
+        "S6_1_H1_loc_badge.png"
+      ]
+    },
+    {
+      "id": "H2",
+      "title": "depAd/arrAd per element persist on LOC strip",
+      "status": "PASS",
+      "note": "el0.depAd=EGCC el1.arrAd=EGLL errors=0",
+      "refs": [
+        "S6_2_H2_loc_dep_arr_ad.png"
+      ]
+    },
+    {
+      "id": "H3",
+      "title": "Invalid WTC blocks LOC modal save",
+      "status": "PASS",
+      "note": "movement=absent (correct) errors=0",
+      "refs": [
+        "S6_3_H3_loc_invalid_wtc.png"
+      ]
+    },
+    {
+      "id": "H4",
+      "title": "Invalid ICAO code blocks LOC modal save",
+      "status": "PASS",
+      "note": "movement=absent (correct) errors=0",
+      "refs": [
+        "S6_4_H4_loc_invalid_icao.png"
+      ]
+    },
+    {
+      "id": "H5",
+      "title": "LOC strip without formation section opened → formation=null, no badge",
+      "status": "PASS",
+      "note": "formation=null badge=0 errors=0",
+      "refs": [
+        "S6_5_H5_loc_no_formation.png"
+      ]
+    },
+    {
+      "id": "H6",
+      "title": "Save-and-Complete LOC: all elements cascaded to COMPLETED",
+      "status": "PASS",
+      "note": "masterStatus=COMPLETED elementStatuses=[\"COMPLETED\",\"COMPLETED\",\"COMPLETED\"] errors=0",
+      "refs": [
+        "S6_6_H6_loc_save_complete_cascade.png"
+      ]
+    }
+  ]
+}
