@@ -31,22 +31,19 @@ fdms-lite/
       └─ ui_liveboard.js      # Live Board rendering + modals
 Only the /src content is required to run the current demo.
 
-## GitHub Pages preview
+## How to Run
 
-The `docs/` folder is the deployment target for GitHub Pages. Configure Pages to use the `main` branch with `/docs` as the source, and the live preview will be available at [https://arkmere.github.io/FDMS/](https://arkmere.github.io/FDMS/) after Pages is enabled.
+FDMS Lite is a **standalone desktop application** (Windows + Linux) using **web UI technologies** (HTML/CSS/JS). During development, it is run locally via a **local server harness** serving `src/` (e.g. `python -m http.server`) to load the UI. This is a local runtime convenience and **not** a hosted web product.
 
-For a quick Unix-friendly helper to refresh the `docs/` snapshot from `src/`, run:
-
-```
-./deploy-docs.sh
-```
-
-How to Run
 No build step is required.
 
-Clone or download this repository.
+Clone or download this repository, then use one of the runner scripts (see `DEV-SETUP.md`), or manually:
 
-Open src/index.html in any modern browser (Chrome, Edge, Firefox, etc.).
+```bash
+cd src
+python -m http.server 8000
+# Open http://localhost:8000 in a browser to load the local UI
+```
 
 You should see:
 

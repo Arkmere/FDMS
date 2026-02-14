@@ -1,8 +1,10 @@
 # FDMS Development Setup
 
+FDMS Lite is a **standalone desktop application** (Windows + Linux) using **web UI technologies** (HTML/CSS/JS). The runner scripts below start a **local server harness** that serves `src/` so the UI can be loaded in a browser locally. This is a development/runtime convenience and **not** a hosted web product.
+
 ## Quick Start
 
-This project includes runner scripts that automatically pull the latest changes and start the development server.
+This project includes runner scripts that automatically pull the latest changes and start the local server harness.
 
 ### Windows Users
 
@@ -32,11 +34,11 @@ Or simply **double-click** `run.bat` or `run.ps1` in File Explorer.
 ## What the Scripts Do
 
 1. **Fetch latest changes** from `claude/review-project-bYiIr` branch
-2. **Reset to remote version** (automatically discards any local changes)
-3. **Start HTTP server** on `http://localhost:8000`
-4. **Navigate to browser**: Open http://localhost:8000 to view the app
+2. **Reset to remote version** (automatically discards any local changes) — this is a **developer convenience** and **not** the intended end-user update mechanism
+3. **Start local server harness** on `http://localhost:8000`
+4. **Open browser** to http://localhost:8000 to load the desktop UI locally
 
-> **Note**: The scripts will automatically discard any local changes and use the latest version from GitHub. This is intentional for testing/development workflow.
+> **Note**: The scripts will automatically discard any local changes and use the latest version from the specified branch. This is intentional for developer testing workflow.
 
 ## Manual Steps (if scripts don't work)
 
@@ -47,10 +49,10 @@ git pull origin claude/review-project-bYiIr
 # 2. Navigate to src directory
 cd src
 
-# 3. Start server
+# 3. Start local server harness
 python -m http.server 8000  # or python3 on Linux/Mac
 
-# 4. Open browser to http://localhost:8000
+# 4. Open browser to http://localhost:8000 to load the desktop UI locally
 ```
 
 ## Troubleshooting
@@ -70,7 +72,7 @@ python -m http.server 8000  # or python3 on Linux/Mac
 
 ## Development Workflow
 
-1. **Run script** → Automatically pulls latest code and starts server
+1. **Run script** → Automatically pulls latest code and starts local server harness
 2. **Make changes** (if needed)
 3. **Refresh browser** (Ctrl+F5 to clear cache)
 4. **Stop server** with Ctrl+C when done

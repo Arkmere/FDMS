@@ -382,7 +382,9 @@ None of this is wired yet; the current build only has a descriptive placeholder 
 5. Current architecture and code layout
 5.1 Tech stack
 
-Pure front-end:
+**FDMS Lite is a standalone desktop application** (Windows + Linux) using **web UI technologies** (HTML/CSS/JS). During development, it is run locally via a **local server harness** serving `src/` (e.g. `python -m http.server`) to load the UI. This is a local runtime convenience and **not** a hosted web product.
+
+Technologies:
 
 HTML
 
@@ -392,17 +394,13 @@ Vanilla JavaScript (ES modules)
 
 No frameworks or build tools (no React, Vue, Webpack, etc.).
 
-Development:
+Development runtime:
 
-Run a simple static server from src/ (e.g. python -m http.server 8000).
+Run a local server harness from `src/` (e.g. `python -m http.server 8000`) to load the desktop UI locally.
 
-View at http://localhost:8000.
+Open http://localhost:8000 in a browser to view the UI.
 
-Later, this front-end will be:
-
-Embedded in a desktop wrapper (e.g. Electron or similar).
-
-Backed by a small persistent data store (e.g. SQLite or local API).
+Future: backend/persistence may be backed by a small local data store (e.g. SQLite or local API). Desktop packaging/wrapping is explicitly out of scope for Release v1 unless reprioritised.
 
 5.2 Directory structure (current)
 
@@ -634,7 +632,7 @@ git clone git@github.com:Arkmere/FDMS.git
 cd FDMS
 
 
-Run a small static server from src (Python 3 example):
+Run a local server harness from `src/` (Python 3 example):
 
 cd src
 python -m http.server 8000

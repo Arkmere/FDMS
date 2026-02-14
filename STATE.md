@@ -9,18 +9,57 @@ This file is the shared source of truth for the Manager–Worker workflow:
 
 ---
 
+#### Delivery model and runtime model (NO DRIFT)
+**FDMS Lite is NOT a static web app and NOT a website.**
+**FDMS Lite is a standalone desktop application** (Windows + Linux) that uses **web technologies internally** (HTML/CSS/JS UI) for its interface.
+
+During development and QA, we run FDMS Lite via a **local server harness** that serves `src/` (e.g. `python -m http.server`). This is a **development/runtime convenience only** and must not be interpreted as "FDMS is a web product" or "FDMS is intended to be hosted".
+
+**OS targets:** Development is performed on **Windows**. Operational installation/use is on **Linux**. **Both OS are required** and must remain supported.
+
+---
+
+#### Development workflow approved for Release v1
+The current workflow (git branches/PRs + local repo checkout + local server harness) is **approved and sufficient to reach Release v1**.
+
+- Day-to-day development occurs in the repo via branches and PRs.
+- Local execution uses `run.ps1` / `run.bat` / `run.sh` to serve `src/` and open the UI locally.
+- Regression scripts (e.g., Playwright) are **developer QA tooling** only and are **not required for end users**.
+
+---
+
+#### Packaging / installers / auto-update (explicitly out of scope for Release v1)
+**Packaging (installers), desktop wrapping, and auto-update mechanisms are out of scope for Release v1 unless explicitly reprioritised.**
+
+Any future update mechanism must be based on **versioned release artifacts** (e.g., GitHub Releases), **not** "pull latest `main` and restart". Do not introduce packaging or auto-update work into v1 sprints unless the project owner explicitly opens that workstream.
+
+---
+
+#### Drift guardrails (do not reinterpret)
+- Do **not** describe FDMS Lite as a "static web app", "web app", or "website".
+- Do **not** propose "hosting" FDMS as the default delivery path.
+- The local server (`python -m http.server`) is a **development harness** to run the desktop UI locally; it is not product hosting.
+- Do **not** add packaging/installer/updater scope unless explicitly requested and scheduled as its own epic.
+
+---
+
+#### Why run.* scripts fetch/reset
+The `run.*` scripts perform a fetch/reset to a specified branch to ensure the local working copy matches the expected code for testing. This is a **developer convenience** and **not** the intended end-user update mechanism.
+
+---
+
 ## 1) System Architecture
 
 ### 1.1 Product goal
-A lightweight, browser-based Flight Data Management System ("FDMS Lite") for local ATC/ops workflow:
+A lightweight, **standalone desktop application** ("FDMS Lite") for local ATC/ops workflow, using web UI technologies (HTML/CSS/JS) for its interface:
 - Live "strip" board (movements)
 - Booking workflow that can create planned strips and stay synchronized
 - Calendar for bookings and general events
 - Admin tooling (profiles, etc.)
-- Fully offline / static deployment, using local persistence
+- Fully offline / local deployment, using local persistence (localStorage)
 
 ### 1.2 Tech stack
-- **Static web app**: HTML/CSS/JS (no backend)
+- **Standalone desktop application** using web UI technologies (HTML/CSS/JS); run locally via a **local server harness** serving `src/` (not a hosted web product)
 - **Module style**: ES modules (`src/js/...`)
 - **Persistence**: `localStorage`
 - **Data model**: movements ("strips") stored in `src/js/datamodel.js`
