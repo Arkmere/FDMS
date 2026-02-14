@@ -511,6 +511,14 @@ Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS (no regressions)
 
 - **LOC modal expanders not wired:** The `openNewLocalModal` function did not include the `document.querySelectorAll('.modal-expander').forEach(...)` event binding that wires the collapsible section toggle. The Formation expander button had no click handler, so `panel.hidden` was never toggled and the Formation section remained permanently hidden. Fixed: added the same expander wiring block used in the DEP/ARR and Edit modals.
 
+#### Dev tooling improvement (cross-platform Playwright imports)
+
+- `package.json` added at repo root with `playwright@1.56.1` as a `devDependency` and `npm run test:s4/s5/s6` scripts.
+- All three sprint verify scripts updated: replaced absolute-path imports (`/opt/node22/lib/node_modules/playwright/index.mjs`) with portable `import { chromium } from 'playwright'`.
+- `package-lock.json` committed so `npm ci` is reproducible on Windows + Linux.
+- `DEV-SETUP.md` updated with a "Regression Tests (developer QA tooling)" section documenting `npm ci`, `npx playwright install chromium`, and `npm run test:s*` commands.
+- No changes under `src/`. No drift in delivery-model statements.
+
 ---
 
 ## 5) Operating Procedure (Manager–Worker)

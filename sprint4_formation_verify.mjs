@@ -14,7 +14,7 @@
  *   F10 Malformed formation in localStorage is normalized on load (no crash)
  */
 
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
