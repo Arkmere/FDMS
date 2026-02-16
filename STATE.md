@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-13 (Europe/London) — Sprint 6 Formations v1.1 Parity (LOC)
+Last updated: 2026-02-16 (Europe/London) — Sprint 7 LOC Standard Modal Parity
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -518,6 +518,105 @@ Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS (no regressions)
 - `package-lock.json` committed so `npm ci` is reproducible on Windows + Linux.
 - `DEV-SETUP.md` updated with a "Regression Tests (developer QA tooling)" section documenting `npm ci`, `npx playwright install chromium`, and `npm run test:s*` commands.
 - No changes under `src/`. No drift in delivery-model statements.
+
+### 4.8 Sprint 7: LOC Standard Modal Parity
+
+**Sprint goal:** Replace the bespoke LOC create/edit modal (`openNewLocalModal`) with the standard movement modal structure used by DEP/ARR/OVR. LOC now uses the same sectioned layout (IDENTITY, PLAN, TIMES, OPERATIONAL) and accordions (Remarks & Warnings, ATC Details, Formation), with LOC-specific locks applied to prevent user modification of Flight Type, Departure AD, and Arrival AD.
+
+**Branch:** `claude/fdms-lite-ux-change-iepHR`
+
+#### What changed
+
+**`src/js/ui_liveboard.js`:**
+- **`openNewLocalModal`** (bespoke form, removed from user flow): Replaced by `openNewLocFlightModal()`. The old bespoke function is no longer wired to any button and is now dead code. It has been removed from the codebase.
+- **`openNewLocFlightModal()`** (new function): Renders the standard movement modal structure with:
+  - Sections: IDENTITY, PLAN, TIMES, OPERATIONAL (matching `openNewFlightModal`)
+  - Accordions: Remarks & Warnings, ATC Details, Formation
+  - Two-column `modal-section-grid` layout
+  - LOC locks: Flight Type = `<input value="LOC" disabled />` (not a select); Departure AD = `<input value="EGOW" disabled />`; Arrival AD = `<input value="EGOW" disabled />`
+  - Backward-compatible element IDs (`newLocCallsignCode`, `newLocStart`, `newLocEnd`, `newLocFormationCount`, `newLocFormationSection`, `newLocFormationElementsContainer`, `.js-save-loc`, `.js-save-complete-loc`) to preserve Sprint 6 test compatibility
+  - Added new fields not in bespoke form: Warnings textarea, ATC Details (Squawk, Route, Clearance), O/S count, FIS count, Priority checkbox/dropdown, Flight Rules dropdown
+  - EGOW Code field present with datalist (same options as standard modal); validation only blocks save if a value is provided but is invalid (not enforced as mandatory, to preserve Sprint 6 backward compat)
+  - Save handlers write depAd/arrAd = "EGOW" (hardcoded, user cannot override), flightType = "LOC", isLocal = true
+  - Timing semantics unchanged: no ETD→ETA auto-fill in new modal (same as previous LOC behavior)
+- **Button wire-up** (line ~4697): `safeOn(btnNewLoc, "click", openNewLocFlightModal)` (was `openNewLocalModal`)
+- **`openEditMovementModal`**: Added `disabled` attribute to `editFlightType` select, `editDepAd` input, and `editArrAd` input when `flightType === "LOC"`, so editing an existing LOC movement also shows locked fields
+
+**`package.json`:**
+- Added `"test:s7": "node sprint7_loc_standard_modal_verify.mjs"` script
+
+**`sprint7_loc_standard_modal_verify.mjs`** (new):
+- 8-test Playwright regression suite (see table below)
+
+**`evidence_s7/`** (new):
+- 9 screenshots: `S7_1` through `S7_9`
+- `sprint7_loc_standard_modal_results.json` with pass/fail summary + run metadata
+
+#### Where
+
+| Change | File | Key function / line |
+|--------|------|---------------------|
+| New LOC standard modal | `src/js/ui_liveboard.js` | `openNewLocFlightModal()` (new function replacing `openNewLocalModal`) |
+| Button re-wire | `src/js/ui_liveboard.js` | `safeOn(btnNewLoc, "click", openNewLocFlightModal)` |
+| Edit modal LOC locks | `src/js/ui_liveboard.js` | `openEditMovementModal()` — `disabled` on `editFlightType`, `editDepAd`, `editArrAd` for LOC |
+| npm script | `package.json` | `"test:s7"` |
+| Test harness | `sprint7_loc_standard_modal_verify.mjs` | — |
+
+#### Why
+
+LOC parity requirement: the bespoke LOC form had a single-column stacked layout lacking the standard sections, accordions, and two-column grid. Users saw a different UI for LOC vs DEP/ARR/OVR. This sprint routes LOC through a functionally equivalent form of the standard modal template, ensuring structural parity while preserving LOC-specific constraints (EGOW AD lock, LOC flight type lock) and all existing formation/timing semantics.
+
+#### Playwright regression results
+
+| Test | Scenario | Result |
+|------|----------|--------|
+| I1 | Standard modal structure: IDENTITY, PLAN, TIMES, OPERATIONAL headings present | **PASS** |
+| I2 | Standard modal accordions: Remarks & Warnings, ATC Details, Formation | **PASS** |
+| I3 | Flight Type shows LOC and is disabled/read-only | **PASS** |
+| I4 | Departure AD shows EGOW and is disabled/read-only | **PASS** |
+| I5 | Arrival AD shows EGOW and is disabled/read-only | **PASS** |
+| I6 | LOC timing: entering ETD does not auto-fill ETA (unchanged behavior) | **PASS** |
+| I7 | Save LOC; reload; depPlanned/arrPlanned/depAd/arrAd/flightType persisted correctly | **PASS** |
+| I8 | Edit LOC: flight type locked to LOC, dep/arr AD locked to EGOW in edit modal | **PASS** |
+
+**Result: 8/8 PASS, 0 JS errors**
+
+Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS, Sprint 6 6/6 PASS (no regressions)
+
+#### Verification evidence (commands run)
+
+```
+npm run test:s7   → 8/8 PASS
+npm run test:s4   → 10/10 PASS
+npm run test:s5   → 12/12 PASS
+npm run test:s6   → 6/6 PASS
+```
+
+All four suites passing on Linux kernel 4.4, Node v22, Playwright 1.56.1, Chromium headless.
+
+**Evidence pack:**
+- Screenshots: `evidence_s7/S7_*.png` (9 screenshots)
+- Results JSON: `evidence_s7/sprint7_loc_standard_modal_results.json`
+- Test harness: `sprint7_loc_standard_modal_verify.mjs`
+
+#### Deliverables checklist
+
+- [x] LOC modal is the standard modal (sectioned layout), not the bespoke LOC form
+- [x] LOC flight type locked to LOC (disabled input in new + edit modal)
+- [x] LOC dep/arr AD locked to EGOW (disabled inputs in new + edit modal)
+- [x] LOC timing semantics unchanged (no ETD→ETA auto-fill; same as before)
+- [x] New Sprint 7 test: 8/8 PASS
+- [x] Sprint 4: 10/10 PASS (no regression)
+- [x] Sprint 5: 12/12 PASS (no regression)
+- [x] Sprint 6: 6/6 PASS (no regression)
+- [x] Evidence pack exists: `evidence_s7/`
+- [x] STATE.md updated with audit entry
+
+#### Notes
+
+- Element IDs in the LOC modal (`newLocCallsignCode`, `newLocStart`, `newLocEnd`, formation IDs, `.js-save-loc`, `.js-save-complete-loc`) are preserved from the old bespoke modal to maintain backward compatibility with Sprint 6 regression tests.
+- EGOW Code field is present and visible in the LOC modal (with datalist, same as standard modal). Validation blocks save only if an invalid code is entered, not if left empty — this preserves Sprint 6 test behavior where EGOW Code was not filled.
+- No changes to counters, reporting logic, formation semantics, or delivery-model documentation.
 
 ---
 

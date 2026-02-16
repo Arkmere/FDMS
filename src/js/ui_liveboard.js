@@ -2809,91 +2809,211 @@ function openNewFlightModal(flightType = "DEP") {
   });
 }
 
-function openNewLocalModal() {
+/**
+ * Open "New LOC Flight" modal using the standard movement modal structure.
+ * Flight type is locked to LOC; Dep AD and Arr AD are locked to EGOW.
+ * Element IDs use the newLoc* prefix for backward compatibility with existing
+ * regression tests (sprint6_loc_formation_verify.mjs).
+ */
+function openNewLocFlightModal() {
   openModal(`
     <div class="modal-header">
       <div>
-        <div class="modal-title">New Local Flight</div>
-        <div class="modal-subtitle">Pre-configured for EGOW → EGOW VFR circuits</div>
+        <div class="modal-title">New LOC Flight</div>
+        <div class="modal-subtitle">Create a new local movement</div>
       </div>
       <div class="modal-header-buttons">
         <button class="btn btn-ghost js-minimize-modal" type="button" title="Minimize">−</button>
         <button class="btn btn-ghost js-close-modal" type="button" title="Close">✕</button>
       </div>
     </div>
-    <div class="modal-body">
-      <div class="modal-field">
-        <label class="modal-label">Callsign Code <span style="font-size: 11px; font-weight: normal;">(Contraction or tactical/registration callsign)</span></label>
-        <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Flight Number <span style="font-size: 11px; font-weight: normal;">(Optional - for numbered flights)</span></label>
-        <input id="newLocFlightNumber" class="modal-input" placeholder="e.g. 11, 01" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Registration</label>
-        <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Aircraft Type</label>
-        <input id="newLocType" class="modal-input" placeholder="e.g. G115 (auto-filled from registration)" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Flight Type</label>
-        <input class="modal-input" value="LOC (Local)" disabled />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Departure / Arrival AD</label>
-        <input class="modal-input" value="EGOW · RAF Woodvale" disabled />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Date of Flight (DOF)</label>
-        <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Departure (ETD) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeLocDep" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
-          <span id="localLocDepTime" style="font-size: 12px; color: #666;"></span>
+    <div class="modal-body modal-sectioned">
+      <!-- IDENTITY Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Identity</h3>
+        <div class="modal-section-grid">
+          <div class="modal-field">
+            <label class="modal-label">Callsign Code</label>
+            <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Number</label>
+            <input id="newLocFlightNumber" class="modal-input" placeholder="e.g. 11, 01" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Registration</label>
+            <input id="newLocReg" class="modal-input" placeholder="e.g. G-VAIR" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Aircraft Type</label>
+            <input id="newLocType" class="modal-input is-derived" placeholder="Auto-filled" />
+          </div>
         </div>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Arrival (ETA) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeLocArr" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
-          <span id="localLocArrTime" style="font-size: 12px; color: #666;"></span>
+      </section>
+
+      <!-- PLAN Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Plan</h3>
+        <div class="modal-section-grid">
+          <div class="modal-field">
+            <label class="modal-label">Flight Type</label>
+            <input class="modal-input" value="LOC" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Flight Rules</label>
+            <select id="newLocRules" class="modal-select">
+              <option value="VFR" selected>VFR</option>
+              <option value="IFR">IFR</option>
+              <option value="Y">Y (IFR to VFR)</option>
+              <option value="Z">Z (VFR to IFR)</option>
+              <option value="SVFR">SVFR</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Departure AD</label>
+            <input class="modal-input" value="EGOW" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Arrival AD</label>
+            <input class="modal-input" value="EGOW" disabled />
+          </div>
+          <div class="modal-field modal-field-priority">
+            <label class="modal-label">
+              <input type="checkbox" id="locPriorityEnabled" style="margin-right: 6px;" />
+              Priority
+            </label>
+            <select id="locPriorityLetter" class="modal-select" disabled>
+              <option value="">-</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+              <option value="Z">Z</option>
+            </select>
+          </div>
         </div>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Touch &amp; Go count</label>
-        <input id="newLocTng" class="modal-input" type="number" value="0" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">POB</label>
-        <input id="newLocPob" class="modal-input" type="number" value="0" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Remarks</label>
-        <textarea id="newLocRemarks" class="modal-textarea" placeholder="Circuits RWY 21, left-hand."></textarea>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">EGOW Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from registration)</span></label>
-        <input id="newLocEgowCode" class="modal-input" placeholder="e.g. BM, VM, BC" />
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Unit Code <span style="font-size: 11px; font-weight: normal;">(Auto-filled from callsign)</span></label>
-        <input id="newLocUnitCode" class="modal-input" placeholder="e.g. L, M, A" />
-      </div>
+      </section>
+
+      <!-- TIMES Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Times</h3>
+        <div class="modal-section-grid">
+          <div class="modal-field">
+            <label class="modal-label">Date of Flight (DOF)</label>
+            <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">
+              <input type="checkbox" id="showLocalTimeLocToggle" style="margin-right: 4px;" />
+              Times shown in: <strong id="locTimeDisplayMode">UTC</strong>
+            </label>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Estimated Departure (ETD)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
+              <span id="localLocDepTime" class="time-local"></span>
+            </div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Estimated Arrival (ETA)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
+              <span id="localLocArrTime" class="time-local"></span>
+            </div>
+          </div>
+        </div>
+        <!-- Hidden checkboxes for compatibility -->
+        <input type="checkbox" id="showLocalTimeLocDep" style="display: none;" />
+        <input type="checkbox" id="showLocalTimeLocArr" style="display: none;" />
+      </section>
+
+      <!-- OPERATIONAL Section -->
+      <section class="modal-section">
+        <h3 class="modal-section-title">Operational</h3>
+        <div class="modal-section-grid">
+          <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="newLocPob" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
+            <input id="newLocEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM" list="locEgowCodeOptions" />
+            <datalist id="locEgowCodeOptions">
+              <option value="VC">VC</option>
+              <option value="VM">VM</option>
+              <option value="BC">BC</option>
+              <option value="BM">BM</option>
+              <option value="VCH">VCH</option>
+              <option value="VMH">VMH</option>
+              <option value="VNH">VNH</option>
+            </datalist>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Unit</label>
+            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">T&amp;G</label>
+            <input id="newLocTng" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">O/S</label>
+            <input id="newLocOsCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="newLocFisCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Collapsible: Remarks & Warnings -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="locRemarksWarnings">
+          <span class="expander-icon">▶</span>
+          Remarks &amp; Warnings
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="locRemarksWarnings" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Remarks</label>
+              <textarea id="newLocRemarks" class="modal-textarea" rows="3" placeholder="Optional notes…"></textarea>
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Warnings</label>
+              <textarea id="newLocWarnings" class="modal-textarea" rows="3" placeholder="Optional warnings…"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Collapsible: ATC Details -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="false" data-target="locAtcDetails">
+          <span class="expander-icon">▶</span>
+          ATC Details
+          <span class="expander-hint">(optional)</span>
+        </button>
+        <div id="locAtcDetails" class="modal-expander-panel" hidden>
+          <div class="modal-section-grid">
+            <div class="modal-field">
+              <label class="modal-label">Squawk</label>
+              <input id="newLocSquawk" class="modal-input" placeholder="e.g. 7000" maxlength="4" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Route</label>
+              <input id="newLocRoute" class="modal-input" placeholder="e.g. DCT" />
+            </div>
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Clearance</label>
+              <textarea id="newLocClearance" class="modal-textarea" rows="2" placeholder="Optional clearance details…"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Collapsible: Formation -->
       <section class="modal-section modal-collapsible">
@@ -2945,33 +3065,46 @@ function openNewLocalModal() {
     regInput.addEventListener("input", () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
-        // Auto-fill aircraft type from VKB
         const vkbType = regData['TYPE'];
         if (vkbType && vkbType !== '-' && vkbType !== '') {
           typeInput.value = vkbType;
         }
-
-        // Auto-fill EGOW Code from registration
         const egowFlightType = regData['EGOW FLIGHT TYPE'];
         if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput) {
           egowCodeInput.value = egowFlightType;
         }
-
-        // Auto-fill fixed callsign and flight number if available
         const fixedCallsign = regData['FIXED C/S'];
         if (fixedCallsign && fixedCallsign !== '-' && fixedCallsign !== '') {
-          // Try to split into callsign code and flight number
-          // e.g., "UAM01" → "UAM" + "01"
           const match = fixedCallsign.match(/^([A-Z]+)(\d+.*)?$/);
           if (match && callsignCodeInput && (!callsignCodeInput.value || callsignCodeInput.value === '')) {
-            callsignCodeInput.value = match[1]; // Code part
+            callsignCodeInput.value = match[1];
             if (match[2] && flightNumberInput && (!flightNumberInput.value || flightNumberInput.value === '')) {
-              flightNumberInput.value = match[2]; // Number part
+              flightNumberInput.value = match[2];
             }
           }
         }
+        // Auto-fill Remarks/Warnings from registration data
+        const remarksInput = document.getElementById('newLocRemarks');
+        const warningsInput = document.getElementById('newLocWarnings');
+        const warningsText = regData['WARNINGS'] || '';
+        if (warningsText && warningsText !== '-' && warningsInput) {
+          const currentWarnings = warningsInput.value.trim();
+          const lastAutofill = warningsInput.dataset.autofillValue || '';
+          if (!currentWarnings || currentWarnings === lastAutofill) {
+            warningsInput.value = warningsText;
+            warningsInput.dataset.autofillValue = warningsText;
+          }
+        }
+        const notesText = regData['NOTES'] || '';
+        if (notesText && notesText !== '-' && remarksInput) {
+          const currentRemarks = remarksInput.value.trim();
+          const lastAutofill = remarksInput.dataset.autofillValue || '';
+          if (!currentRemarks || currentRemarks === lastAutofill) {
+            remarksInput.value = notesText;
+            remarksInput.dataset.autofillValue = notesText;
+          }
+        }
       } else {
-        // Fallback to hardcoded lookup if not in VKB
         const inferredType = inferTypeFromReg(regInput.value);
         if (inferredType) {
           typeInput.value = inferredType;
@@ -2980,52 +3113,51 @@ function openNewLocalModal() {
     });
   }
 
-  // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
+  // When callsign code or flight number changes, lookup unit code and auto-fill registration if fixed callsign
   const updateCallsignDerivedFields = () => {
     const code = callsignCodeInput?.value?.toUpperCase().trim() || '';
     const number = flightNumberInput?.value?.trim() || '';
     const fullCallsign = code + number;
 
-    // UAM* pattern → POB = 2
     if (code.startsWith('UAM') && pobInput && (pobInput.value === '0' || !pobInput.value)) {
       pobInput.value = '2';
     }
-
-    // Lookup unit code from full callsign
     if (fullCallsign && unitCodeInput) {
       const unitData = lookupCallsign(fullCallsign);
       if (unitData && unitData['UC'] && unitData['UC'] !== '-' && unitData['UC'] !== '') {
         unitCodeInput.value = unitData['UC'];
       }
     }
-
-    // If callsign matches a fixed callsign, auto-fill registration (only if registration is empty)
     if (fullCallsign && regInput && (!regInput.value || regInput.value === '')) {
       const regData = lookupRegistrationByFixedCallsign(fullCallsign);
       if (regData) {
         const registration = regData['REGISTRATION'] || '';
         if (registration && registration !== '-') {
           regInput.value = registration;
-          // Trigger registration input event to update dependent fields
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }
     }
   };
 
-  if (callsignCodeInput) {
-    callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
-  }
-  if (flightNumberInput) {
-    flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+  if (callsignCodeInput) callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
+  if (flightNumberInput) flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
+
+  // Wire Priority checkbox/dropdown
+  const locPriorityEnabled = document.getElementById('locPriorityEnabled');
+  const locPriorityLetter = document.getElementById('locPriorityLetter');
+  if (locPriorityEnabled && locPriorityLetter) {
+    locPriorityEnabled.addEventListener('change', () => {
+      locPriorityLetter.disabled = !locPriorityEnabled.checked;
+      if (!locPriorityEnabled.checked) locPriorityLetter.value = '';
+    });
   }
 
-  // Wire formation section for LOC modal
+  // Wire formation section
   const getLocCallsign = () =>
     (document.getElementById("newLocCallsignCode")?.value?.trim() || "") +
     (document.getElementById("newLocFlightNumber")?.value?.trim() || "");
   wireFormationCountInput("newLocFormationCount", "newLocFormationElementsContainer", getLocCallsign, []);
-  // Rebuild rows when callsign changes only if rows already exist (guard against phantom formation)
   callsignCodeInput?.addEventListener("input", () => {
     const container = document.getElementById("newLocFormationElementsContainer");
     if (!container?.querySelector('[data-el-callsign="0"]')) return;
@@ -3033,7 +3165,7 @@ function openNewLocalModal() {
     if (count >= 2) buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", []);
   });
 
-  // Wire collapsible section expanders for LOC modal
+  // Wire collapsible section expanders
   document.querySelectorAll('.modal-expander').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.dataset.target;
@@ -3046,20 +3178,21 @@ function openNewLocalModal() {
     });
   });
 
-  // Bind local time display handlers
+  // Wire local time display toggle (single toggle mirrors standard modal pattern)
   const depTimeInput = document.getElementById("newLocStart");
   const arrTimeInput = document.getElementById("newLocEnd");
   const showLocalDepCheck = document.getElementById("showLocalTimeLocDep");
   const showLocalArrCheck = document.getElementById("showLocalTimeLocArr");
+  const showLocalToggle = document.getElementById("showLocalTimeLocToggle");
+  const timeDisplayMode = document.getElementById("locTimeDisplayMode");
   const localDepSpan = document.getElementById("localLocDepTime");
   const localArrSpan = document.getElementById("localLocArrTime");
 
   function updateLocalLocDepTime() {
     if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
-      const utcTime = depTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
+      const localTime = convertUTCToLocal(depTimeInput.value);
       const offset = getTimezoneOffsetLabel();
-      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+      localDepSpan.textContent = localTime ? `${localTime} (${offset})` : "";
     } else if (localDepSpan) {
       localDepSpan.textContent = "";
     }
@@ -3067,13 +3200,23 @@ function openNewLocalModal() {
 
   function updateLocalLocArrTime() {
     if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
-      const utcTime = arrTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
+      const localTime = convertUTCToLocal(arrTimeInput.value);
       const offset = getTimezoneOffsetLabel();
-      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
+      localArrSpan.textContent = localTime ? `${localTime} (${offset})` : "";
     } else if (localArrSpan) {
       localArrSpan.textContent = "";
     }
+  }
+
+  if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
+    showLocalToggle.addEventListener('change', () => {
+      const isChecked = showLocalToggle.checked;
+      showLocalDepCheck.checked = isChecked;
+      showLocalArrCheck.checked = isChecked;
+      timeDisplayMode.textContent = isChecked ? 'Local' : 'UTC';
+      updateLocalLocDepTime();
+      updateLocalLocArrTime();
+    });
   }
 
   if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalLocDepTime);
@@ -3081,75 +3224,63 @@ function openNewLocalModal() {
   if (depTimeInput) depTimeInput.addEventListener("input", updateLocalLocDepTime);
   if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalLocArrTime);
 
-  // Bind save handler with validation
+  // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
-    // Get form values
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
-    const depPlanned = document.getElementById("newLocStart")?.value || "";
-    const arrPlanned = document.getElementById("newLocEnd")?.value || "";
+    let depPlanned = document.getElementById("newLocStart")?.value || "";
+    let arrPlanned = document.getElementById("newLocEnd")?.value || "";
     const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
     const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
     const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
-    const callsign = callsignCode + flightNumber; // Combine for full callsign
+    const callsign = callsignCode + flightNumber;
 
-    // Validate inputs
     const dofValidation = validateDate(dof);
-    if (!dofValidation.valid) {
-      showToast(dofValidation.error, 'error');
-      return;
-    }
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return; }
 
     const depValidation = validateTime(depPlanned);
-    if (!depValidation.valid) {
-      showToast(`Departure time: ${depValidation.error}`, 'error');
-      return;
-    }
+    if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return; }
+    if (depValidation.normalized) { depPlanned = depValidation.normalized; document.getElementById("newLocStart").value = depPlanned; }
 
     const arrValidation = validateTime(arrPlanned);
-    if (!arrValidation.valid) {
-      showToast(`Arrival time: ${arrValidation.error}`, 'error');
-      return;
-    }
+    if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return; }
+    if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newLocEnd").value = arrPlanned; }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
-    if (!pobValidation.valid) {
-      showToast(pobValidation.error, 'error');
-      return;
-    }
+    if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return; }
 
     const tngValidation = validateNumberRange(tng, 0, 99, "T&G count");
-    if (!tngValidation.valid) {
-      showToast(tngValidation.error, 'error');
-      return;
-    }
+    if (!tngValidation.valid) { showToast(tngValidation.error, 'error'); return; }
 
-    const callsignValidation = validateRequired(callsign, "Callsign");
-    if (!callsignValidation.valid) {
-      showToast(callsignValidation.error, 'error');
-      return;
-    }
+    const callsignValidation = validateRequired(callsignCode, "Callsign Code");
+    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
 
-    // Validate and read formation (must happen before movement creation)
+    const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
+    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+
     const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
     if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
 
-    // Get voice callsign for display (only if different from contraction/registration)
     const regValue = document.getElementById("newLocReg")?.value || "";
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
-
-    // Get WTC based on aircraft type (Local flights are always LOC)
     const aircraftType = document.getElementById("newLocType")?.value || "";
     const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
-
-    // Get warnings and notes from registration
-    const warnings = regData ? (regData['WARNINGS'] || "") : "";
-    const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
 
-    // Create movement - determine initial status based on whether time is past
+    const priorityEnabledCheck = document.getElementById("locPriorityEnabled")?.checked || false;
+    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("locPriorityLetter")?.value || "") : "";
+    const remarksValue = document.getElementById("newLocRemarks")?.value || "";
+    const warningsValue = document.getElementById("newLocWarnings")?.value || "";
+    const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
+    const squawkValue = document.getElementById("newLocSquawk")?.value || "";
+    const routeValue = document.getElementById("newLocRoute")?.value || "";
+    const clearanceValue = document.getElementById("newLocClearance")?.value || "";
+
     const initialStatus = determineInitialStatus("LOC", dof, depPlanned, arrPlanned);
     let movement = {
       status: initialStatus,
@@ -3162,36 +3293,36 @@ function openNewLocalModal() {
       popularName: popularName,
       wtc: wtc,
       depAd: "EGOW",
-      depName: "RAF Woodvale",
+      depName: getLocationName("EGOW"),
       arrAd: "EGOW",
-      arrName: "RAF Woodvale",
+      arrName: getLocationName("EGOW"),
       depPlanned: depPlanned,
       depActual: "",
       arrPlanned: arrPlanned,
       arrActual: "",
       dof: dof,
-      rules: "VFR", // Local flights are always VFR
+      rules: document.getElementById("newLocRules")?.value || "VFR",
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(tng, 10),
-      osCount: 0,
-      fisCount: "LOC" === "OVR" ? 1 : 0,
-      egowCode: document.getElementById("newLocEgowCode")?.value || "",
+      osCount: osCountValue,
+      fisCount: fisCountValue,
+      egowCode: egowCode,
       egowDesc: "",
       unitCode: document.getElementById("newLocUnitCode")?.value || "",
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
-      remarks: document.getElementById("newLocRemarks")?.value || "",
-      warnings: warnings,
+      priorityLetter: priorityLetterValue,
+      remarks: remarksValue,
+      warnings: warningsValue,
       notes: notes,
-      squawk: "",
-      route: "",
-      clearance: "",
+      squawk: squawkValue,
+      route: routeValue,
+      clearance: clearanceValue,
       formation: locFormation || null
     };
 
-    // Enrich with auto-populated fields
     movement = enrichMovementData(movement);
 
     createMovement(movement);
@@ -3201,50 +3332,61 @@ function openNewLocalModal() {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Local flight created successfully", 'success');
 
-    // Close modal
     const modalRoot = document.getElementById("modalRoot");
     if (modalRoot) modalRoot.innerHTML = "";
   });
 
-  // Bind "Save & Complete" handler for local flight
+  // Bind "Save & Complete" handler
   document.querySelector(".js-save-complete-loc")?.addEventListener("click", () => {
-    // Get current time for actual times
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Get form values
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
-    const depPlanned = document.getElementById("newLocStart")?.value || "";
-    const arrPlanned = document.getElementById("newLocEnd")?.value || "";
-    const pob = document.getElementById("newPob")?.value || "0";
+    let depPlanned = document.getElementById("newLocStart")?.value || "";
+    let arrPlanned = document.getElementById("newLocEnd")?.value || "";
+    const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
     const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
     const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
     const callsign = callsignCode + flightNumber;
 
-    // Basic validation
-    const callsignValidation = validateRequired(callsign, "Callsign");
-    if (!callsignValidation.valid) {
-      showToast(callsignValidation.error, 'error');
-      return;
-    }
+    const dofValidation = validateDate(dof);
+    if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return; }
 
-    // Validate and read formation
+    const callsignValidation = validateRequired(callsignCode, "Callsign Code");
+    if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
+
+    const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
+    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+
+    const depValidation = validateTime(depPlanned);
+    if (depValidation.normalized) depPlanned = depValidation.normalized;
+    const arrValidation = validateTime(arrPlanned);
+    if (arrValidation.normalized) arrPlanned = arrValidation.normalized;
+
     const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
     if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
-    // Get voice callsign and other data
     const regValue = document.getElementById("newLocReg")?.value || "";
     const regData = lookupRegistration(regValue);
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
     const aircraftType = document.getElementById("newLocType")?.value || "";
     const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
-    const warnings = regData ? (regData['WARNINGS'] || "") : "";
-    const notes = regData ? (regData['NOTES'] || "") : "";
     const operator = regData ? (regData['OPERATOR'] || "") : "";
+    const notes = regData ? (regData['NOTES'] || "") : "";
 
-    // Create movement with COMPLETED status
+    const priorityEnabledCheck = document.getElementById("locPriorityEnabled")?.checked || false;
+    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("locPriorityLetter")?.value || "") : "";
+    const remarksValue = document.getElementById("newLocRemarks")?.value || "";
+    const warningsValue = document.getElementById("newLocWarnings")?.value || "";
+    const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
+    const squawkValue = document.getElementById("newLocSquawk")?.value || "";
+    const routeValue = document.getElementById("newLocRoute")?.value || "";
+    const clearanceValue = document.getElementById("newLocClearance")?.value || "";
+
     let movement = {
       status: "COMPLETED",
       callsignCode: callsign,
@@ -3256,39 +3398,39 @@ function openNewLocalModal() {
       popularName: popularName,
       wtc: wtc,
       depAd: "EGOW",
-      depName: "RAF Woodvale",
+      depName: getLocationName("EGOW"),
       arrAd: "EGOW",
-      arrName: "RAF Woodvale",
+      arrName: getLocationName("EGOW"),
       depPlanned: depPlanned,
       depActual: depPlanned || currentTime,
       arrPlanned: arrPlanned,
       arrActual: arrPlanned || currentTime,
       dof: dof,
-      rules: "VFR",
+      rules: document.getElementById("newLocRules")?.value || "VFR",
       flightType: "LOC",
       isLocal: true,
       tngCount: parseInt(tng, 10),
-      osCount: 0,
-      fisCount: 0,
-      egowCode: document.getElementById("newLocEgowCode")?.value || "",
+      osCount: osCountValue,
+      fisCount: fisCountValue,
+      egowCode: egowCode,
       egowDesc: "",
       unitCode: document.getElementById("newLocUnitCode")?.value || "",
       unitDesc: "",
       captain: "",
       pob: parseInt(pob, 10),
-      remarks: document.getElementById("newLocRemarks")?.value || "",
-      warnings: warnings,
+      priorityLetter: priorityLetterValue,
+      remarks: remarksValue,
+      warnings: warningsValue,
       notes: notes,
-      squawk: "",
-      route: "",
-      clearance: "",
+      squawk: squawkValue,
+      route: routeValue,
+      clearance: clearanceValue,
       formation: locCpFormation || null
     };
 
     movement = enrichMovementData(movement);
 
     const createdLoc = createMovement(movement);
-    // Cascade COMPLETED status to formation elements (if any)
     if (createdLoc?.id && locCpFormation) cascadeFormationStatus(createdLoc.id, "COMPLETED");
     renderLiveBoard();
     renderHistoryBoard();
@@ -3357,7 +3499,7 @@ function openEditMovementModal(m) {
         <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
-            <select id="editFlightType" class="modal-select">
+            <select id="editFlightType" class="modal-select" ${flightType === "LOC" ? "disabled" : ""}>
               <option ${flightType === "ARR" ? "selected" : ""}>ARR</option>
               <option ${flightType === "DEP" ? "selected" : ""}>DEP</option>
               <option ${flightType === "LOC" ? "selected" : ""}>LOC</option>
@@ -3376,11 +3518,11 @@ function openEditMovementModal(m) {
           </div>
           <div class="modal-field">
             <label class="modal-label">Departure AD</label>
-            <input id="editDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" />
+            <input id="editDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
-            <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" />
+            <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
           </div>
           <div class="modal-field modal-field-priority">
             <label class="modal-label">
@@ -4694,7 +4836,7 @@ export function initLiveBoard() {
   });
 
   // New movement buttons
-  safeOn(btnNewLoc, "click", openNewLocalModal);
+  safeOn(btnNewLoc, "click", openNewLocFlightModal);
   safeOn(btnNewDep, "click", () => openNewFlightModal("DEP"));
   safeOn(btnNewArr, "click", () => openNewFlightModal("ARR"));
   safeOn(btnNewOvr, "click", () => openNewFlightModal("OVR"));

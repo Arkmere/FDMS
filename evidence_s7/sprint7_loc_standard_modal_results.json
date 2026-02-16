@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-02-16T10:42:03.144Z",
+  "runMetadata": {
+    "sprint": 7,
+    "node": "v22.22.0",
+    "platform": "linux",
+    "appUrl": "http://localhost:8765/"
+  },
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8
+  },
+  "results": [
+    {
+      "id": "I1",
+      "title": "Standard modal structure: IDENTITY, PLAN, TIMES, OPERATIONAL headings",
+      "status": "PASS",
+      "note": "headings=[\"IDENTITY\",\"PLAN\",\"TIMES\",\"OPERATIONAL\"] errors=0",
+      "refs": [
+        "S7_1_I1_section_headings.png"
+      ]
+    },
+    {
+      "id": "I2",
+      "title": "Standard modal accordions: Remarks & Warnings, ATC Details, Formation",
+      "status": "PASS",
+      "note": "expanders=[\"▶\\n          REMARKS & WARNINGS\\n          (OPTIONAL)\",\"▶\\n          ATC DETAILS\\n          (OPTIONAL)\",\"▶\\n          FORMATION\\n          (OPTIONAL – MULTI-AIRCRAFT)\"] errors=0",
+      "refs": [
+        "S7_2_I2_accordions.png"
+      ]
+    },
+    {
+      "id": "I3",
+      "title": "Flight Type shows LOC and is disabled/read-only",
+      "status": "PASS",
+      "note": "value=LOC disabled=true errors=0",
+      "refs": [
+        "S7_3_I3_flight_type_loc_locked.png"
+      ]
+    },
+    {
+      "id": "I4",
+      "title": "Departure AD shows EGOW and is disabled/read-only",
+      "status": "PASS",
+      "note": "disabledValues=[\"LOC\",\"EGOW\",\"EGOW\"] errors=0",
+      "refs": [
+        "S7_4_I4_dep_ad_egow_locked.png"
+      ]
+    },
+    {
+      "id": "I5",
+      "title": "Arrival AD shows EGOW and is disabled/read-only",
+      "status": "PASS",
+      "note": "egowCount=2 disabledValues=[\"LOC\",\"EGOW\",\"EGOW\"] errors=0",
+      "refs": [
+        "S7_5_I5_arr_ad_egow_locked.png"
+      ]
+    },
+    {
+      "id": "I6",
+      "title": "LOC timing: entering ETD does not auto-fill ETA (unchanged behavior)",
+      "status": "PASS",
+      "note": "etdBefore= etaBefore= etaAfter= errors=0",
+      "refs": [
+        "S7_6_I6_timing_no_autofill.png"
+      ]
+    },
+    {
+      "id": "I7",
+      "title": "Save LOC; reload; depPlanned/arrPlanned/depAd/arrAd/flightType persisted",
+      "status": "PASS",
+      "note": "depPlanned=10:00 arrPlanned=11:00 depAd=EGOW arrAd=EGOW ft=LOC errors=0",
+      "refs": [
+        "S7_7_I7_after_save.png",
+        "S7_8_I7_after_reload.png"
+      ]
+    },
+    {
+      "id": "I8",
+      "title": "Edit LOC: flight type locked to LOC, dep/arr AD locked to EGOW",
+      "status": "PASS",
+      "note": "ftDisabled=true ft=LOC depAdDisabled=true depAd=EGOW arrAdDisabled=true arrAd=EGOW errors=0",
+      "refs": [
+        "S7_9_I8_edit_loc_locked_fields.png"
+      ]
+    }
+  ]
+}

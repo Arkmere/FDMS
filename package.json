@@ -7,7 +7,8 @@
   "scripts": {
     "test:s4": "node sprint4_formation_verify.mjs",
     "test:s5": "node sprint5_formation_v11_verify.mjs",
-    "test:s6": "node sprint6_loc_formation_verify.mjs"
+    "test:s6": "node sprint6_loc_formation_verify.mjs",
+    "test:s7": "node sprint7_loc_standard_modal_verify.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"
