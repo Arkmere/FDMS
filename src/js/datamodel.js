@@ -389,6 +389,12 @@ function loadFromStorage() {
 
 function saveToStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
+  // Guard: never persist an undefined/null movements array.  If somehow the
+  // module-level array is corrupted, bail out rather than overwrite good data.
+  if (!Array.isArray(movements)) {
+    console.error("FDMS: saveToStorage aborted — movements is not an array", movements);
+    return;
+  }
   try {
     // v2 schema: wrap movements with version and timestamp
     const payload = JSON.stringify({

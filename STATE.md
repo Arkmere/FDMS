@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-16 (Europe/London) — Sprint 7 LOC Standard Modal Parity
+Last updated: 2026-02-17 (Europe/London) — P0 Inline Edit Time Field Data-Loss Fix
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -617,6 +617,138 @@ All four suites passing on Linux kernel 4.4, Node v22, Playwright 1.56.1, Chromi
 - Element IDs in the LOC modal (`newLocCallsignCode`, `newLocStart`, `newLocEnd`, formation IDs, `.js-save-loc`, `.js-save-complete-loc`) are preserved from the old bespoke modal to maintain backward compatibility with Sprint 6 regression tests.
 - EGOW Code field is present and visible in the LOC modal (with datalist, same as standard modal). Validation blocks save only if an invalid code is entered, not if left empty — this preserves Sprint 6 test behavior where EGOW Code was not filled.
 - No changes to counters, reporting logic, formation semantics, or delivery-model documentation.
+
+### 4.9 P0 Fix: Inline Edit Time Field Toast Storm + Data Loss
+
+**Date:** 2026-02-17
+**Branch:** `claude/fix-inline-edit-data-loss-QLjBR`
+**Priority:** P0 (data integrity)
+
+#### Symptom
+
+Inline editing a time cell on a strip (double-click → type → Enter) triggered:
+- A storm of mixed toasts: "Callsign Code is required" (error) and "Movement updated successfully" (success).
+- In some cases, entries were removed from Live/Pending and History (apparent data loss).
+
+#### Root Cause (precise)
+
+**Primary — leaked `document` keyHandler from `openModal()`:**
+
+`openModal()` registers `document.addEventListener("keydown", keyHandler)` to implement:
+1. Esc-to-close modal.
+2. Enter-to-save via the primary save button.
+
+Every save handler (`.js-save-flight`, `.js-save-edit`, `.js-save-loc`, `.js-save-complete-*`, `.js-save-dup`) closed the modal by setting `modalRoot.innerHTML = ""` **directly** — bypassing the `closeModal()` closure which is the only path that called `document.removeEventListener("keydown", keyHandler)`.
+
+Over a session with multiple modal open+save cycles, one leaked `keyHandler` per cycle accumulated on `document`. Each subsequent `Enter` keypress triggered ALL accumulated handlers simultaneously:
+- Each handler called `backdrop.querySelector(".js-save-edit").click()` on its (now-detached) backdrop element.
+- The click listener on the detached element ran the full modal save handler.
+- `document.getElementById("editCallsignCode")?.value` returned `""` (modal closed, element gone).
+- Callsign validation failed → `showToast("Callsign Code is required", 'error')` — N times (one per leaked handler).
+
+**If a live modal happened to be open at the time**, the leaked handler's `document.getElementById()` calls found the live modal's fields, passed validation, and called `updateMovement(m.id, updates)` with whatever the modal currently had — potentially overwriting the movement with incomplete or incorrect data → data corruption.
+
+**Secondary — missing `stopPropagation` in inline-edit `keydown` handler:**
+
+The inline-edit input's `keydown` handler called `e.preventDefault()` but NOT `e.stopPropagation()`. Enter keypresses from inline-edit thus bubbled up to `document`, triggering all accumulated modal keyHandlers even when no modal was intended to be interacted with.
+
+**Tertiary — blur retry race after failed time validation:**
+
+When time validation failed, `saved` was reset to `false` to allow retry. The blur handler's 100ms setTimeout could re-trigger `saveEdit()` if the user clicked elsewhere before the corrected value was typed, showing the error toast a second time.
+
+#### Fix Summary
+
+**`src/js/ui_liveboard.js`:**
+
+1. Added module-level `let _modalKeyHandler = null;` to track the single active modal handler.
+
+2. Added `closeActiveModal()` function:
+   - Removes `_modalKeyHandler` from `document` before clearing `modalRoot.innerHTML`.
+   - Called by all 7 save-handler modal-close paths (previously direct `innerHTML = ""`).
+
+3. Modified `openModal()`:
+   - Removes any previously leaked `_modalKeyHandler` at modal open time (belt-and-suspenders).
+   - Assigns new `keyHandler` to `_modalKeyHandler`.
+   - `closeModal()` closure now dereferences `_modalKeyHandler` after removal.
+   - Added `backdrop.isConnected` guard in the keyHandler Enter path to prevent detached-backdrop saves.
+   - Added `activeEl.classList.contains("inline-edit-input")` guard so inline-edit Enter presses are ignored by the modal keyHandler.
+
+4. In `startInlineEdit()` → keydown listener:
+   - Added `e.stopPropagation()` for both `Enter` and `Escape` keys to prevent bubbling to document.
+
+5. In `saveEdit()`:
+   - Added `_lastSaveFailed` flag; set when time validation fails, cleared on next `input` event.
+   - Blur handler checks `!_lastSaveFailed` before auto-saving, preventing repeated error toasts on blur.
+   - Added `window.__FDMS_DIAGNOSTICS__` diagnostic logging guards.
+   - Transactional update: build patch → validate → call `updateMovement` only on success → `onMovementUpdated` only if movement was found.
+   - Guard: if `updateMovement` returns null (movement not found), restore cell silently without touching state.
+
+**`src/js/datamodel.js`:**
+
+6. Added guard in `saveToStorage()`: aborts if `movements` is not an array (prevents overwriting good data with a corrupt module state).
+
+#### Regression Harness
+
+New: `sprintP0_inline_edit_integrity_verify.mjs` (8 tests)
+
+| ID | Test | Result |
+|----|------|--------|
+| P0-T1 | No error toasts on valid inline-edit commit | **PASS** |
+| P0-T2 | Exactly one error toast on invalid time; data not mutated | **PASS** |
+| P0-T3 | Live/Pending row count stable after inline-edit | **PASS** |
+| P0-T4 | History row count stable after inline-edit | **PASS** |
+| P0-T5 | Repeated inline-edits (3×) — no error toasts, count stable | **PASS** |
+| P0-T6 | 3× modal open+save then inline-edit — no toast storm | **PASS** |
+| P0-T7 | Inline-edit while modal minimised — no modal double-save | **PASS** |
+| P0-T8 | Time field update persists across page reload | **PASS** |
+
+**Result: 8/8 PASS, 0 FAIL**
+
+#### Verification evidence (commands run)
+
+```
+# P0 regression harness (new)
+node sprintP0_inline_edit_integrity_verify.mjs  → 8/8 PASS
+
+# Existing sprint suites
+npm run test:s4   → 10/10 PASS  (no regression)
+npm run test:s5   → 12/12 PASS  (no regression)
+npm run test:s6   → 6/6 PASS   (no regression)
+npm run test:s7   → 8/8 PASS   (no regression)
+```
+
+All suites passing on Linux kernel 4.4, Node v22.22.0, Playwright 1.56.1, Chromium headless.
+
+**Evidence pack:**
+- Screenshots: `evidence_p0/P0_*.png` (8 screenshots)
+- Results JSON: `evidence_p0/sprintP0_inline_edit_integrity_results.json`
+- Test harness: `sprintP0_inline_edit_integrity_verify.mjs`
+
+#### Deliverables checklist
+
+- [x] Root cause identified and documented (precise: `openModal` + missing `closeModal` call in save handlers)
+- [x] `closeActiveModal()` created; all 7 save-handler modal-close paths updated
+- [x] `_modalKeyHandler` module-level tracking added to `openModal()`
+- [x] `e.stopPropagation()` added to inline-edit `keydown` Enter handler
+- [x] `backdrop.isConnected` guard added to modal keyHandler Enter path
+- [x] `inline-edit-input` class guard added to modal keyHandler
+- [x] `_lastSaveFailed` flag prevents blur-auto-save after failed validation
+- [x] Transactional save path in `saveEdit()`: validate → update → render (no partial mutation)
+- [x] `saveToStorage()` guard against non-array `movements`
+- [x] `window.__FDMS_DIAGNOSTICS__` logging added to `saveEdit()` and `closeActiveModal()`
+- [x] P0 regression harness: 8/8 PASS
+- [x] Sprint 4: 10/10 PASS (no regression)
+- [x] Sprint 5: 12/12 PASS (no regression)
+- [x] Sprint 6: 6/6 PASS (no regression)
+- [x] Sprint 7: 8/8 PASS (no regression)
+- [x] Evidence pack exists: `evidence_p0/`
+- [x] STATE.md updated
+
+#### NO-DRIFT confirmation
+
+- No changes to counters, reporting logic, formation semantics, or timing semantics.
+- No speculative refactors. Only the fault path (modal keyHandler leak) and guardrails (stopPropagation, blur guard, persistence guard) were changed.
+- All existing test suites pass without modification.
 
 ---
 
