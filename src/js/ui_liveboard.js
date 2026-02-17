@@ -2058,23 +2058,23 @@ function openNewFlightModal(flightType = "DEP") {
         <div class="modal-grid-identity">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
-            <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
+            <input id="newCallsignCode" class="modal-input" placeholder="SYS, GBNKV" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Flight Number</label>
-            <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123" />
+            <input id="newFlightNumber" class="modal-input" placeholder="106, 67VM" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Registration</label>
-            <input id="newReg" class="modal-input" placeholder="e.g. G-BYUN" />
+            <input id="newReg" class="modal-input" placeholder="ZM520, G-BNKV" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
-            <input id="newType" class="modal-input is-derived" placeholder="Auto-filled" />
+            <input id="newType" class="modal-input is-derived" placeholder="EC35, C152" />
           </div>
           <div class="modal-field">
             <label class="modal-label">WTC</label>
-            <input id="newWtcDisplay" class="modal-input is-derived" placeholder="Auto" disabled />
+            <input id="newWtcDisplay" class="modal-input is-derived" placeholder="L, J" disabled />
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -2122,11 +2122,11 @@ function openNewFlightModal(flightType = "DEP") {
         <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">Departure AD</label>
-            <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
+            <input id="newDepAd" class="modal-input" placeholder="EGOS" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
-            <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
+            <input id="newArrAd" class="modal-input" placeholder="EGOS" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
           </div>
         </div>
       </section>
@@ -2136,7 +2136,7 @@ function openNewFlightModal(flightType = "DEP") {
         <h3 class="modal-section-title">Times</h3>
         <div class="modal-section-grid">
           <div class="modal-field">
-            <label class="modal-label">Date of Flight (DOF)</label>
+            <label class="modal-label">Date of Flight</label>
             <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
           <div class="modal-field">
@@ -2146,16 +2146,16 @@ function openNewFlightModal(flightType = "DEP") {
             </label>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Estimated Departure (ETD)</label>
+            <label class="modal-label">ETD</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newDepPlanned" class="modal-input" placeholder="12:30" style="width: 80px;" />
+              <input id="newDepPlanned" class="modal-input" placeholder="13:37" style="width: 80px;" />
               <span id="localDepTime" class="time-local"></span>
             </div>
           </div>
           <div class="modal-field">
-            <label class="modal-label">Estimated Arrival (ETA)</label>
+            <label class="modal-label">ETA</label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newArrPlanned" class="modal-input" placeholder="13:05" style="width: 80px;" />
+              <input id="newArrPlanned" class="modal-input" placeholder="16:20" style="width: 80px;" />
               <span id="localArrTime" class="time-local"></span>
             </div>
           </div>
@@ -2185,7 +2185,7 @@ function openNewFlightModal(flightType = "DEP") {
         <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
-            <input id="newEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM" list="egowCodeOptions" />
+            <input id="newEgowCode" class="modal-input is-derived" placeholder="" list="egowCodeOptions" />
             <datalist id="egowCodeOptions">
               <option value="VC">VC</option>
               <option value="VM">VM</option>
@@ -2198,7 +2198,7 @@ function openNewFlightModal(flightType = "DEP") {
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="newUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
+            <input id="newUnitCode" class="modal-input is-derived" placeholder="" />
           </div>
         </div>
       </section>
@@ -2214,11 +2214,11 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-section-grid">
             <div class="modal-field modal-field-full">
               <label class="modal-label">Remarks</label>
-              <textarea id="rwRemarks" class="modal-textarea" rows="3" placeholder="Optional notes…"></textarea>
+              <textarea id="rwRemarks" class="modal-textarea" rows="3" placeholder=""></textarea>
             </div>
             <div class="modal-field modal-field-full">
               <label class="modal-label">Warnings</label>
-              <textarea id="rwWarnings" class="modal-textarea" rows="3" placeholder="Optional warnings…"></textarea>
+              <textarea id="rwWarnings" class="modal-textarea" rows="3" placeholder=""></textarea>
             </div>
           </div>
         </div>
@@ -2235,15 +2235,15 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-section-grid">
             <div class="modal-field">
               <label class="modal-label">Squawk</label>
-              <input id="atcSquawk" class="modal-input" placeholder="e.g. 7000" maxlength="4" />
+              <input id="atcSquawk" class="modal-input" placeholder="e.g. 7375" maxlength="4" />
             </div>
             <div class="modal-field">
               <label class="modal-label">Route</label>
-              <input id="atcRoute" class="modal-input" placeholder="e.g. DCT" />
+              <input id="atcRoute" class="modal-input" placeholder="WAL GODPA MIDJO SWB" />
             </div>
             <div class="modal-field modal-field-full">
               <label class="modal-label">Clearance</label>
-              <textarea id="atcClearance" class="modal-textarea" rows="2" placeholder="Optional clearance details…"></textarea>
+              <textarea id="atcClearance" class="modal-textarea" rows="2" placeholder="DCT WAL ↑ A020 128.050"></textarea>
             </div>
           </div>
         </div>
