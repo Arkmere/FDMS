@@ -107,3 +107,73 @@ node sprint6_loc_formation_verify.mjs
 ```
 
 > **Note**: Tests require the local server harness to be running first (`python -m http.server 8000` from `src/`, or one of the `run.*` scripts). The default test port is `8765`; check each script's `APP_URL` constant if you use a different port.
+
+---
+
+## Engineering Rules (modal and inline-edit safety)
+
+These rules were introduced after a P0 data-integrity incident (2026-02-17) where
+leaked `document` keydown handlers caused toast storms and data corruption.
+
+### Rule 1 — All modal close paths must call `closeActiveModal()`
+
+**Never** clear `modalRoot` directly with `modalRoot.innerHTML = ""`.
+Always call the exported `closeActiveModal()` function from `ui_liveboard.js` instead.
+
+```js
+// BAD — leaks the keyHandler onto document forever
+modalRoot.innerHTML = '';
+
+// GOOD — removes keyHandler AND clears modalRoot atomically
+import { closeActiveModal } from "./ui_liveboard.js";
+closeActiveModal();
+```
+
+This applies to every modal-close path: Cancel button, Save button, Delete button,
+and any programmatic close. It also applies to `ui_booking.js` and any future module
+that shares the `#modalRoot` element.
+
+### Rule 2 — All modal open paths must call `closeActiveModal()` first
+
+Before writing new HTML into `modalRoot`, call `closeActiveModal()` to ensure any
+previously leaked handler is removed.
+
+```js
+// BAD — previous handler may still be registered
+modalRoot.innerHTML = `<div class="modal-backdrop">…</div>`;
+
+// GOOD — clean slate before opening
+closeActiveModal();
+modalRoot.innerHTML = `<div class="modal-backdrop">…</div>`;
+```
+
+### Rule 3 — Inline-edit key events must call `e.stopPropagation()`
+
+The `keydown` handler inside `startInlineEdit()` (and any future inline-edit
+implementation) must stop propagation on both `Enter` and `Escape` so the event
+does not bubble to `document`-level listeners (including modal keyHandlers).
+
+```js
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.stopPropagation();  // required — prevents modal keyHandler interception
+    saveEdit();
+  } else if (e.key === 'Escape') {
+    e.stopPropagation();  // required
+    cancelEdit();
+  }
+});
+```
+
+### Diagnostics
+
+Enable the modal invariant checker at the browser console:
+
+```js
+window.__FDMS_DIAGNOSTICS__ = true;
+window.__fdmsDiag = {};
+// then open/close modals; violations appear in console and in:
+window.__fdmsDiag.modalInvariantViolations
+// call manually:
+window.__fdmsDiag.checkModalInvariants()
+```

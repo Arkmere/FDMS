@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-17T13:28:26.044Z",
+  "timestamp": "2026-02-17T21:25:06.819Z",
   "runMetadata": {
     "sprint": "P0",
     "fix": "inline-edit-data-loss-QLjBR",
@@ -8,9 +8,9 @@
     "appUrl": "http://localhost:8765/"
   },
   "summary": {
-    "passed": 8,
+    "passed": 9,
     "failed": 0,
-    "total": 8
+    "total": 9
   },
   "results": [
     {
@@ -83,6 +83,15 @@
       "note": "afterEdit=15:00 afterReload=15:00",
       "refs": [
         "P0_08_T8_persistence_after_reload.png"
+      ]
+    },
+    {
+      "id": "P0-T9",
+      "title": "8-cycle modal stress: 0 error toasts, stable count, persisted time",
+      "status": "PASS",
+      "note": "cycles=8 errorToasts=0 liveBefore=1 liveAfter=1 editedTime=16:00 persistedTime=16:00 allToasts=[]",
+      "refs": [
+        "P0_09_T9_8cycle_modal_stress.png"
       ]
     }
   ]

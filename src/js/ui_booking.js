@@ -14,6 +14,8 @@ import { showToast } from "./app.js";
 
 import { clearStripLinks } from "./services/bookingSync.js";
 
+import { closeActiveModal } from "./ui_liveboard.js";
+
 import * as bookingsStore from "./stores/bookingsStore.js";
 
 // VKB imports for autofill functionality
@@ -1888,6 +1890,7 @@ function openEditBookingModal(bookingId) {
   const movement = booking.movement || {};
   const ops = booking.ops || {};
 
+  closeActiveModal();
   modalRoot.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal" style="max-width: 520px;">
@@ -1960,7 +1963,7 @@ function openEditBookingModal(bookingId) {
 
   // Close handlers
   modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
-    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    btn.addEventListener('click', () => { closeActiveModal(); });
   });
 
   // Save handler
@@ -2024,7 +2027,7 @@ function openEditBookingModal(bookingId) {
     });
 
     showToast('Booking updated', 'success');
-    modalRoot.innerHTML = '';
+    closeActiveModal();
     // Refresh drawer if still open
     openBookingDrawer(bookingId);
     renderCalendar();
@@ -2105,6 +2108,7 @@ function openEditCalendarEventModal(eventId) {
   const modalRoot = byId('modalRoot');
   if (!modalRoot) return;
 
+  closeActiveModal();
   modalRoot.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal" style="max-width: 480px;">
@@ -2144,7 +2148,7 @@ function openEditCalendarEventModal(eventId) {
   `;
 
   modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
-    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    btn.addEventListener('click', () => { closeActiveModal(); });
   });
 
   modalRoot.querySelector('.js-save-calendar-event')?.addEventListener('click', () => {
@@ -2155,7 +2159,7 @@ function openEditCalendarEventModal(eventId) {
       description: document.getElementById('eeDescription')?.value?.trim() || ''
     });
     showToast('Event updated', 'success');
-    modalRoot.innerHTML = '';
+    closeActiveModal();
     renderCalendar();
   });
 
@@ -2163,7 +2167,7 @@ function openEditCalendarEventModal(eventId) {
     if (confirm('Delete this calendar event?')) {
       deleteCalendarEvent(eventId);
       showToast('Event deleted', 'info');
-      modalRoot.innerHTML = '';
+      closeActiveModal();
       renderCalendar();
     }
   });
@@ -2368,6 +2372,7 @@ function openProfileModal(reg) {
   const isNew = !reg;
   const title = isNew ? 'New Booking Profile' : `Edit Profile – ${reg}`;
 
+  closeActiveModal();
   modalRoot.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal" style="max-width: 480px;">
@@ -2437,7 +2442,7 @@ function openProfileModal(reg) {
   `;
 
   modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
-    btn.addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    btn.addEventListener('click', () => { closeActiveModal(); });
   });
 
   modalRoot.querySelector('.js-save-profile')?.addEventListener('click', () => {
@@ -2457,7 +2462,7 @@ function openProfileModal(reg) {
     });
 
     showToast(`Profile saved for ${regVal}`, 'success');
-    modalRoot.innerHTML = '';
+    closeActiveModal();
     renderProfilesTable();
   });
 }
@@ -2471,6 +2476,7 @@ function openAddEventModal(presetDate = null) {
   const modalRoot = document.getElementById('modalRoot');
   if (!modalRoot) return;
 
+  closeActiveModal();
   modalRoot.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal" style="max-width: 500px;">
@@ -2590,7 +2596,7 @@ function openAddEventModal(presetDate = null) {
   // Close handlers
   modalRoot.querySelectorAll('.js-close-modal').forEach(btn => {
     btn.addEventListener('click', () => {
-      modalRoot.innerHTML = '';
+      closeActiveModal();
     });
   });
 
@@ -2668,6 +2674,6 @@ function openAddEventModal(presetDate = null) {
 
     showToast('Calendar event added', 'success');
     renderCalendar();
-    modalRoot.innerHTML = '';
+    closeActiveModal();
   });
 }
