@@ -997,9 +997,29 @@ tr.strip.ft-ovr > td {
   grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
 }
+/* 3-equal-column grid used in PLAN row-1 (type/rules/pob) and OPERATIONAL row-1 (t&g/o/s/fis) */
+.modal-section-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 12px;
+}
+/* Identity grid: wider first col for callsign/type, narrow middle for flight-number/wtc */
+.modal-grid-identity {
+  display: grid;
+  grid-template-columns: 2fr 0.7fr 1.3fr;
+  gap: 10px 12px;
+}
+/* Vertical gap between two sub-grids inside the same section */
+.modal-subgrid-gap {
+  margin-top: 10px;
+}
 @media (max-width: 640px) {
   .modal-section-grid {
     grid-template-columns: 1fr;
+  }
+  .modal-section-grid-3,
+  .modal-grid-identity {
+    grid-template-columns: 1fr 1fr;
   }
 }
 .modal-field-full {
