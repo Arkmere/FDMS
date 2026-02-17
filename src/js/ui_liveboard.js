@@ -68,6 +68,37 @@ let historyExpandedId = null;
 // X-button path that calls closeModal().  This prevents keyHandler leaks that
 // accumulate over the session and cause toast storms on every Enter keypress.
 let _modalKeyHandler = null;
+// Invariant: _modalOpen === true iff a keyHandler is registered on document.
+// Checked by _checkModalInvariant() when __FDMS_DIAGNOSTICS__ is active.
+let _modalOpen = false;
+
+/**
+ * Diagnostics-gated modal state invariant checker.
+ * Only runs when window.__FDMS_DIAGNOSTICS__ is truthy.
+ * Records violations to window.__fdmsDiag.modalInvariantViolations[].
+ * @param {string} context - Call site label for the log message.
+ */
+function _checkModalInvariant(context) {
+  if (!window.__FDMS_DIAGNOSTICS__ || !window.__fdmsDiag) return;
+  const root = byId("modalRoot");
+  const hasContent = !!(root && root.children.length > 0);
+  const violations = window.__fdmsDiag.modalInvariantViolations =
+    window.__fdmsDiag.modalInvariantViolations || [];
+  if (_modalOpen && !_modalKeyHandler) {
+    console.warn(`[FDMS diag] Modal invariant @${context}: _modalOpen=true but _modalKeyHandler=null`);
+    violations.push({ context, violation: "open-no-handler", ts: Date.now() });
+  }
+  if (!_modalOpen && _modalKeyHandler) {
+    console.warn(`[FDMS diag] Modal invariant @${context}: _modalOpen=false but _modalKeyHandler is set (leaked)`);
+    violations.push({ context, violation: "closed-leaked-handler", ts: Date.now() });
+  }
+  if (_modalOpen && !hasContent) {
+    console.warn(`[FDMS diag] Modal invariant @${context}: _modalOpen=true but modalRoot is empty`);
+    violations.push({ context, violation: "open-no-content", ts: Date.now() });
+  }
+  // Expose as callable for console inspection
+  window.__fdmsDiag.checkModalInvariants = () => _checkModalInvariant("manual");
+}
 
 const state = {
   globalFilter: "",
@@ -1952,17 +1983,22 @@ function getTodayDateString() {
  * All save-handler paths that close the modal by clearing modalRoot must call
  * this instead of setting modalRoot.innerHTML = "" directly, so the keyHandler
  * is always removed and never leaks onto the document.
+ *
+ * Exported so that ui_booking.js (and any future modal owner) can call the same
+ * cleanup path regardless of which module opened the modal.
  */
-function closeActiveModal() {
+export function closeActiveModal() {
   if (_modalKeyHandler) {
     document.removeEventListener("keydown", _modalKeyHandler);
     _modalKeyHandler = null;
+    if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
+      window.__fdmsDiag.modalKeyHandlerLeaksFixed = (window.__fdmsDiag.modalKeyHandlerLeaksFixed || 0) + 1;
+    }
   }
-  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
-    window.__fdmsDiag.modalKeyHandlerLeaksFixed = (window.__fdmsDiag.modalKeyHandlerLeaksFixed || 0) + 1;
-  }
+  _modalOpen = false;
   const root = byId("modalRoot");
   if (root) root.innerHTML = "";
+  _checkModalInvariant("closeActiveModal");
 }
 
 function openModal(contentHtml) {
@@ -2013,6 +2049,8 @@ function openModal(contentHtml) {
     root.innerHTML = "";
     document.removeEventListener("keydown", _modalKeyHandler);
     _modalKeyHandler = null;
+    _modalOpen = false;
+    _checkModalInvariant("closeModal");
   };
 
   const keyHandler = (e) => {
@@ -2042,8 +2080,7 @@ function openModal(contentHtml) {
 
   // Register and track the handler so it can always be cleaned up.
   _modalKeyHandler = keyHandler;
-
-  // Click-outside-to-close removed - modal only closes via X button or Cancel button
+  _modalOpen = true;
 
   const minimizeModal = () => {
     backdrop.classList.add("minimized");
@@ -2068,6 +2105,7 @@ function openModal(contentHtml) {
   // Real save handler is bound after modal opens via specific save functions
 
   document.addEventListener("keydown", keyHandler);
+  _checkModalInvariant("openModal");
 }
 
 /**

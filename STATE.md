@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-17 (Europe/London) — P0 Inline Edit Time Field Data-Loss Fix
+Last updated: 2026-02-17 (Europe/London) — P0 Hardening: modal-clear policy enforcement, invariant check, stress test, engineering rules
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -749,6 +749,82 @@ All suites passing on Linux kernel 4.4, Node v22.22.0, Playwright 1.56.1, Chromi
 - No changes to counters, reporting logic, formation semantics, or timing semantics.
 - No speculative refactors. Only the fault path (modal keyHandler leak) and guardrails (stopPropagation, blur guard, persistence guard) were changed.
 - All existing test suites pass without modification.
+
+---
+
+### 4.10 P0 Hardening: Modal-Clear Policy Enforcement + Invariant Check
+
+**Date:** 2026-02-17
+**Branch:** `claude/fix-inline-edit-data-loss-QLjBR` (same branch — hardening continuation)
+**Priority:** P0 follow-up hardening
+
+#### Work completed
+
+**Task A — Zero direct `modalRoot.innerHTML` clears in codebase:**
+
+- `closeActiveModal()` in `ui_liveboard.js` marked `export`.
+- `ui_booking.js` updated:
+  - `import { closeActiveModal } from "./ui_liveboard.js"` added.
+  - All 4 modal open paths now call `closeActiveModal()` before assigning `modalRoot.innerHTML = \`…\``.
+  - All 9 modal close paths (Cancel, Save, Delete handlers across 4 modal functions) now call `closeActiveModal()` instead of `modalRoot.innerHTML = ''`.
+- Verified with `grep`: zero live `modalRoot.innerHTML = ''` or `modalRoot.innerHTML = ""` assignments remain in `src/js/`.
+
+**Task B — `_modalOpen` runtime invariant check (diagnostics-gated):**
+
+Added to `ui_liveboard.js`:
+- `let _modalOpen = false;` module-level tracking variable.
+- `_checkModalInvariant(context)` function — runs only when `window.__FDMS_DIAGNOSTICS__` is truthy.
+  - Warns if `_modalOpen && !_modalKeyHandler` (open-no-handler).
+  - Warns if `!_modalOpen && _modalKeyHandler` (closed-leaked-handler).
+  - Warns if `_modalOpen` but `modalRoot` is empty (open-no-content).
+  - Records violations to `window.__fdmsDiag.modalInvariantViolations[]`.
+  - Exposes `window.__fdmsDiag.checkModalInvariants()` for manual console invocation.
+- Called from: `openModal()` (after handler registration), `closeModal()` closure, `closeActiveModal()`.
+- `_modalOpen` is set to `true` in `openModal()` and `false` in both `closeModal()` and `closeActiveModal()`.
+
+**Task C — P0-T9 stress test (8-cycle modal stress):**
+
+Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
+- Seeds 1 ACTIVE movement.
+- Opens and saves the edit modal 8 times consecutively.
+- Then performs an inline-edit of the dep-time cell.
+- Asserts: 0 error toasts, live count unchanged, edited time persists after reload.
+- Harness now has 9 tests total.
+
+**Task D — Engineering rules documented:**
+
+- `DEV-SETUP.md` updated with "Engineering Rules" section covering:
+  - Rule 1: All modal close paths must call `closeActiveModal()` (never direct `innerHTML = ""`).
+  - Rule 2: All modal open paths must call `closeActiveModal()` first.
+  - Rule 3: Inline-edit key events must call `e.stopPropagation()`.
+  - Diagnostics activation instructions.
+- `STATE.md` (this section) updated.
+
+#### Engineering rules (condensed — see DEV-SETUP.md for full detail)
+
+| Rule | Requirement |
+|------|-------------|
+| 1 | All modal close paths call `closeActiveModal()` — never `modalRoot.innerHTML = ""` directly |
+| 2 | All modal open paths call `closeActiveModal()` first (before writing new content) |
+| 3 | Inline-edit `keydown` handlers call `e.stopPropagation()` on Enter and Escape |
+
+#### Deliverables checklist
+
+- [x] `closeActiveModal()` exported from `ui_liveboard.js`
+- [x] `ui_booking.js` imports `closeActiveModal`; all 13 direct clears replaced
+- [x] Zero remaining `modalRoot.innerHTML = ''` in production code (`src/js/`)
+- [x] `_modalOpen` tracking variable added to `ui_liveboard.js`
+- [x] `_checkModalInvariant()` diagnostics-gated function added and wired
+- [x] P0-T9 (8-cycle modal stress) added to `sprintP0_inline_edit_integrity_verify.mjs`
+- [x] Engineering rules added to `DEV-SETUP.md`
+- [x] `STATE.md` updated (this section)
+
+#### NO-DRIFT confirmation
+
+- No changes to counters, reporting logic, formation semantics, timing semantics, or UX behaviour.
+- The `closeActiveModal()` call on open paths is a no-op when `_modalKeyHandler` is already null (normal case); it is only protective for race conditions.
+- `_checkModalInvariant()` has zero runtime cost when `window.__FDMS_DIAGNOSTICS__` is falsy (first condition fails).
+- All existing test suites must continue to pass.
 
 ---
 

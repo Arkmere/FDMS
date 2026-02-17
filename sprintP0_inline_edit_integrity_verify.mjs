@@ -30,6 +30,8 @@
  *   P0-T6  Open+save modal N times, then inline-edit — no accumulated toasts
  *   P0-T7  Inline-edit while modal is minimised — only inline-edit saves
  *   P0-T8  Persistence: time field update survives page reload
+ *   P0-T9  8-cycle modal stress: open+save 8× then inline-edit — 0 error toasts,
+ *          stable live count, persisted dep-time after reload
  */
 
 import { chromium } from 'playwright';
@@ -494,6 +496,68 @@ async function countHistoryRows(page) {
         updatedTime !== '' && persistedTime === updatedTime,
         `afterEdit=${updatedTime} afterReload=${persistedTime}`,
         [ref8]);
+  }
+
+  // ── P0-T9: 8-cycle modal stress test ──────────────────────────────────────
+  {
+    console.log('\n[P0-T9] 8-cycle modal stress: open+save modal 8× then inline-edit — 0 error toasts, stable count, persist');
+    const stressMovement = makeMovement({ id: 801, callsignCode: 'BAW04', egowCode: 'VC', depPlanned: '10:00' });
+    await seedData(page, [stressMovement]);
+    const liveCountBefore = await countLiveRows(page);
+
+    // Run 8 open+save cycles — before fix each would leak a keyHandler onto document
+    const CYCLES = 8;
+    for (let i = 0; i < CYCLES; i++) {
+      const editDropdown = page.locator('#liveBody tr.strip-row .js-edit-dropdown').first();
+      if (await editDropdown.count() > 0) {
+        await editDropdown.click();
+        await page.waitForTimeout(200);
+        const editDetailsBtn = page.locator('.js-edit-details').first();
+        if (await editDetailsBtn.count() > 0) {
+          await editDetailsBtn.click();
+          await page.waitForTimeout(400);
+          const saveBtn = page.locator('.js-save-edit').first();
+          if (await saveBtn.count() > 0) {
+            await saveBtn.click();
+            await page.waitForTimeout(400);
+          } else {
+            // modal didn't open — close via Escape as fallback
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(200);
+          }
+        }
+      }
+    }
+
+    // Now inline-edit: with fix, exactly 0 error toasts regardless of cycle count
+    const toasts = await collectToasts(page, async () => {
+      await inlineEditDepTimeCell(page, '1600');
+    }, 3000);
+
+    const liveCountAfter = await countLiveRows(page);
+    const errorToasts = toasts.filter(t => t.type === 'error');
+
+    // Verify persistence after reload
+    const afterEdit = await getMovements(page);
+    const editedTime = afterEdit[0]
+      ? (afterEdit[0].depActual || afterEdit[0].depPlanned || '')
+      : '';
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForApp(page);
+    const afterReload = await getMovements(page);
+    const persistedTime = afterReload[0]
+      ? (afterReload[0].depActual || afterReload[0].depPlanned || '')
+      : '';
+
+    const ref9 = await ss(page, 'T9_8cycle_modal_stress');
+    const pass = errorToasts.length === 0
+      && liveCountBefore === liveCountAfter
+      && editedTime !== ''
+      && persistedTime === editedTime;
+    log('P0-T9', `8-cycle modal stress: 0 error toasts, stable count, persisted time`,
+        pass,
+        `cycles=${CYCLES} errorToasts=${errorToasts.length} liveBefore=${liveCountBefore} liveAfter=${liveCountAfter} editedTime=${editedTime} persistedTime=${persistedTime} allToasts=${JSON.stringify(toasts)}`,
+        [ref9]);
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────
