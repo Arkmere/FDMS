@@ -63,6 +63,12 @@ import {
 let expandedId = null;
 let historyExpandedId = null;
 
+// Tracks the active modal keyboard handler so it can always be cleaned up,
+// even when the modal is closed via modalRoot.innerHTML = "" rather than the
+// X-button path that calls closeModal().  This prevents keyHandler leaks that
+// accumulate over the session and cause toast storms on every Enter keypress.
+let _modalKeyHandler = null;
+
 const state = {
   globalFilter: "",
   plannedWindowHours: 24, // Show PLANNED movements within this many hours
@@ -293,13 +299,25 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
   input.focus();
   input.select();
 
-  // Guard: prevent double-fire from Enter + blur race
+  // Guard: prevent double-fire from Enter + blur race.  Once saved or
+  // definitively cancelled, further calls to saveEdit()/cancelEdit() are no-ops.
   let saved = false;
+  // Tracks whether the last save attempt failed validation (suppresses blur
+  // auto-save while the input is still shown for retry, without resetting the
+  // saved flag in a way that re-opens a race window).
+  let _lastSaveFailed = false;
 
   // Save function
   const saveEdit = () => {
     if (saved) return;
+
+    if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
+      window.__fdmsDiag.inlineEditSaveAttempts = (window.__fdmsDiag.inlineEditSaveAttempts || 0) + 1;
+      console.debug('[FDMS-diag] saveEdit called', { movementId, fieldName, inputType, value: input.value });
+    }
+
     saved = true;
+    _lastSaveFailed = false;
 
     let newValue = input.value.trim();
 
@@ -317,7 +335,11 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       const validation = validateTime(newValue);
       if (!validation.valid) {
         showToast(validation.error || 'Invalid time format', 'error');
-        saved = false; // Allow retry
+        // Reset saved so the user can correct and press Enter again.
+        // _lastSaveFailed=true prevents the blur handler from immediately
+        // re-triggering another save attempt while the error is still showing.
+        saved = false;
+        _lastSaveFailed = true;
         input.focus();
         return;
       }
@@ -325,15 +347,22 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       newValue = validation.normalized || newValue;
     }
 
-    // Patch semantics: update only the edited field, preserving all others
+    // --- Transactional update: validate then mutate, never the other way round ---
+    // Build the patch object first.
     const updateData = {};
     updateData[fieldName] = newValue || null;
+
+    // Commit to the data model.  updateMovement validates the id and returns
+    // null if the movement is not found; in that case do not render.
     const updatedMovement = updateMovement(movementId, updateData);
+    if (!updatedMovement) {
+      // Movement not found – silently restore the cell without touching state.
+      el.innerHTML = originalContent;
+      return;
+    }
 
     // Sync back to booking if this strip is linked
-    if (updatedMovement) {
-      onMovementUpdated(updatedMovement);
-    }
+    onMovementUpdated(updatedMovement);
 
     // Re-render
     renderLiveBoard();
@@ -351,11 +380,18 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     el.innerHTML = originalContent;
   };
 
+  // Clear _lastSaveFailed when the user changes the value, allowing blur-save
+  // to resume after the user corrects a bad time entry.
+  input.addEventListener('input', () => { _lastSaveFailed = false; });
+
   // Event handlers
   input.addEventListener('blur', () => {
     // Small delay to allow click events to register first
     setTimeout(() => {
-      if (!saved && document.activeElement !== input) {
+      // Do not auto-save on blur if the last attempt failed validation and
+      // the user has not yet typed a new value — the error toast was already
+      // shown and the input might still be visible for retry.
+      if (!saved && !_lastSaveFailed && document.activeElement !== input) {
         saveEdit();
       }
     }, 100);
@@ -363,10 +399,15 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
+      // stopPropagation prevents the event from reaching document-level handlers
+      // (e.g. the modal keyHandler) so that inline-edit Enter never accidentally
+      // triggers an open modal's save button at the same time.
       e.preventDefault();
+      e.stopPropagation();
       saveEdit();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       cancelEdit();
     }
   });
@@ -1906,7 +1947,37 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Close the currently active modal and remove its document keydown handler.
+ * All save-handler paths that close the modal by clearing modalRoot must call
+ * this instead of setting modalRoot.innerHTML = "" directly, so the keyHandler
+ * is always removed and never leaks onto the document.
+ */
+function closeActiveModal() {
+  if (_modalKeyHandler) {
+    document.removeEventListener("keydown", _modalKeyHandler);
+    _modalKeyHandler = null;
+  }
+  if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
+    window.__fdmsDiag.modalKeyHandlerLeaksFixed = (window.__fdmsDiag.modalKeyHandlerLeaksFixed || 0) + 1;
+  }
+  const root = byId("modalRoot");
+  if (root) root.innerHTML = "";
+}
+
 function openModal(contentHtml) {
+  // Remove any previous keyHandler before opening a new modal.
+  // This guards against the case where a prior modal was closed without going
+  // through closeModal() (e.g. by a save handler that used modalRoot.innerHTML
+  // directly before this fix was applied).
+  if (_modalKeyHandler) {
+    document.removeEventListener("keydown", _modalKeyHandler);
+    _modalKeyHandler = null;
+    if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
+      window.__fdmsDiag.modalKeyHandlerLeaksPrevented = (window.__fdmsDiag.modalKeyHandlerLeaksPrevented || 0) + 1;
+    }
+  }
+
   const root = byId("modalRoot");
   if (!root) return;
 
@@ -1940,19 +2011,25 @@ function openModal(contentHtml) {
 
   const closeModal = () => {
     root.innerHTML = "";
-    document.removeEventListener("keydown", keyHandler);
+    document.removeEventListener("keydown", _modalKeyHandler);
+    _modalKeyHandler = null;
   };
 
   const keyHandler = (e) => {
     if (e.key === "Escape") {
       closeModal();
     } else if (e.key === "Enter" && !e.shiftKey) {
-      // Enter-to-save: trigger the primary save button
-      // Skip if focused on textarea (to allow multi-line input)
+      // Enter-to-save: trigger the primary save button.
+      // Skip if focused on a textarea (to allow multi-line input) or an inline-
+      // edit input (those handle Enter themselves and stop propagation).
       const activeEl = document.activeElement;
-      if (activeEl && activeEl.tagName === "TEXTAREA") {
+      if (activeEl && (activeEl.tagName === "TEXTAREA" || activeEl.classList.contains("inline-edit-input"))) {
         return;
       }
+
+      // Only act if the save button is in a CONNECTED (live) modal, not in a
+      // detached/stale backdrop captured in a leaked closure.
+      if (!backdrop || !backdrop.isConnected) return;
 
       // Find the primary save button
       const saveBtn = backdrop?.querySelector(".js-save-flight, .js-save-loc, .js-save-edit, .js-save-dup");
@@ -1962,6 +2039,9 @@ function openModal(contentHtml) {
       }
     }
   };
+
+  // Register and track the handler so it can always be cleaned up.
+  _modalKeyHandler = keyHandler;
 
   // Click-outside-to-close removed - modal only closes via X button or Cancel button
 
@@ -2679,9 +2759,8 @@ function openNewFlightModal(flightType = "DEP") {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement created successfully", 'success');
 
-    // Close modal
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    // Close modal (also removes the document keydown handler to prevent leaks)
+    closeActiveModal();
   });
 
   // Bind "Save & Complete" handler - creates movement and immediately marks as completed
@@ -2807,9 +2886,8 @@ function openNewFlightModal(flightType = "DEP") {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement created and completed", 'success');
 
-    // Close modal
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    // Close modal (also removes the document keydown handler to prevent leaks)
+    closeActiveModal();
   });
 }
 
@@ -3340,8 +3418,7 @@ function openNewLocFlightModal() {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Local flight created successfully", 'success');
 
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    closeActiveModal();
   });
 
   // Bind "Save & Complete" handler
@@ -3446,8 +3523,7 @@ function openNewLocFlightModal() {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Local flight created and completed", 'success');
 
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    closeActiveModal();
   });
 }
 
@@ -4146,9 +4222,8 @@ function openEditMovementModal(m) {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement updated successfully", 'success');
 
-    // Close modal
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    // Close modal (also removes the document keydown handler to prevent leaks)
+    closeActiveModal();
   });
 
   // Bind "Save & Complete" handler for edit modal
@@ -4272,8 +4347,7 @@ function openEditMovementModal(m) {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement saved and completed", 'success');
 
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    closeActiveModal();
   });
 }
 
@@ -4574,9 +4648,8 @@ function openDuplicateMovementModal(m) {
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Duplicate movement created successfully", 'success');
 
-    // Close modal
-    const modalRoot = document.getElementById("modalRoot");
-    if (modalRoot) modalRoot.innerHTML = "";
+    // Close modal (also removes the document keydown handler to prevent leaks)
+    closeActiveModal();
   });
 }
 

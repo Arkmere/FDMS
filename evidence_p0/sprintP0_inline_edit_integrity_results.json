@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-02-17T13:28:26.044Z",
+  "runMetadata": {
+    "sprint": "P0",
+    "fix": "inline-edit-data-loss-QLjBR",
+    "node": "v22.22.0",
+    "platform": "linux",
+    "appUrl": "http://localhost:8765/"
+  },
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8
+  },
+  "results": [
+    {
+      "id": "P0-T1",
+      "title": "No error toasts on valid inline-edit commit",
+      "status": "PASS",
+      "note": "toasts=[]",
+      "refs": [
+        "P0_01_T1_after_valid_edit.png"
+      ]
+    },
+    {
+      "id": "P0-T2",
+      "title": "Exactly one error toast, data not mutated on invalid time",
+      "status": "PASS",
+      "note": "errorToasts=1 originalTime=10:00 timeAfter=10:00",
+      "refs": [
+        "P0_02_T2_invalid_time_error.png"
+      ]
+    },
+    {
+      "id": "P0-T3",
+      "title": "Live/Pending row count unchanged after inline-edit",
+      "status": "PASS",
+      "note": "before=3 after=3",
+      "refs": [
+        "P0_03_T3_live_count_stable.png"
+      ]
+    },
+    {
+      "id": "P0-T4",
+      "title": "History row count unchanged after inline-edit",
+      "status": "PASS",
+      "note": "before=0 after=0",
+      "refs": [
+        "P0_04_T4_history_count_stable.png"
+      ]
+    },
+    {
+      "id": "P0-T5",
+      "title": "Repeated inline-edits produce no error toasts and keep count stable",
+      "status": "PASS",
+      "note": "startCount=2 endCount=2 errorToasts=0 allToasts=[]",
+      "refs": [
+        "P0_05_T5_repeated_edits.png"
+      ]
+    },
+    {
+      "id": "P0-T6",
+      "title": "No error toast storm after 3 modal open+save cycles",
+      "status": "PASS",
+      "note": "errorToasts=0 allToasts=[]",
+      "refs": [
+        "P0_06_T6_post_modal_saves_no_storm.png"
+      ]
+    },
+    {
+      "id": "P0-T7",
+      "title": "Inline-edit while modal minimised does not trigger modal save path",
+      "status": "PASS",
+      "note": "modalSaveToasts=0 errorToasts=0 allToasts=[]",
+      "refs": [
+        "P0_07_T7_no_modal_save_on_inline_edit.png"
+      ]
+    },
+    {
+      "id": "P0-T8",
+      "title": "Inline-edit time value persists across page reload",
+      "status": "PASS",
+      "note": "afterEdit=15:00 afterReload=15:00",
+      "refs": [
+        "P0_08_T8_persistence_after_reload.png"
+      ]
+    }
+  ]
+}
