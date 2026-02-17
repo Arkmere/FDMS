@@ -2055,22 +2055,38 @@ function openNewFlightModal(flightType = "DEP") {
       <!-- Identity Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Identity</h3>
-        <div class="modal-section-grid">
+        <div class="modal-grid-identity">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
             <input id="newCallsignCode" class="modal-input" placeholder="e.g. BAW, CONNECT, G-BYUN" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Flight Number</label>
-            <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123, 01" />
+            <input id="newFlightNumber" class="modal-input" placeholder="e.g. 123" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Registration</label>
-            <input id="newReg" class="modal-input" placeholder="e.g. ZM300, G-BYUN" />
+            <input id="newReg" class="modal-input" placeholder="e.g. G-BYUN" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
             <input id="newType" class="modal-input is-derived" placeholder="Auto-filled" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">WTC</label>
+            <input id="newWtcDisplay" class="modal-input is-derived" placeholder="Auto" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Priority</label>
+            <select id="priorityLetter" class="modal-select">
+              <option value="">-</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+              <option value="Z">Z</option>
+            </select>
           </div>
         </div>
       </section>
@@ -2078,7 +2094,7 @@ function openNewFlightModal(flightType = "DEP") {
       <!-- Plan Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Plan</h3>
-        <div class="modal-section-grid">
+        <div class="modal-section-grid-3">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
             <select id="newFlightType" class="modal-select">
@@ -2099,27 +2115,18 @@ function openNewFlightModal(flightType = "DEP") {
             </select>
           </div>
           <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="newPob" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
             <label class="modal-label">Departure AD</label>
             <input id="newDepAd" class="modal-input" placeholder="EGOS or Shawbury" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
             <input id="newArrAd" class="modal-input" placeholder="EGOW or Woodvale" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
-          </div>
-          <div class="modal-field modal-field-priority">
-            <label class="modal-label">
-              <input type="checkbox" id="priorityEnabled" style="margin-right: 6px;" />
-              Priority
-            </label>
-            <select id="priorityLetter" class="modal-select" disabled>
-              <option value="">-</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-              <option value="Z">Z</option>
-            </select>
           </div>
         </div>
       </section>
@@ -2161,11 +2168,21 @@ function openNewFlightModal(flightType = "DEP") {
       <!-- Operational Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Operational</h3>
-        <div class="modal-section-grid">
+        <div class="modal-section-grid-3">
           <div class="modal-field">
-            <label class="modal-label">POB</label>
-            <input id="newPob" class="modal-input" type="number" value="0" min="0" />
+            <label class="modal-label">T&amp;G</label>
+            <input id="newTng" class="modal-input" type="number" value="0" min="0" />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">O/S</label>
+            <input id="newOsCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="newFisCount" class="modal-input" type="number" value="${flightType === "OVR" ? "1" : "0"}" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM" list="egowCodeOptions" />
@@ -2182,18 +2199,6 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
             <input id="newUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">T&amp;G</label>
-            <input id="newTng" class="modal-input" type="number" value="0" min="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">O/S</label>
-            <input id="newOsCount" class="modal-input" type="number" value="0" min="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">FIS</label>
-            <input id="newFisCount" class="modal-input" type="number" value="${flightType === "OVR" ? "1" : "0"}" min="0" />
           </div>
         </div>
       </section>
@@ -2386,17 +2391,16 @@ function openNewFlightModal(flightType = "DEP") {
     });
   });
 
-  // Wire Priority checkbox/dropdown
-  const priorityEnabled = document.getElementById('priorityEnabled');
-  const priorityLetter = document.getElementById('priorityLetter');
-  if (priorityEnabled && priorityLetter) {
-    priorityEnabled.addEventListener('change', () => {
-      priorityLetter.disabled = !priorityEnabled.checked;
-      if (!priorityEnabled.checked) {
-        priorityLetter.value = '';
-      }
-    });
-  }
+  // WTC display: update when type or flight type changes
+  const wtcDisplay = document.getElementById('newWtcDisplay');
+  const updateWtcDisplay = () => {
+    if (!wtcDisplay) return;
+    const t = document.getElementById('newType')?.value || '';
+    const ft = document.getElementById('newFlightType')?.value || flightType;
+    wtcDisplay.value = t ? (getWTC(t, ft, getConfig().wtcSystem || 'ICAO') || '') : '';
+  };
+  document.getElementById('newType')?.addEventListener('input', updateWtcDisplay);
+  document.getElementById('newFlightType')?.addEventListener('change', updateWtcDisplay);
 
   // Wire formation count input — rebuild element rows when count or base callsign changes
   const getNewFlightCallsign = () =>
@@ -2604,9 +2608,9 @@ function openNewFlightModal(flightType = "DEP") {
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
-    // Get new optional fields
-    const priorityEnabledCheck = document.getElementById("priorityEnabled")?.checked || false;
-    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("priorityLetter")?.value || "") : "";
+    // Priority is now a plain select; empty string or "-" means no priority
+    const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
+    const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
     const remarksValue = document.getElementById("rwRemarks")?.value || "";
     const warningsValue = document.getElementById("rwWarnings")?.value || "";
     const notesValue = regData ? (regData['NOTES'] || "") : ""; // Keep notes from VKB for backward compatibility
@@ -2740,8 +2744,8 @@ function openNewFlightModal(flightType = "DEP") {
     const arrAd = document.getElementById("newArrAd")?.value || "";
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
-    const priorityEnabledCheck = document.getElementById("priorityEnabled")?.checked || false;
-    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("priorityLetter")?.value || "") : "";
+    const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
+    const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
     const remarksValue = document.getElementById("rwRemarks")?.value || "";
     const warningsValue = document.getElementById("rwWarnings")?.value || "";
     const notesValue = regData ? (regData['NOTES'] || "") : "";
@@ -2831,7 +2835,7 @@ function openNewLocFlightModal() {
       <!-- IDENTITY Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Identity</h3>
-        <div class="modal-section-grid">
+        <div class="modal-grid-identity">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
             <input id="newLocCallsignCode" class="modal-input" placeholder="e.g. UAM, WOODVALE, G-BYUN" />
@@ -2848,13 +2852,29 @@ function openNewLocFlightModal() {
             <label class="modal-label">Aircraft Type</label>
             <input id="newLocType" class="modal-input is-derived" placeholder="Auto-filled" />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">WTC</label>
+            <input id="newLocWtcDisplay" class="modal-input is-derived" placeholder="Auto" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Priority</label>
+            <select id="locPriorityLetter" class="modal-select">
+              <option value="">-</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+              <option value="Z">Z</option>
+            </select>
+          </div>
         </div>
       </section>
 
       <!-- PLAN Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Plan</h3>
-        <div class="modal-section-grid">
+        <div class="modal-section-grid-3">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
             <input class="modal-input" value="LOC" disabled />
@@ -2870,27 +2890,18 @@ function openNewLocFlightModal() {
             </select>
           </div>
           <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="newLocPob" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
             <label class="modal-label">Departure AD</label>
             <input class="modal-input" value="EGOW" disabled />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
             <input class="modal-input" value="EGOW" disabled />
-          </div>
-          <div class="modal-field modal-field-priority">
-            <label class="modal-label">
-              <input type="checkbox" id="locPriorityEnabled" style="margin-right: 6px;" />
-              Priority
-            </label>
-            <select id="locPriorityLetter" class="modal-select" disabled>
-              <option value="">-</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-              <option value="Z">Z</option>
-            </select>
           </div>
         </div>
       </section>
@@ -2932,11 +2943,21 @@ function openNewLocFlightModal() {
       <!-- OPERATIONAL Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Operational</h3>
-        <div class="modal-section-grid">
+        <div class="modal-section-grid-3">
           <div class="modal-field">
-            <label class="modal-label">POB</label>
-            <input id="newLocPob" class="modal-input" type="number" value="0" min="0" />
+            <label class="modal-label">T&amp;G</label>
+            <input id="newLocTng" class="modal-input" type="number" value="0" min="0" />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">O/S</label>
+            <input id="newLocOsCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">FIS</label>
+            <input id="newLocFisCount" class="modal-input" type="number" value="0" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newLocEgowCode" class="modal-input is-derived" placeholder="e.g. BM, VM" list="locEgowCodeOptions" />
@@ -2953,18 +2974,6 @@ function openNewLocFlightModal() {
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
             <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">T&amp;G</label>
-            <input id="newLocTng" class="modal-input" type="number" value="0" min="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">O/S</label>
-            <input id="newLocOsCount" class="modal-input" type="number" value="0" min="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">FIS</label>
-            <input id="newLocFisCount" class="modal-input" type="number" value="0" min="0" />
           </div>
         </div>
       </section>
@@ -3051,6 +3060,15 @@ function openNewLocFlightModal() {
   const pobInput = document.getElementById("newLocPob");
   const egowCodeInput = document.getElementById("newLocEgowCode");
   const unitCodeInput = document.getElementById("newLocUnitCode");
+
+  // WTC display auto-update
+  const locWtcDisplay = document.getElementById('newLocWtcDisplay');
+  const updateLocWtcDisplay = () => {
+    if (!locWtcDisplay) return;
+    const t = typeInput?.value || '';
+    locWtcDisplay.value = t ? (getWTC(t, 'LOC', getConfig().wtcSystem || 'ICAO') || '') : '';
+  };
+  typeInput?.addEventListener('input', updateLocWtcDisplay);
 
   // Apply automatic uppercase conversion to aviation-related fields
   makeInputUppercase(callsignCodeInput);
@@ -3142,16 +3160,6 @@ function openNewLocFlightModal() {
 
   if (callsignCodeInput) callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
   if (flightNumberInput) flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
-
-  // Wire Priority checkbox/dropdown
-  const locPriorityEnabled = document.getElementById('locPriorityEnabled');
-  const locPriorityLetter = document.getElementById('locPriorityLetter');
-  if (locPriorityEnabled && locPriorityLetter) {
-    locPriorityEnabled.addEventListener('change', () => {
-      locPriorityLetter.disabled = !locPriorityEnabled.checked;
-      if (!locPriorityEnabled.checked) locPriorityLetter.value = '';
-    });
-  }
 
   // Wire formation section
   const getLocCallsign = () =>
@@ -3271,8 +3279,8 @@ function openNewLocFlightModal() {
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
 
-    const priorityEnabledCheck = document.getElementById("locPriorityEnabled")?.checked || false;
-    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("locPriorityLetter")?.value || "") : "";
+    const priorityLetterRaw = document.getElementById("locPriorityLetter")?.value || "";
+    const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
     const remarksValue = document.getElementById("newLocRemarks")?.value || "";
     const warningsValue = document.getElementById("newLocWarnings")?.value || "";
     const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
@@ -3377,8 +3385,8 @@ function openNewLocFlightModal() {
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
 
-    const priorityEnabledCheck = document.getElementById("locPriorityEnabled")?.checked || false;
-    const priorityLetterValue = priorityEnabledCheck ? (document.getElementById("locPriorityLetter")?.value || "") : "";
+    const locCpPriorityRaw = document.getElementById("locPriorityLetter")?.value || "";
+    const priorityLetterValue = locCpPriorityRaw === "-" ? "" : locCpPriorityRaw;
     const remarksValue = document.getElementById("newLocRemarks")?.value || "";
     const warningsValue = document.getElementById("newLocWarnings")?.value || "";
     const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
@@ -3473,7 +3481,7 @@ function openEditMovementModal(m) {
       <!-- Identity Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Identity</h3>
-        <div class="modal-section-grid">
+        <div class="modal-grid-identity">
           <div class="modal-field">
             <label class="modal-label">Callsign Code</label>
             <input id="editCallsignCode" class="modal-input" value="${escapeHtml(callsignCode)}" placeholder="e.g. BAW, CONNECT, G-BYUN" />
@@ -3490,13 +3498,29 @@ function openEditMovementModal(m) {
             <label class="modal-label">Aircraft Type</label>
             <input id="editType" class="modal-input is-derived" value="${escapeHtml(m.type || "")}" />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">WTC</label>
+            <input id="editWtcDisplay" class="modal-input is-derived" value="${escapeHtml(m.wtc || "")}" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Priority</label>
+            <select id="editPriorityLetter" class="modal-select">
+              <option value="" ${!hasPriority ? "selected" : ""}>-</option>
+              <option value="A" ${m.priorityLetter === "A" ? "selected" : ""}>A</option>
+              <option value="B" ${m.priorityLetter === "B" ? "selected" : ""}>B</option>
+              <option value="C" ${m.priorityLetter === "C" ? "selected" : ""}>C</option>
+              <option value="D" ${m.priorityLetter === "D" ? "selected" : ""}>D</option>
+              <option value="E" ${m.priorityLetter === "E" ? "selected" : ""}>E</option>
+              <option value="Z" ${m.priorityLetter === "Z" ? "selected" : ""}>Z</option>
+            </select>
+          </div>
         </div>
       </section>
 
       <!-- Plan Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Plan</h3>
-        <div class="modal-section-grid">
+        <div class="modal-section-grid-3">
           <div class="modal-field">
             <label class="modal-label">Flight Type</label>
             <select id="editFlightType" class="modal-select" ${flightType === "LOC" ? "disabled" : ""}>
@@ -3517,27 +3541,18 @@ function openEditMovementModal(m) {
             </select>
           </div>
           <div class="modal-field">
+            <label class="modal-label">POB</label>
+            <input id="editPob" class="modal-input" type="number" value="${m.pob || 0}" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
             <label class="modal-label">Departure AD</label>
             <input id="editDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
             <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
-          </div>
-          <div class="modal-field modal-field-priority">
-            <label class="modal-label">
-              <input type="checkbox" id="editPriorityEnabled" ${hasPriority ? "checked" : ""} style="margin-right: 6px;" />
-              Priority
-            </label>
-            <select id="editPriorityLetter" class="modal-select" ${hasPriority ? "" : "disabled"}>
-              <option value="">-</option>
-              <option value="A" ${m.priorityLetter === "A" ? "selected" : ""}>A</option>
-              <option value="B" ${m.priorityLetter === "B" ? "selected" : ""}>B</option>
-              <option value="C" ${m.priorityLetter === "C" ? "selected" : ""}>C</option>
-              <option value="D" ${m.priorityLetter === "D" ? "selected" : ""}>D</option>
-              <option value="E" ${m.priorityLetter === "E" ? "selected" : ""}>E</option>
-              <option value="Z" ${m.priorityLetter === "Z" ? "selected" : ""}>Z</option>
-            </select>
           </div>
         </div>
       </section>
@@ -3597,19 +3612,7 @@ function openEditMovementModal(m) {
       <!-- Operational Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Operational</h3>
-        <div class="modal-section-grid">
-          <div class="modal-field">
-            <label class="modal-label">POB</label>
-            <input id="editPob" class="modal-input" type="number" value="${m.pob || 0}" min="0" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
-            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">EGOW Unit</label>
-            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
-          </div>
+        <div class="modal-section-grid-3">
           <div class="modal-field">
             <label class="modal-label">T&amp;G</label>
             <input id="editTng" class="modal-input" type="number" value="${m.tngCount || 0}" min="0" />
@@ -3621,6 +3624,16 @@ function openEditMovementModal(m) {
           <div class="modal-field">
             <label class="modal-label">FIS</label>
             <input id="editFisCount" class="modal-input" type="number" value="${m.fisCount || 0}" min="0" />
+          </div>
+        </div>
+        <div class="modal-section-grid modal-subgrid-gap">
+          <div class="modal-field">
+            <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
+            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">EGOW Unit</label>
+            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
           </div>
         </div>
       </section>
@@ -3806,6 +3819,17 @@ function openEditMovementModal(m) {
     flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
   }
 
+  // WTC display auto-update
+  const editWtcDisplay = document.getElementById('editWtcDisplay');
+  const updateEditWtcDisplay = () => {
+    if (!editWtcDisplay) return;
+    const t = document.getElementById('editType')?.value || '';
+    const ft = document.getElementById('editFlightType')?.value || flightType;
+    editWtcDisplay.value = t ? (getWTC(t, ft, getConfig().wtcSystem || 'ICAO') || '') : '';
+  };
+  document.getElementById('editType')?.addEventListener('input', updateEditWtcDisplay);
+  document.getElementById('editFlightType')?.addEventListener('change', updateEditWtcDisplay);
+
   // Wire collapsible sections
   document.querySelectorAll('.modal-expander').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3818,18 +3842,6 @@ function openEditMovementModal(m) {
       btn.querySelector('.expander-icon').textContent = isExpanded ? '▶' : '▼';
     });
   });
-
-  // Wire Priority checkbox/dropdown
-  const editPriorityEnabled = document.getElementById('editPriorityEnabled');
-  const editPriorityLetter = document.getElementById('editPriorityLetter');
-  if (editPriorityEnabled && editPriorityLetter) {
-    editPriorityEnabled.addEventListener('change', () => {
-      editPriorityLetter.disabled = !editPriorityEnabled.checked;
-      if (!editPriorityEnabled.checked) {
-        editPriorityLetter.value = '';
-      }
-    });
-  }
 
   // Wire formation section — pre-populate element rows and bind count input
   const getEditCallsign = () =>
@@ -4064,8 +4076,8 @@ function openEditMovementModal(m) {
     const arrName = getLocationName(arrAd);
 
     // Get new optional fields
-    const editPriorityEnabledCheck = document.getElementById("editPriorityEnabled")?.checked || false;
-    const editPriorityLetterValue = editPriorityEnabledCheck ? (document.getElementById("editPriorityLetter")?.value || "") : "";
+    const editPriorityLetterRaw = document.getElementById("editPriorityLetter")?.value || "";
+    const editPriorityLetterValue = editPriorityLetterRaw === "-" ? "" : editPriorityLetterRaw;
     const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
     const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
     const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
@@ -4200,8 +4212,8 @@ function openEditMovementModal(m) {
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
-    const editPriorityEnabledCheck = document.getElementById("editPriorityEnabled")?.checked || false;
-    const editPriorityLetterValue = editPriorityEnabledCheck ? (document.getElementById("editPriorityLetter")?.value || "") : "";
+    const editCpPriorityRaw = document.getElementById("editPriorityLetter")?.value || "";
+    const editPriorityLetterValue = editCpPriorityRaw === "-" ? "" : editCpPriorityRaw;
     const editRemarksValue = document.getElementById("editRwRemarks")?.value || "";
     const editWarningsValue = document.getElementById("editRwWarnings")?.value || "";
     const editOsCountValue = parseInt(document.getElementById("editOsCount")?.value || "0", 10);
