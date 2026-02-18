@@ -256,6 +256,118 @@ function escapeHtml(s) {
    Inline Edit Helpers
 ------------------------------ */
 
+/* -----------------------------
+   Inline-edit Tab order
+------------------------------ */
+
+/**
+ * Maps data-model fieldName → CSS selector for the inline-editable cell.
+ * Time fields (dep/arr) have two possible fieldNames (planned vs actual)
+ * that both map to the same cell selector.
+ */
+const _INLINE_FIELD_TO_SELECTOR = {
+  callsignCode:  '.js-edit-callsign',
+  callsignVoice: '.js-edit-voice',
+  registration:  '.js-edit-reg',
+  type:          '.js-edit-type',
+  wtc:           '.js-edit-wtc',
+  depAd:         '.js-edit-dep-ad',
+  arrAd:         '.js-edit-arr-ad',
+  rules:         '.js-edit-rules',
+  depActual:     '.js-edit-dep-time',
+  depPlanned:    '.js-edit-dep-time',
+  arrActual:     '.js-edit-arr-time',
+  arrPlanned:    '.js-edit-arr-time',
+  tngCount:      '.js-edit-tng',
+  osCount:       '.js-edit-os',
+  fisCount:      '.js-edit-fis',
+  remarks:       '.js-edit-remarks',
+};
+
+/**
+ * Build the ordered list of applicable tab stops for a row + movement.
+ * Returns only entries whose selector resolves to an element in rowEl.
+ */
+function _buildTabOrder(rowEl, movement) {
+  const ft = (movement.flightType || '').toUpperCase();
+  const slots = [
+    { selector: '.js-edit-callsign',  inputType: 'text',
+      fieldName: () => 'callsignCode',  applicable: true },
+    { selector: '.js-edit-voice',     inputType: 'text',
+      fieldName: () => 'callsignVoice', applicable: true },
+    { selector: '.js-edit-reg',       inputType: 'text',
+      fieldName: () => 'registration',  applicable: true },
+    { selector: '.js-edit-type',      inputType: 'text',
+      fieldName: () => 'type',          applicable: true },
+    { selector: '.js-edit-wtc',       inputType: 'text',
+      fieldName: () => 'wtc',           applicable: true },
+    // Dep AD: editable for OVR (origin can be updated) and ARR (where they came from)
+    { selector: '.js-edit-dep-ad',    inputType: 'text',
+      fieldName: () => 'depAd',         applicable: ft === 'OVR' || ft === 'ARR' },
+    // Arr AD: editable for OVR and DEP (destination)
+    { selector: '.js-edit-arr-ad',    inputType: 'text',
+      fieldName: () => 'arrAd',         applicable: ft === 'OVR' || ft === 'DEP' },
+    { selector: '.js-edit-rules',     inputType: 'text',
+      fieldName: () => 'rules',         applicable: true },
+    { selector: '.js-edit-dep-time',  inputType: 'time',
+      fieldName: (m) => m.depActual ? 'depActual' : 'depPlanned',
+      applicable: ft === 'DEP' || ft === 'LOC' || ft === 'OVR' },
+    { selector: '.js-edit-arr-time',  inputType: 'time',
+      fieldName: (m) => m.arrActual ? 'arrActual' : 'arrPlanned',
+      applicable: ft === 'ARR' || ft === 'LOC' },
+    // field 11 is NOT inline-editable — skipped
+    { selector: '.js-edit-tng',       inputType: 'number',
+      fieldName: () => 'tngCount',      applicable: true },
+    { selector: '.js-edit-os',        inputType: 'number',
+      fieldName: () => 'osCount',       applicable: true },
+    { selector: '.js-edit-fis',       inputType: 'number',
+      fieldName: () => 'fisCount',      applicable: true },
+    { selector: '.js-edit-remarks',   inputType: 'text',
+      fieldName: () => 'remarks',       applicable: true },
+  ];
+  return slots
+    .filter(s => s.applicable)
+    .map(s => ({ ...s, el: rowEl.querySelector(s.selector) || null,
+                        resolvedFieldName: s.fieldName(movement) }))
+    .filter(s => s.el !== null);
+}
+
+/**
+ * After a successful Tab-commit, re-query the (newly rendered) DOM and open
+ * the next (or previous, for Shift+Tab) applicable inline-edit field.
+ * Wraps from last→first and first→last.
+ *
+ * @param {string|number} movementId - ID of the movement being edited
+ * @param {string}        currentFieldName - fieldName that was just committed
+ * @param {'forward'|'backward'} direction
+ */
+function advanceInlineEditor(movementId, currentFieldName, direction) {
+  // renderLiveBoard() has already run, so we must re-query the new DOM.
+  const rowEl = document.querySelector(`#liveBody tr[data-id="${movementId}"]`);
+  if (!rowEl) return;
+
+  const movement = getMovements().find(m => String(m.id) === String(movementId));
+  if (!movement) return;
+
+  const tabs = _buildTabOrder(rowEl, movement);
+  if (tabs.length === 0) return;
+
+  const currentSelector = _INLINE_FIELD_TO_SELECTOR[currentFieldName];
+  const currentIdx = currentSelector
+    ? tabs.findIndex(t => t.selector === currentSelector)
+    : -1;
+
+  const len = tabs.length;
+  const delta = direction === 'backward' ? -1 : 1;
+  const nextIdx = currentIdx === -1
+    ? 0
+    : ((currentIdx + delta) % len + len) % len;
+
+  const next = tabs[nextIdx];
+  next.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  startInlineEdit(next.el, movementId, next.resolvedFieldName, next.inputType, null);
+}
+
 /**
  * Create inline edit functionality for a field
  * @param {HTMLElement} el - The element to make editable
@@ -322,6 +434,12 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       const newPos = Math.min(cursorPos, digitsOnly.length);
       e.target.setSelectionRange(newPos, newPos);
     });
+  } else if (inputType === 'number') {
+    input.placeholder = '0';
+    // Only allow digits for counter fields
+    input.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
   }
 
   // Clear element and add input
@@ -339,8 +457,10 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
   let _lastSaveFailed = false;
 
   // Save function
+  // saveEdit returns true on success, false on any validation or data-model failure.
+  // Tab navigation checks this return value: if false, focus stays on the current cell.
   const saveEdit = () => {
-    if (saved) return;
+    if (saved) return false;
 
     if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
       window.__fdmsDiag.inlineEditSaveAttempts = (window.__fdmsDiag.inlineEditSaveAttempts || 0) + 1;
@@ -352,56 +472,93 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
     let newValue = input.value.trim();
 
-    // Required field validation: reject blanking required fields
+    // ── Required-field guard ───────────────────────────────────────────────
     const requiredFields = ['callsignCode'];
     if (requiredFields.includes(fieldName) && !newValue) {
       showToast(`${fieldName === 'callsignCode' ? 'Callsign Code' : fieldName} cannot be blank`, 'error');
       el.innerHTML = originalContent;
-      return;
+      return false;
     }
 
-    // Validate and normalize time format if time type
+    // ── Time format validation ─────────────────────────────────────────────
     if (inputType === 'time' && newValue) {
-      // Use validateTime which handles both HHMM and HH:MM
       const validation = validateTime(newValue);
       if (!validation.valid) {
         showToast(validation.error || 'Invalid time format', 'error');
-        // Reset saved so the user can correct and press Enter again.
-        // _lastSaveFailed=true prevents the blur handler from immediately
-        // re-triggering another save attempt while the error is still showing.
         saved = false;
         _lastSaveFailed = true;
         input.focus();
-        return;
+        return false;
       }
-      // Use the normalized value (HH:MM format)
       newValue = validation.normalized || newValue;
     }
 
-    // --- Transactional update: validate then mutate, never the other way round ---
-    // Build the patch object first.
-    const updateData = {};
-    updateData[fieldName] = newValue || null;
-
-    // Commit to the data model.  updateMovement validates the id and returns
-    // null if the movement is not found; in that case do not render.
-    const updatedMovement = updateMovement(movementId, updateData);
-    if (!updatedMovement) {
-      // Movement not found – silently restore the cell without touching state.
-      el.innerHTML = originalContent;
-      return;
+    // ── WTC validation ─────────────────────────────────────────────────────
+    if (fieldName === 'wtc' && newValue) {
+      const upper = newValue.toUpperCase();
+      if (!isValidWtcChar(upper)) {
+        showToast('Invalid WTC category', 'error');
+        saved = false;
+        _lastSaveFailed = true;
+        input.focus();
+        return false;
+      }
+      newValue = upper;
     }
 
-    // Sync back to booking if this strip is linked
+    // ── Flight rules normalisation ─────────────────────────────────────────
+    if (fieldName === 'rules' && newValue) {
+      const rulesMap = { I: 'IFR', V: 'VFR', S: 'SVFR', Y: 'Y', Z: 'Z',
+                         IFR: 'IFR', VFR: 'VFR', SVFR: 'SVFR' };
+      const normalised = rulesMap[newValue.toUpperCase()];
+      if (!normalised) {
+        showToast('Invalid flight rules — use IFR, VFR, SVFR, Y or Z', 'error');
+        saved = false;
+        _lastSaveFailed = true;
+        input.focus();
+        return false;
+      }
+      newValue = normalised;
+    }
+
+    // ── Counter validation (tngCount, osCount, fisCount) ───────────────────
+    const counterFields = ['tngCount', 'osCount', 'fisCount'];
+    let storedValue = newValue || null;
+    if (counterFields.includes(fieldName)) {
+      const num = parseInt(newValue || '0', 10);
+      if (isNaN(num) || num < 0) {
+        showToast('Must be a non-negative number', 'error');
+        saved = false;
+        _lastSaveFailed = true;
+        input.focus();
+        return false;
+      }
+      storedValue = num;
+    }
+
+    // ── Transactional update ───────────────────────────────────────────────
+    const updateData = {};
+    updateData[fieldName] = storedValue;
+
+    const updatedMovement = updateMovement(movementId, updateData);
+    if (!updatedMovement) {
+      el.innerHTML = originalContent;
+      return false;
+    }
+
     onMovementUpdated(updatedMovement);
 
-    // Re-render
+    // Re-render — renderLiveBoard already calls renderTimeline at its end, but
+    // renderTimelineTracks is also called explicitly so timeline always stays
+    // in sync with the committed edit (guards against future refactors).
     renderLiveBoard();
     renderHistoryBoard();
+    renderTimelineTracks();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
 
     if (onSave) onSave();
+    return true;
   };
 
   // Cancel function
@@ -440,6 +597,18 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       e.preventDefault();
       e.stopPropagation();
       cancelEdit();
+    } else if (e.key === 'Tab') {
+      // Tab / Shift+Tab: commit the current edit then advance to next/prev field.
+      // stopPropagation keeps this from triggering document-level handlers.
+      e.preventDefault();
+      e.stopPropagation();
+      const direction = e.shiftKey ? 'backward' : 'forward';
+      const committed = saveEdit();
+      // advanceInlineEditor re-queries the DOM after renderLiveBoard(), so it
+      // always operates on fresh elements even though the old row was replaced.
+      if (committed) {
+        advanceInlineEditor(movementId, fieldName, direction);
+      }
     }
   });
 
@@ -1691,7 +1860,7 @@ export function renderLiveBoard() {
       <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
         <div class="${callsignClass} js-edit-callsign">${escapeHtml(m.callsignCode)}</div>
-        <div class="call-sub">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
+        <div class="call-sub js-edit-voice">${m.callsignVoice ? escapeHtml(m.callsignVoice) : "&nbsp;"}</div>
         ${m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0 ? `<span class="badge badge-formation">F×${m.formation.elements.length}</span>` : ""}
       </td>
       <td class="priority-cell" style="text-align: center; ${m.priorityLetter ? 'padding: 0 6px 0 4px;' : 'padding: 0; width: 0;'}">
@@ -1699,14 +1868,14 @@ export function renderLiveBoard() {
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-reg">${escapeHtml(m.registration || "—")}</span>${m.type ? ` · <span class="js-edit-type" title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
-        <div class="cell-muted">WTC: ${wtcDisplay}</div>
+        <div class="cell-muted">WTC: <span class="js-edit-wtc">${wtcDisplay}</span></div>
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-dep-ad"${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
         <div class="cell-strong"><span class="js-edit-arr-ad"${m.arrName && m.arrName !== '' ? ` title="${m.arrName}"` : ''}>${escapeHtml(m.arrAd)}</span></div>
       </td>
       <td style="text-align: center;">
-        <div class="cell-strong">${rulesDisplay}</div>
+        <div class="cell-strong"><span class="js-edit-rules">${rulesDisplay}</span></div>
       </td>
       <td${tooltipTitle}>
         <div class="cell-strong"><span class="js-edit-dep-time">${escapeHtml(depDisplay)}</span> / ${overdueClass ? `<span class="js-edit-arr-time ${overdueClass}">${escapeHtml(arrDisplay)}</span>` : `<span class="js-edit-arr-time">${escapeHtml(arrDisplay)}</span>`}</div>
@@ -1714,7 +1883,7 @@ export function renderLiveBoard() {
       </td>
       <td style="text-align: center;">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
-          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.tngCount || 0}</span>
+          <span class="js-edit-tng" style="min-width: 20px; text-align: center; font-weight: 600;">${m.tngCount || 0}</span>
           <div style="display: flex; gap: 4px;">
             <button class="counter-btn js-dec-tng" data-id="${m.id}" type="button" aria-label="Decrease T&G">◄</button>
             <button class="counter-btn js-inc-tng" data-id="${m.id}" type="button" aria-label="Increase T&G">►</button>
@@ -1723,7 +1892,7 @@ export function renderLiveBoard() {
       </td>
       <td style="text-align: center;">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
-          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.osCount || 0}</span>
+          <span class="js-edit-os" style="min-width: 20px; text-align: center; font-weight: 600;">${m.osCount || 0}</span>
           <div style="display: flex; gap: 4px;">
             <button class="counter-btn js-dec-os" data-id="${m.id}" type="button" aria-label="Decrease O/S">◄</button>
             <button class="counter-btn js-inc-os" data-id="${m.id}" type="button" aria-label="Increase O/S">►</button>
@@ -1732,7 +1901,7 @@ export function renderLiveBoard() {
       </td>
       <td style="text-align: center;">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
-          <span style="min-width: 20px; text-align: center; font-weight: 600;">${m.fisCount || 0}</span>
+          <span class="js-edit-fis" style="min-width: 20px; text-align: center; font-weight: 600;">${m.fisCount || 0}</span>
           <div style="display: flex; gap: 4px;">
             <button class="counter-btn js-dec-fis" data-id="${m.id}" type="button" aria-label="Decrease FIS">◄</button>
             <button class="counter-btn js-inc-fis" data-id="${m.id}" type="button" aria-label="Increase FIS">►</button>
@@ -1740,7 +1909,7 @@ export function renderLiveBoard() {
         </div>
       </td>
       <td>
-        <div style="font-size: 12px; text-transform: uppercase;">${escapeHtml(m.remarks || '')}</div>
+        <div class="js-edit-remarks" style="font-size: 12px; text-transform: uppercase;">${escapeHtml(m.remarks || '')}</div>
       </td>
       <td class="actions-cell">
         <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">
@@ -1912,10 +2081,23 @@ export function renderLiveBoard() {
 
     // Bind inline edit handlers (double-click to edit)
     enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-voice"), m.id, "callsignVoice", "text");
     enableInlineEdit(tr.querySelector(".js-edit-reg"), m.id, "registration", "text");
     enableInlineEdit(tr.querySelector(".js-edit-type"), m.id, "type", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-wtc"), m.id, "wtc", "text");
+    // depAd editable only for OVR and ARR (not DEP or LOC)
+    if (ft === "OVR" || ft === "ARR") {
+      enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text");
+    }
+    // arrAd editable only for OVR and DEP (not ARR or LOC)
+    if (ft === "OVR" || ft === "DEP") {
+      enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
+    }
+    enableInlineEdit(tr.querySelector(".js-edit-rules"), m.id, "rules", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-tng"), m.id, "tngCount", "number");
+    enableInlineEdit(tr.querySelector(".js-edit-os"), m.id, "osCount", "number");
+    enableInlineEdit(tr.querySelector(".js-edit-fis"), m.id, "fisCount", "number");
+    enableInlineEdit(tr.querySelector(".js-edit-remarks"), m.id, "remarks", "text");
 
     // Time field mapping depends on flight type
     // Use canonical field names: depActual/depPlanned/arrActual/arrPlanned
@@ -5415,20 +5597,23 @@ function renderTimelineScale() {
 }
 
 /**
- * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals)
+ * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals,
+ * ECT for overflights).
  */
 function getMovementStartTime(m) {
-  if (m.flightType === 'ARR') {
-    return getETA(m) || getATD(m);
-  }
-  return getETD(m) || getATD(m);
+  const ft = (m.flightType || '').toUpperCase();
+  if (ft === 'ARR') return getETA(m) || m.arrActual || null;
+  if (ft === 'OVR') return getECT(m) || getACT(m) || null;
+  return getETD(m) || getATD(m);  // DEP, LOC
 }
 
 /**
- * Get the end time for a movement
+ * Get the end time for a movement.  Uses raw arrPlanned/arrActual for all
+ * flight types so DEP and OVR bars show a real end time rather than the
+ * +60 min fallback (getETA/getATA are semantically restricted to ARR/LOC).
  */
 function getMovementEndTime(m) {
-  return getETA(m) || getATA(m);
+  return m.arrPlanned || m.arrActual || getETA(m) || getATA(m);
 }
 
 /**

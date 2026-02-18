@@ -828,6 +828,72 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 
 ---
 
+### 4.11 Feature: Inline-Edit Tab Flow + Timeline Desync Fix
+
+**Branch:** `claude/inline-edit-tabflow-and-timeline-QLjBR`
+
+#### A) Timeline desync fix
+
+**Root cause:** `getMovementStartTime(m)` returned `null` for OVR flights (used `getETD()`/`getATD()` which are DEP/LOC-only), and `getMovementEndTime(m)` returned `null` for DEP flights (used `getETA()`/`getATA()` which are ARR/LOC-only). Result: OVR bars did not appear; DEP end-times fell back to +60 min.
+
+**Fix:**
+- `getMovementStartTime`: ARR → `getETA || arrActual`; OVR → `getECT || getACT`; DEP/LOC → `getETD || getATD`
+- `getMovementEndTime`: uses `m.arrPlanned || m.arrActual || getETA || getATA` (raw fields first for DEP/OVR)
+- `saveEdit()` now calls `renderTimelineTracks()` explicitly on success (in addition to the existing `renderTimeline()` at end of `renderLiveBoard()`)
+
+#### B) Tab/Shift+Tab inline-edit workflow
+
+**New module-level constructs in `ui_liveboard.js`:**
+- `_INLINE_FIELD_TO_SELECTOR` — maps fieldName → CSS selector for all 15 editable fields
+- `_buildTabOrder(rowEl, movement)` — builds the ordered list of applicable tab stops for a row, respecting flight-type applicability rules and filtering to elements that exist in the DOM
+- `advanceInlineEditor(movementId, currentFieldName, direction)` — re-queries DOM after `renderLiveBoard()`, finds next/prev tab stop (with wrap), calls `startInlineEdit()`
+
+**Applicability rules:**
+- Dep AD: OVR and ARR only
+- Arr AD: OVR and DEP only
+- Dep time: DEP, LOC, OVR
+- Arr time: ARR, LOC
+- All other fields (callsign, voice, reg, type, WTC, rules, tng, os, fis, remarks): all flight types
+
+**`saveEdit()` hardened:**
+- Returns `boolean` (true = committed, false = validation failure)
+- WTC validated via `isValidWtcChar()`; rules normalised ('I'→'IFR', 'V'→'VFR', 'S'→'SVFR')
+- Counter fields (tngCount/osCount/fisCount) validated as non-negative integers; stored as `number` not string
+- Tab handler only advances when `saveEdit()` returns `true`
+
+**New inline-editable fields (strip HTML + enableInlineEdit):**
+- `callsignVoice` (`.js-edit-voice`) — always
+- `wtc` (`.js-edit-wtc`) — always
+- `rules` (`.js-edit-rules`) — always
+- `tngCount` (`.js-edit-tng`, inputType `number`) — always
+- `osCount` (`.js-edit-os`, inputType `number`) — always
+- `fisCount` (`.js-edit-fis`, inputType `number`) — always
+- `remarks` (`.js-edit-remarks`) — always
+
+**Number input filter:** Digits-only `input` event listener prevents non-numeric characters in number fields.
+
+#### Deliverables checklist
+
+- [x] `getMovementStartTime` fixed for OVR
+- [x] `getMovementEndTime` fixed for DEP
+- [x] `renderTimelineTracks()` called on `saveEdit()` success path
+- [x] `_INLINE_FIELD_TO_SELECTOR`, `_buildTabOrder`, `advanceInlineEditor` added
+- [x] Tab/Shift+Tab handler in `startInlineEdit` keydown — calls `saveEdit()` then `advanceInlineEditor()`
+- [x] 7 new fields: strip HTML classes + `enableInlineEdit()` registrations
+- [x] dep/arr AD `enableInlineEdit` restricted by flight type
+- [x] `saveEdit()` returns boolean; WTC/rules/counter validations added
+- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
+- [x] `STATE.md` updated
+
+#### NO-DRIFT confirmation
+
+- No changes to movement data model, formation semantics, counter button logic, or persistence model.
+- Tab keydown calls `e.preventDefault()` + `e.stopPropagation()` — Tab never bubbles to document-level modal handlers.
+- Counter button ◄/► handlers are unchanged; inline-edit of counter fields is additive.
+- All existing test suites (`test:s4` through `test:s7`) unaffected.
+
+---
+
 ## 5) Operating Procedure (Manager–Worker)
 
 ### 5.1 Before any new task ticket
