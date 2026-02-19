@@ -110,6 +110,32 @@ Computed by `calculateDailyStats()` in `app.js`.
 - `CANCELLED` strips are **not counted** (soft-deleted)
 - Hard-deleted strips do not exist in storage, so cannot be counted
 
+**Runway movement-equivalent counting rule:**
+
+Each ACTIVE/COMPLETED movement (except OVR) contributes a *runway movement equivalent*
+to the totals rather than a flat count of 1:
+
+```
+contribution = base + (2 × tngCount) + (1 × osCount)
+```
+
+| Flight type | Base | Rationale |
+|---|---|---|
+| `DEP` | 1 | One departure = one runway movement |
+| `ARR` | 1 | One arrival = one runway movement |
+| `LOC` | 2 | Local flight = one departure + one arrival |
+| `OVR` | — | Overflights are excluded from runway totals (counted separately) |
+
+Each T&G (`tngCount`) contributes 2 runway movements (touch-down + take-off).
+Each overshoot (`osCount`) contributes 1 runway movement.
+
+`runwayMovementContribution(m)` and `isOverflight(m)` are exported helpers in `datamodel.js`.
+
+**OVR (Overflight) counter:**
+- OVR movements are **excluded** from the BM/BC/VM/VC/Total runway totals.
+- They are counted separately and displayed in the **OVR** header counter (`id="statOvrToday"`).
+- OVR movements with status ACTIVE or COMPLETED for today are included in the OVR count.
+
 **Classification buckets** (via `classifyMovement()` in `reporting.js`):
 
 | Code | Meaning | Source |
@@ -122,9 +148,9 @@ Computed by `calculateDailyStats()` in `app.js`.
 | `VCH` | Visiting Civil Helicopter | Registration lookup → includes rotary |
 | `VNH` | Visiting Navy Helicopter | Navy operator detection |
 
-For counter display purposes, each movement is classified into exactly one bucket.
-The `TOTAL` counter is the sum of all classified movements (BM + BC + VM + VC +
-any other codes).
+For counter display purposes, each non-OVR movement contributes its runway movement
+equivalent to the matching classification bucket and to Total.
+A LOC with 3 T&G and 1 O/S contributes `2 + (2×3) + (1×1) = 9` to its bucket and to Total.
 
 **No double counting:** A movement that transitions ACTIVE → COMPLETED is still
 counted once. The dedup-by-ID ensures this even if data anomalies exist.

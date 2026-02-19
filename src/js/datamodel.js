@@ -49,7 +49,8 @@ const defaultConfig = {
   timelineEndHour: 22,               // Timeline end hour (UTC)
   // Reciprocal strip creation settings
   depToArrOffsetMinutes: 180,        // DEP→ARR: Arrival time = ETD/ATD + this (default 3 hours)
-  arrToDepOffsetMinutes: 30          // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
+  arrToDepOffsetMinutes: 30,         // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
+  inlineEditIdleMs: 120000           // Inline-edit idle timeout before auto-cancel (ms); min enforced 5000
 };
 
 // Configuration state
@@ -701,6 +702,57 @@ export function isValidIcaoAd(ad) {
 }
 export function isValidElementStatus(status) {
   return ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"].includes(status);
+}
+
+/* ------------------------------------------------------------------ *
+ * Runway movement-equivalent helpers                                   *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Coerce a value to a non-negative integer (0 for null/NaN/negative).
+ * @param {*} v
+ * @returns {number}
+ */
+function asNonNegInt(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.trunc(n));
+}
+
+/**
+ * Runway movement-equivalent contribution of one movement.
+ * OVR returns 0 (overflights excluded from runway totals; counted separately).
+ * DEP/ARR contribute 1 base + counter additions.
+ * LOC contributes 2 base + counter additions.
+ * Formula: base + (2 × tngCount) + (1 × osCount)
+ *
+ * @param {object} m - Movement object
+ * @returns {number}
+ */
+export function runwayMovementContribution(m) {
+  const ft = String(m.flightType || "").toUpperCase();
+  const tng = asNonNegInt(m.tngCount);
+  const os  = asNonNegInt(m.osCount);
+
+  const base =
+    ft === "LOC" ? 2 :
+    ft === "DEP" ? 1 :
+    ft === "ARR" ? 1 :
+    ft === "OVR" ? 0 :
+    0;
+
+  return base + (2 * tng) + os;
+}
+
+/**
+ * Returns true when movement is an overflight (OVR flight type).
+ * OVR movements are counted separately and excluded from runway totals.
+ *
+ * @param {object} m - Movement object
+ * @returns {boolean}
+ */
+export function isOverflight(m) {
+  return String(m.flightType || "").toUpperCase() === "OVR";
 }
 
 /**
