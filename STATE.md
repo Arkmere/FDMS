@@ -894,6 +894,67 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 
 ---
 
+### 4.12 Sprint: Daily Totals, WTC Dropdown, Idle Timeout, Timeline Actual-First
+
+**Branch:** `claude/fix-daily-totals-wtc-timeout-timeline`
+
+#### 1) Runway Daily Movement Totals
+
+- `runwayMovementContribution(m)` and `isOverflight(m)` exported from `datamodel.js`
+- Formula: `base + (2 × tngCount) + (1 × osCount)` where base: DEP=1, ARR=1, LOC=2, OVR=0
+- `calculateDailyStats()` in `app.js` now uses these helpers; OVR increments a separate `ovr` counter and skips runway totals
+- BM/BC/VM/VC/Total buckets now accumulate runway movement equivalents (not flat counts)
+- New `statOvrToday` span added to `src/index.html` stats bar; `updateDailyStats()` populates it
+- `docs/STRIP_LIFECYCLE_AND_COUNTERS.md` §3.1 updated with counting formula and OVR-separate note
+
+#### 2) Inline Edit Idle Timeout (auto-cancel, not commit)
+
+- `inlineEditIdleMs: 120000` added to `defaultConfig` in `datamodel.js`
+- `_activeInlineSession`, `_pendingRerenderWhileInline`, `_getInlineIdleMs()`, `_startInlineSession()`, `_endInlineSession()`, `_isInlineEditingActive()` added to `ui_liveboard.js`
+- `startInlineEdit()` wired: calls `_startInlineSession({ cancelFn: cancelEdit })` after editor opens; input/paste/keydown listeners call `_sess.resetTimer()`
+- Idle expiry calls `cancelEdit()` (restore original content) — never commits
+- `saveEdit()` calls `_endInlineSession(false)` before `return true`; `cancelEdit()` calls `_endInlineSession(false)` on explicit cancel
+- `fdms:data-changed` listener now defers to `_pendingRerenderWhileInline` when editor is open; catches up immediately after editor closes
+
+#### 3) WTC Inline Edit Constrained to wtcSystem
+
+- `_WTC_OPTIONS` constant added (UK/ICAO/RECAT option arrays)
+- `startInlineEdit()` detects `fieldName === 'wtc'` and creates `<select>` populated from `getConfig().wtcSystem`
+- Seeded from cell text: `currentValue.match(/^[A-Za-z]+/)[0].toUpperCase()`
+- `isValidWtcChar()` validation block removed from `saveEdit()` (select constrains choices)
+- `el.querySelector('input')` guard expanded to `el.querySelector('input, select')`
+- `input.select()` guarded: only called when `input.tagName === 'INPUT'`
+
+#### 4) Timeline Actual-First Alignment
+
+- `getMovementStartTime(m)`: ARR→`getATA||getETA`, OVR→`getACT||getECT`, DEP/LOC→`getATD||getETD` (was ETD-first)
+- `getMovementEndTime(m)`: ARR/LOC→`getATA||getETA`, DEP/OVR→`m.arrActual||m.arrPlanned`
+- Hover tooltip on timeline bars uses same start/end values (computed from `getMovementStartTime`/`getMovementEndTime`)
+
+#### Deliverables checklist
+
+- [x] `runwayMovementContribution`, `isOverflight` exported from `datamodel.js`
+- [x] `inlineEditIdleMs: 120000` in `defaultConfig`
+- [x] `calculateDailyStats()` uses runway movement equivalents; OVR separate
+- [x] `statOvrToday` element in `index.html`; `updateDailyStats()` updates it
+- [x] `_startInlineSession`/`_endInlineSession` wired into `startInlineEdit()`
+- [x] Idle timeout cancels (not commits) via `cancelEdit()`
+- [x] WTC `<select>` dropdown; `isValidWtcChar` validation removed from save path
+- [x] Timeline actual-first: `getMovementStartTime`, `getMovementEndTime` updated
+- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
+- [x] `docs/STRIP_LIFECYCLE_AND_COUNTERS.md` updated
+- [x] `STATE.md` updated
+
+#### NO-DRIFT confirmation
+
+- No changes to movement data model, formation semantics, or persistence model
+- Modal invariants preserved: no direct `modalRoot.innerHTML =` in modified code
+- Counter ◄/► buttons unchanged; inline-edit of counters is additive
+- `renderLiveBoard()` / `renderTimeline()` call chain unchanged
+- All existing test suites unaffected
+
+---
+
 ## 5) Operating Procedure (Manager–Worker)
 
 ### 5.1 Before any new task ticket

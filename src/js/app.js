@@ -38,7 +38,9 @@ import {
   getGenericOverflightsCount,
   incrementGenericOverflights,
   decrementGenericOverflights,
-  getMovements
+  getMovements,
+  isOverflight,
+  runwayMovementContribution
 } from "./datamodel.js";
 
 import {
@@ -743,24 +745,35 @@ function calculateDailyStats() {
 
   // Deduplicate by ID (defensive — should already be unique)
   const seen = new Set();
-  let bm = 0, bc = 0, vm = 0, vc = 0, total = 0;
+  let bm = 0, bc = 0, vm = 0, vc = 0, total = 0, ovr = 0;
   for (const m of countable) {
     if (seen.has(m.id)) continue;
     seen.add(m.id);
-    total++;
+
+    // OVR counted separately — excluded from runway totals
+    if (isOverflight(m)) {
+      ovr++;
+      continue;
+    }
+
+    // Runway movement-equivalent: DEP=1, ARR=1, LOC=2, + 2×tng + 1×os
+    const contrib = runwayMovementContribution(m);
+    total += contrib;
+
     const { egowFlightType } = classifyMovement(m);
-    if (egowFlightType === 'BM') bm++;
-    else if (egowFlightType === 'BC') bc++;
-    else if (egowFlightType === 'VM') vm++;
-    else if (egowFlightType === 'VC') vc++;
+    if (egowFlightType === 'BM') bm += contrib;
+    else if (egowFlightType === 'BC') bc += contrib;
+    else if (egowFlightType === 'VM') vm += contrib;
+    else if (egowFlightType === 'VC') vc += contrib;
   }
 
   return {
-    bookedMovements: bm,       // BM - Based Military
+    bookedMovements: bm,       // BM - Based Military (runway-movement-equivalent)
     bookedCompleted: bc,       // BC - Based Civil
     vfrMovements: vm,          // VM - Visiting Military
     vfrCompleted: vc,          // VC - Visiting Civil
-    total
+    total,                     // Total runway movements (excludes OVR)
+    ovr                        // Overflights (separate counter)
   };
 }
 
@@ -776,12 +789,14 @@ function updateDailyStats() {
   const vmDisplay = document.getElementById("statVfrMvmts");
   const vcDisplay = document.getElementById("statVfrComp");
   const totalDisplay = document.getElementById("statTotalToday");
+  const ovrDisplay = document.getElementById("statOvrToday");
 
   if (bmDisplay) bmDisplay.textContent = stats.bookedMovements;
   if (bcDisplay) bcDisplay.textContent = stats.bookedCompleted;
   if (vmDisplay) vmDisplay.textContent = stats.vfrMovements;
   if (vcDisplay) vcDisplay.textContent = stats.vfrCompleted;
   if (totalDisplay) totalDisplay.textContent = stats.total;
+  if (ovrDisplay) ovrDisplay.textContent = stats.ovr;
 }
 
 // Export for use in other modules

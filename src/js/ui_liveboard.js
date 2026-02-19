@@ -256,6 +256,104 @@ function escapeHtml(s) {
    Inline Edit Helpers
 ------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * Inline-edit session management                                       *
+ *                                                                      *
+ * Tracks the active inline-editor session so that:                     *
+ *   1) An idle timeout auto-CANCELS (never commits) the edit.          *
+ *   2) Background re-renders triggered by fdms:data-changed are        *
+ *      deferred until after the editor closes, preventing the editor   *
+ *      row from being wiped mid-session.                               *
+ * ------------------------------------------------------------------ */
+
+/** @type {{ idleMs:number, timer:ReturnType<typeof setTimeout>|null, cancelFn:Function, cleanupFn:Function|null, resetTimer:Function, stopTimer:Function }|null} */
+let _activeInlineSession = null;
+
+/** True when a rerender was requested while an inline editor was open. */
+let _pendingRerenderWhileInline = false;
+
+/**
+ * Read the idle-timeout value from config (floor: 5 s safety net).
+ * @returns {number} milliseconds
+ */
+function _getInlineIdleMs() {
+  try {
+    const cfg = (typeof getConfig === 'function') ? getConfig() : null;
+    const v = cfg && Number.isFinite(Number(cfg.inlineEditIdleMs))
+      ? Number(cfg.inlineEditIdleMs)
+      : 120000;
+    return Math.max(5000, Math.trunc(v));
+  } catch {
+    return 120000;
+  }
+}
+
+/**
+ * Start a new inline-edit session. If one is already active it is ended first.
+ *
+ * @param {{ cancelFn: Function, cleanupFn?: Function|null }} opts
+ * @returns {object} The session object (call .resetTimer() on user input).
+ */
+function _startInlineSession({ cancelFn, cleanupFn = null }) {
+  _endInlineSession(); // Safety: end any previous session
+  const idleMs = _getInlineIdleMs();
+
+  const session = {
+    idleMs,
+    timer: null,
+    cancelFn,
+    cleanupFn,
+    resetTimer() {
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = setTimeout(() => {
+        // Idle timeout → CANCEL (never commit)
+        try { this.cancelFn(); } finally { _endInlineSession(true); }
+      }, this.idleMs);
+    },
+    stopTimer() {
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = null;
+    },
+  };
+
+  session.resetTimer();
+  _activeInlineSession = session;
+  return session;
+}
+
+/**
+ * End the active inline-edit session, applying any deferred rerenders.
+ *
+ * @param {boolean} [fromIdle] - True when called by the idle timeout itself.
+ */
+function _endInlineSession(fromIdle = false) {
+  if (!_activeInlineSession) return;
+  try {
+    _activeInlineSession.stopTimer();
+    if (_activeInlineSession.cleanupFn) _activeInlineSession.cleanupFn();
+  } finally {
+    _activeInlineSession = null;
+    if (_pendingRerenderWhileInline) {
+      _pendingRerenderWhileInline = false;
+      renderLiveBoard();
+      if (typeof renderTimeline === 'function') renderTimeline();
+      if (typeof renderTimelineTracks === 'function') renderTimelineTracks();
+      if (typeof window.updateDailyStats === 'function') window.updateDailyStats();
+      if (typeof window.updateFisCounters === 'function') window.updateFisCounters();
+    }
+  }
+}
+
+/**
+ * Returns true while an inline editor is open.
+ * Used to defer fdms:data-changed rerenders.
+ *
+ * @returns {boolean}
+ */
+function _isInlineEditingActive() {
+  return !!_activeInlineSession;
+}
+
 /* -----------------------------
    Inline-edit Tab order
 ------------------------------ */
@@ -392,64 +490,106 @@ function enableInlineEdit(el, movementId, fieldName, inputType = 'text', onSave 
 /**
  * Start inline editing for an element
  */
+/** WTC category options per wtcSystem. */
+const _WTC_OPTIONS = {
+  UK:    ['L','S','LM','UM','H','J'],
+  ICAO:  ['L','S','M','H','J'],
+  RECAT: ['A','B','C','D','E','F'],
+};
+
 function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
-  // Don't start if already editing
-  if (el.querySelector('input')) return;
+  // Don't start if already editing (covers both input and select editors)
+  if (el.querySelector('input, select')) return;
 
   const originalContent = el.innerHTML;
   const currentValue = el.textContent.trim();
   const displayValue = currentValue === '—' || currentValue === '-' ? '' : currentValue;
 
-  // Create input
-  const input = document.createElement('input');
-  input.type = 'text';
-  // For time inputs, strip the colon for easier editing
-  input.value = inputType === 'time' ? displayValue.replace(':', '') : displayValue;
-  input.className = 'inline-edit-input';
-
-  // Time inputs get a narrower width
-  const inputWidth = inputType === 'time' ? '50px' : '100%';
-  input.style.cssText = `
-    width: ${inputWidth};
-    padding: 2px 4px;
-    font-size: inherit;
-    font-family: inherit;
-    border: 1px solid #4a90d9;
-    border-radius: 3px;
-    background: #fff;
-    box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
-    outline: none;
-    text-align: ${inputType === 'time' ? 'center' : 'left'};
-  `;
-
-  if (inputType === 'time') {
-    input.placeholder = 'HHMM';
-    input.maxLength = 4;
-    // Auto-format time input - only allow digits
-    input.addEventListener('input', (e) => {
-      const cursorPos = e.target.selectionStart;
-      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 4);
-      e.target.value = digitsOnly;
-      // Restore cursor position
-      const newPos = Math.min(cursorPos, digitsOnly.length);
-      e.target.setSelectionRange(newPos, newPos);
+  // ── WTC: create a <select> constrained to the active wtcSystem ────────────
+  let input;
+  if (fieldName === 'wtc') {
+    const wtcSystem = getConfig().wtcSystem || 'ICAO';
+    const wtcOpts = _WTC_OPTIONS[wtcSystem] || _WTC_OPTIONS.ICAO;
+    // Seed from cell text: strip alert markup and take leading uppercase letters only
+    const rawSeed = (currentValue.match(/^[A-Za-z]+/) || [''])[0].toUpperCase();
+    input = document.createElement('select');
+    input.className = 'inline-edit-input';
+    input.style.cssText = `
+      padding: 2px 4px;
+      font-size: inherit;
+      font-family: inherit;
+      border: 1px solid #4a90d9;
+      border-radius: 3px;
+      background: #fff;
+      box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+      outline: none;
+    `;
+    wtcOpts.forEach(opt => {
+      const option = document.createElement('option');
+      option.value = opt;
+      option.textContent = opt;
+      if (opt === rawSeed) option.selected = true;
+      input.appendChild(option);
     });
-  } else if (inputType === 'number') {
-    input.placeholder = '0';
-    // Only allow digits for counter fields
-    input.addEventListener('input', (e) => {
-      e.target.value = e.target.value.replace(/[^0-9]/g, '');
-    });
+    // Default to first option if seed not in list
+    if (!wtcOpts.includes(rawSeed) && wtcOpts.length > 0) {
+      input.value = wtcOpts[0];
+    }
+  } else {
+    // ── All other fields: plain <input type="text"> ─────────────────────────
+    input = document.createElement('input');
+    input.type = 'text';
+    // For time inputs, strip the colon for easier editing
+    input.value = inputType === 'time' ? displayValue.replace(':', '') : displayValue;
+    input.className = 'inline-edit-input';
+
+    // Time inputs get a narrower width
+    const inputWidth = inputType === 'time' ? '50px' : '100%';
+    input.style.cssText = `
+      width: ${inputWidth};
+      padding: 2px 4px;
+      font-size: inherit;
+      font-family: inherit;
+      border: 1px solid #4a90d9;
+      border-radius: 3px;
+      background: #fff;
+      box-shadow: 0 0 3px rgba(74, 144, 217, 0.5);
+      outline: none;
+      text-align: ${inputType === 'time' ? 'center' : 'left'};
+    `;
+
+    if (inputType === 'time') {
+      input.placeholder = 'HHMM';
+      input.maxLength = 4;
+      // Auto-format time input - only allow digits
+      input.addEventListener('input', (e) => {
+        const cursorPos = e.target.selectionStart;
+        const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 4);
+        e.target.value = digitsOnly;
+        // Restore cursor position
+        const newPos = Math.min(cursorPos, digitsOnly.length);
+        e.target.setSelectionRange(newPos, newPos);
+      });
+    } else if (inputType === 'number') {
+      input.placeholder = '0';
+      // Only allow digits for counter fields
+      input.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+      });
+    }
   }
 
-  // Clear element and add input
+  // Clear element and add editor (input or select)
   el.innerHTML = '';
   el.appendChild(input);
   input.focus();
-  input.select();
+  // input.select() only valid on <input> elements (not <select>)
+  if (input.tagName === 'INPUT' && typeof input.select === 'function') input.select();
 
   // Guard: prevent double-fire from Enter + blur race.  Once saved or
   // definitively cancelled, further calls to saveEdit()/cancelEdit() are no-ops.
+  // Session management is wired below — _startInlineSession() is called after
+  // cancelEdit/saveEdit are defined so the cancelFn closure captures them.
   let saved = false;
   // Tracks whether the last save attempt failed validation (suppresses blur
   // auto-save while the input is still shown for retry, without resetting the
@@ -464,7 +604,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
     if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) {
       window.__fdmsDiag.inlineEditSaveAttempts = (window.__fdmsDiag.inlineEditSaveAttempts || 0) + 1;
-      console.debug('[FDMS-diag] saveEdit called', { movementId, fieldName, inputType, value: input.value });
+      console.debug('[FDMS-diag] saveEdit called', { movementId, fieldName, inputType, value: input.value || '' });
     }
 
     saved = true;
@@ -491,19 +631,6 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
         return false;
       }
       newValue = validation.normalized || newValue;
-    }
-
-    // ── WTC validation ─────────────────────────────────────────────────────
-    if (fieldName === 'wtc' && newValue) {
-      const upper = newValue.toUpperCase();
-      if (!isValidWtcChar(upper)) {
-        showToast('Invalid WTC category', 'error');
-        saved = false;
-        _lastSaveFailed = true;
-        input.focus();
-        return false;
-      }
-      newValue = upper;
     }
 
     // ── Flight rules normalisation ─────────────────────────────────────────
@@ -558,15 +685,27 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     if (window.updateFisCounters) window.updateFisCounters();
 
     if (onSave) onSave();
+    _endInlineSession(false);
     return true;
   };
 
-  // Cancel function
+  // Cancel function — also used as cancelFn for the idle-timeout session
   const cancelEdit = () => {
     if (saved) return;
     saved = true;
     el.innerHTML = originalContent;
+    _endInlineSession(false);
   };
+
+  // ── Inline-session idle watchdog ──────────────────────────────────────────
+  // cancelEdit is defined above and used as the cancelFn.
+  const _sess = _startInlineSession({ cancelFn: cancelEdit });
+
+  // Reset the idle timer on any user activity on the editor element
+  input.addEventListener('input',   () => _sess.resetTimer());
+  input.addEventListener('paste',   () => _sess.resetTimer());
+  // keydown listener for timer reset (separate from the main keydown handler below)
+  input.addEventListener('keydown', () => _sess.resetTimer());
 
   // Clear _lastSaveFailed when the user changes the value, allowing blur-save
   // to resume after the user corrects a bad time entry.
@@ -5203,11 +5342,17 @@ export function initLiveBoard() {
     showToast(`Element ${elIdx + 1} updated`, "success");
   });
 
-  // Re-render when booking data changes (avoids importing ui_booking)
+  // Re-render when booking data changes (avoids importing ui_booking).
+  // Defer if an inline editor is open — apply once editor closes.
   window.addEventListener("fdms:data-changed", () => {
     if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.dataChangedReceived++;
+    if (_isInlineEditingActive()) {
+      _pendingRerenderWhileInline = true;
+      return;
+    }
     renderLiveBoard();
-    renderTimeline();
+    if (typeof renderTimeline === 'function') renderTimeline();
+    if (typeof renderTimelineTracks === 'function') renderTimelineTracks();
   });
 
   renderLiveBoard();
@@ -5602,18 +5747,22 @@ function renderTimelineScale() {
  */
 function getMovementStartTime(m) {
   const ft = (m.flightType || '').toUpperCase();
-  if (ft === 'ARR') return getETA(m) || m.arrActual || null;
-  if (ft === 'OVR') return getECT(m) || getACT(m) || null;
-  return getETD(m) || getATD(m);  // DEP, LOC
+  // Actual-first ordering so timeline bars reflect committed times immediately
+  if (ft === 'ARR') return getATA(m) || getETA(m) || null;          // actual arrival first
+  if (ft === 'OVR') return getACT(m) || getECT(m) || null;          // actual crossing first
+  return getATD(m) || getETD(m) || null;                             // DEP, LOC — actual departure first
 }
 
 /**
- * Get the end time for a movement.  Uses raw arrPlanned/arrActual for all
- * flight types so DEP and OVR bars show a real end time rather than the
- * +60 min fallback (getETA/getATA are semantically restricted to ARR/LOC).
+ * Get the end time for a movement.
+ * ARR/LOC: actual-first (getATA || getETA) — matches strip display semantics.
+ * DEP/OVR: use raw arrActual/arrPlanned as timeline end if present
+ *           (getATA/getETA are semantically restricted to ARR/LOC only).
  */
 function getMovementEndTime(m) {
-  return m.arrPlanned || m.arrActual || getETA(m) || getATA(m);
+  const ft = (m.flightType || '').toUpperCase();
+  if (ft === 'ARR' || ft === 'LOC') return getATA(m) || getETA(m) || null;
+  return m.arrActual || m.arrPlanned || null;  // DEP/OVR fallback
 }
 
 /**
