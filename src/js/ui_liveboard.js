@@ -252,6 +252,63 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+/* ------------------------------------------------------------------ *
+ * EU Civil Registration Normaliser                                     *
+ *                                                                      *
+ * Inserts a hyphen after known European nationality-mark prefixes when *
+ * the user omits it.  Example: GBYUF → G-BYUF, EIFAT → EI-FAT.       *
+ * Military serials are intentionally ignored.                          *
+ * ------------------------------------------------------------------ */
+
+/**
+ * European civil nationality-mark prefixes.
+ * Listed longest-first so a 2-char prefix is not consumed by a 1-char one.
+ */
+const EURO_HYPHEN_PREFIXES = [
+  "ZJ", "T7", "3A", "4K", "4L", "4O", "5B", "9A", "9H", "Z3", "Z6",
+  "CS", "EI", "EJ", "ER", "ES", "EW", "HA", "HB", "LN", "LX", "OE", "OH", "OK", "OM", "OY",
+  "PH", "SE", "S5", "SP", "SX", "TC", "TF", "UR", "YU", "YR", "YL", "LY", "ZA", "GL", "LZ",
+  "D", "F", "G", "I", "M", "2",
+];
+
+/**
+ * Normalise a raw registration string to its hyphenated canonical form.
+ *
+ * - Uppercases and strips whitespace / stray punctuation (.\/\_).
+ * - If already hyphenated in `prefix-suffix` form, returns as-is.
+ * - Inserts hyphen after the first matching EURO_HYPHEN_PREFIXES entry
+ *   when suffix is 2–6 alphanumeric characters.
+ * - Falls back to plain uppercase/trim when no prefix matches.
+ *
+ * @param {string} raw - User-typed registration string
+ * @returns {string} Normalised registration
+ */
+function normalizeEuCivilRegistration(raw) {
+  if (!raw) return "";
+  let s = String(raw).trim().toUpperCase();
+  s = s.replace(/\s+/g, "");
+  // Remove stray punctuation the user might type; preserve existing hyphens
+  s = s.replace(/[.\/\\_]/g, "");
+
+  // Already has a hyphen in prefix-suffix form — return as-is
+  if (/^[A-Z0-9]{1,3}-[A-Z0-9]{2,6}$/.test(s)) return s;
+
+  // Insert hyphen after known prefix if absent
+  if (!s.includes("-")) {
+    for (const p of EURO_HYPHEN_PREFIXES) {
+      if (s.startsWith(p)) {
+        const rest = s.slice(p.length);
+        // Only apply when suffix length is plausible (2–6 alphanum chars)
+        if (rest.length >= 2 && rest.length <= 6 && /^[A-Z0-9]+$/.test(rest)) {
+          return `${p}-${rest}`;
+        }
+      }
+    }
+  }
+
+  return s;
+}
+
 /* -----------------------------
    Inline Edit Helpers
 ------------------------------ */
@@ -646,6 +703,11 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
         return false;
       }
       newValue = normalised;
+    }
+
+    // ── Registration normalisation (EU civil hyphen insertion) ────────────────
+    if (fieldName === 'registration' && newValue) {
+      newValue = normalizeEuCivilRegistration(newValue);
     }
 
     // ── Counter validation (tngCount, osCount, fisCount) ───────────────────
@@ -2513,7 +2575,7 @@ function openNewFlightModal(flightType = "DEP") {
           </div>
           <div class="modal-field">
             <label class="modal-label">WTC</label>
-            <input id="newWtcDisplay" class="modal-input is-derived" placeholder="L, J" disabled />
+            <select id="newWtc" class="modal-input"></select>
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -2737,6 +2799,26 @@ function openNewFlightModal(flightType = "DEP") {
   makeInputUppercase(depAdInput);
   makeInputUppercase(arrAdInput);
 
+  // EU civil registration normalisation — insert hyphen on blur (hard) and
+  // after 250 ms of typing (soft, only if it would add a hyphen).
+  if (regInput) {
+    regInput.addEventListener("blur", () => {
+      regInput.value = normalizeEuCivilRegistration(regInput.value);
+    });
+    let _regNormDebounce = null;
+    regInput.addEventListener("input", () => {
+      if (_regNormDebounce) clearTimeout(_regNormDebounce);
+      _regNormDebounce = setTimeout(() => {
+        const before = regInput.value;
+        const after  = normalizeEuCivilRegistration(before);
+        // Only apply when the normaliser adds a hyphen (minimises cursor jump)
+        if (after !== before && !before.includes("-") && after.includes("-")) {
+          regInput.value = after;
+        }
+      }, 250);
+    });
+  }
+
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
     regInput.addEventListener("input", () => {
@@ -2746,6 +2828,8 @@ function openNewFlightModal(flightType = "DEP") {
         const vkbType = regData['TYPE'];
         if (vkbType && vkbType !== '-' && vkbType !== '') {
           typeInput.value = vkbType;
+          // Programmatic type set does not fire input; trigger WTC autofill manually
+          maybeAutofillWtc();
         }
 
         // Auto-fill EGOW Code from registration
@@ -2802,7 +2886,7 @@ function openNewFlightModal(flightType = "DEP") {
       if (regData) {
         const registration = regData['REGISTRATION'] || '';
         if (registration && registration !== '-') {
-          regInput.value = registration;
+          regInput.value = normalizeEuCivilRegistration(registration);
           // Trigger registration input event to update dependent fields
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
@@ -2830,16 +2914,55 @@ function openNewFlightModal(flightType = "DEP") {
     });
   });
 
-  // WTC display: update when type or flight type changes
-  const wtcDisplay = document.getElementById('newWtcDisplay');
-  const updateWtcDisplay = () => {
-    if (!wtcDisplay) return;
-    const t = document.getElementById('newType')?.value || '';
-    const ft = document.getElementById('newFlightType')?.value || flightType;
-    wtcDisplay.value = t ? (getWTC(t, ft, getConfig().wtcSystem || 'ICAO') || '') : '';
-  };
-  document.getElementById('newType')?.addEventListener('input', updateWtcDisplay);
-  document.getElementById('newFlightType')?.addEventListener('change', updateWtcDisplay);
+  // WTC select: constrained to wtcSystem, with autofill + manual-override support
+  const wtcSelect = document.getElementById('newWtc');
+  let wtcDirty = false;
+
+  function wtcSystemKey() {
+    return String((getConfig().wtcSystem || 'ICAO')).toUpperCase();
+  }
+
+  function wtcOpts() {
+    const key = wtcSystemKey();
+    return (_WTC_OPTIONS && _WTC_OPTIONS[key]) ? _WTC_OPTIONS[key] : ['L','S','M','H','J'];
+  }
+
+  function setWtcOptions() {
+    if (!wtcSelect) return;
+    const opts = wtcOpts();
+    wtcSelect.innerHTML =
+      `<option value=""></option>` +
+      opts.map(o => `<option value="${o}">${o}</option>`).join('');
+  }
+
+  function extractLeadingToken(s) {
+    const m = String(s || '').trim().toUpperCase().match(/^[A-Z]+/);
+    return m ? m[0] : '';
+  }
+
+  function computeWtcFromCurrentForm() {
+    const type = document.getElementById('newType')?.value || '';
+    const ft   = document.getElementById('newFlightType')?.value || flightType;
+    if (!type) return '';
+    const sys = (getConfig().wtcSystem || 'ICAO');
+    const w = getWTC(type, ft, sys) || '';
+    return extractLeadingToken(w);
+  }
+
+  function maybeAutofillWtc() {
+    if (!wtcSelect) return;
+    if (wtcDirty && wtcSelect.value) return; // user manual override wins
+    const raw = computeWtcFromCurrentForm();
+    const allowed = new Set(wtcOpts());
+    wtcSelect.value = allowed.has(raw) ? raw : '';
+  }
+
+  setWtcOptions();
+  maybeAutofillWtc();
+
+  wtcSelect?.addEventListener('change', () => { wtcDirty = true; });
+  document.getElementById('newType')?.addEventListener('input', maybeAutofillWtc);
+  document.getElementById('newFlightType')?.addEventListener('change', maybeAutofillWtc);
 
   // Wire formation count input — rebuild element rows when count or base callsign changes
   const getNewFlightCallsign = () =>
@@ -3036,10 +3159,16 @@ function openNewFlightModal(flightType = "DEP") {
     // Get voice callsign for display (only if different from contraction/registration)
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
 
-    // Get WTC based on aircraft type and flight type
+    // WTC: manual select override wins; fall back to computed value
     const aircraftType = document.getElementById("newType")?.value || "";
     const selectedFlightType = document.getElementById("newFlightType")?.value || flightType;
-    const wtc = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO");
+    const wtcManual = (document.getElementById("newWtc")?.value || "").trim().toUpperCase();
+    const wtcComputed = (() => {
+      const w = getWTC(aircraftType, selectedFlightType, getConfig().wtcSystem || "ICAO") || "";
+      const m2 = w.trim().toUpperCase().match(/^[A-Z]+/);
+      return m2 ? m2[0] : "";
+    })();
+    const wtc = wtcManual || wtcComputed;
 
     // Get departure and arrival location names
     const depAd = document.getElementById("newDepAd")?.value || "";

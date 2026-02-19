@@ -955,6 +955,49 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 
 ---
 
+### 4.13 Sprint: New Strip WTC select + EU Registration Normaliser
+
+**Branch:** `claude/fix-newstrip-wtc-and-eu-reg-normalize`
+
+#### Part 1 — New Strip modal WTC field (select + autofill + override)
+
+- `<input id="newWtcDisplay" disabled>` replaced with `<select id="newWtc" class="modal-input">` in the modal HTML template
+- WTC select options populated from `_WTC_OPTIONS[getConfig().wtcSystem]` at modal open time via `setWtcOptions()` — uses current config (no caching)
+- `maybeAutofillWtc()` computes WTC via `getWTC(type, ft, sys)` → `extractLeadingToken()` → checks against current option set → auto-selects matching option
+- `wtcDirty` flag: set on user `change` event; prevents auto-fill from overwriting a manual selection
+- Autofill triggered by: modal open, `newType` input event, `newFlightType` change event, VKB programmatic type fill (explicit `maybeAutofillWtc()` call in VKB listener)
+- Save handler: `wtcManual || wtcComputed` — manual select wins; computed value used when select is blank
+- Callsign-lookup registration fill normalised: `normalizeEuCivilRegistration(registration)` applied before `regInput.value` is set
+
+#### Part 2 — EU civil registration normaliser
+
+- `EURO_HYPHEN_PREFIXES` constant (longest-first) + `normalizeEuCivilRegistration(raw)` added to `ui_liveboard.js` (before Inline Edit Helpers section)
+- Applies: uppercase + strip whitespace/punctuation → test for existing hyphen → insert hyphen after first matching prefix (suffix 2–6 alphanum chars) → fallback to plain uppercase
+- Wired into **New Strip modal**: blur normalises always; debounced (250 ms) input normalises only when adding a hyphen (cursor-friendly)
+- Wired into **inline edit saveEdit()**: `if (fieldName === 'registration') newValue = normalizeEuCivilRegistration(newValue)` before counter validation block
+- Examples: GBYUF → G-BYUF, EIFAT → EI-FAT, 2CYFR → 2-CYFR, M-GLOB → M-GLOB (unchanged)
+
+#### Deliverables checklist
+
+- [x] `<select id="newWtc">` in modal HTML
+- [x] `setWtcOptions()`, `maybeAutofillWtc()`, `wtcDirty` wired in `openNewFlightModal()`
+- [x] WTC save: manual override wins (`wtcManual || wtcComputed`)
+- [x] `EURO_HYPHEN_PREFIXES` + `normalizeEuCivilRegistration()` added
+- [x] New Strip reg: blur + debounced normalisation listeners
+- [x] Callsign-lookup programmatic reg fill normalised
+- [x] `saveEdit()` normalises registration on commit
+- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
+- [x] `STATE.md` updated
+
+#### NO-DRIFT confirmation
+
+- No changes to modal lifecycle, data model, daily stats, OVR separation, idle timeout, or timeline rules
+- Modal invariants preserved; no new document-level keydown listeners
+- Military serials intentionally ignored by normaliser (prefix list is EU-civil only)
+- All existing test suites unaffected
+
+---
+
 ## 5) Operating Procedure (Manager–Worker)
 
 ### 5.1 Before any new task ticket
