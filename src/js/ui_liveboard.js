@@ -17,7 +17,9 @@ import {
   getECT,
   getACT,
   getConfig,
+  updateConfig,
   convertUTCToLocal,
+  convertLocalToUTC,
   getTimezoneOffsetLabel,
   validateTime,
   validateDate,
@@ -895,6 +897,109 @@ function addMinutesToTime(time, minutesToAdd) {
   const mins = timeToMinutes(time);
   if (!Number.isFinite(mins)) return "";
   return minutesToTime(mins + minutesToAdd);
+}
+
+/* -----------------------------------------------------------------------
+   Times grid helpers — shared across all create/edit/duplicate modals
+----------------------------------------------------------------------- */
+
+/**
+ * Render the shared 2×2 times grid (ETD | ETA / ATD | ATA).
+ * Returns HTML fragment of four .modal-field divs to be placed inside
+ * an existing .modal-section-grid container.
+ *
+ * Stored values are always canonical UTC HH:MM strings.  If the current
+ * timeInputMode is "LOCAL" they are converted for display here so the
+ * initial HTML reflects the user's chosen mode.
+ *
+ * @param {object} opts
+ *   etdId, etaId, atdId, ataId  — element IDs for the four inputs
+ *   etdLabel, etaLabel, atdLabel, ataLabel — display labels (defaults ETD/ETA/ATD/ATA)
+ *   etdVal, etaVal, atdVal, ataVal — canonical UTC values (empty string if none)
+ *   etaDisabled, ataDisabled — boolean; disables the input (OVR arrival fields)
+ * @returns {string} HTML string
+ */
+function renderTimesGrid({ etdId, etaId, atdId, ataId,
+    etdLabel = "ETD", etaLabel = "ETA", atdLabel = "ATD", ataLabel = "ATA",
+    etdVal = "", etaVal = "", atdVal = "", ataVal = "",
+    etaDisabled = false, ataDisabled = false }) {
+
+  const mode = (getConfig().timeInputMode || "UTC").toUpperCase();
+
+  const toDisplay = (utcVal) => {
+    if (!utcVal) return "";
+    return mode === "LOCAL" ? convertUTCToLocal(utcVal) : utcVal;
+  };
+
+  const etaDis = etaDisabled ? " disabled" : "";
+  const ataDis = ataDisabled ? " disabled" : "";
+
+  return `
+    <div class="modal-field">
+      <label class="modal-label">${escapeHtml(etdLabel)}</label>
+      <input id="${etdId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(etdVal))}" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">${escapeHtml(etaLabel)}</label>
+      <input id="${etaId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(etaVal))}"${etaDis} />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">${escapeHtml(atdLabel)}</label>
+      <input id="${atdId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(atdVal))}" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">${escapeHtml(ataLabel)}</label>
+      <input id="${ataId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(ataVal))}"${ataDis} />
+    </div>`;
+}
+
+/**
+ * Bind the UTC/Local mode toggle button for a modal's times section.
+ *
+ * On open: reads cfg.timeInputMode, sets button label, converts existing
+ * input values to the correct display mode.
+ * On click: validates all non-empty inputs, converts values, persists new
+ * mode to config via updateConfig(), updates button label.
+ *
+ * @param {string}   toggleBtnId  — ID of the <button> element
+ * @param {string[]} inputIds     — IDs of the four time inputs (ETD,ETA,ATD,ATA)
+ */
+function bindTimeModeToggle(toggleBtnId, inputIds) {
+  const toggleBtn = document.getElementById(toggleBtnId);
+  if (!toggleBtn) return;
+
+  const cfg = getConfig();
+  let currentMode = (cfg.timeInputMode || "UTC").toUpperCase();
+
+  const inputs = inputIds.map(id => document.getElementById(id)).filter(Boolean);
+
+  // Set initial button label (values already converted at render time)
+  toggleBtn.textContent = currentMode === "LOCAL" ? "Local" : "UTC";
+
+  toggleBtn.addEventListener("click", () => {
+    // Validate all non-empty inputs before converting
+    for (const inp of inputs) {
+      if (!inp || !inp.value || inp.value.trim() === "") continue;
+      const v = validateTime(inp.value);
+      if (!v.valid) {
+        showToast(`Cannot switch time mode: invalid time "${inp.value}" in ${inp.id}`, 'error');
+        return;
+      }
+    }
+
+    const newMode = currentMode === "UTC" ? "LOCAL" : "UTC";
+
+    // Convert all non-empty values
+    inputs.forEach(inp => {
+      if (!inp || !inp.value || inp.value.trim() === "") return;
+      const norm = validateTime(inp.value).normalized || inp.value;
+      inp.value = newMode === "LOCAL" ? convertUTCToLocal(norm) : convertLocalToUTC(norm);
+    });
+
+    currentMode = newMode;
+    updateConfig({ timeInputMode: newMode });
+    toggleBtn.textContent = newMode === "LOCAL" ? "Local" : "UTC";
+  });
 }
 
 /**
@@ -2641,29 +2746,20 @@ function openNewFlightModal(flightType = "DEP") {
             <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">
-              <input type="checkbox" id="showLocalTimeToggle" style="margin-right: 4px;" />
-              Times shown in: <strong id="timeDisplayMode">UTC</strong>
-            </label>
+            <label class="modal-label">Times shown in:</label>
+            <button type="button" id="newFlightTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
           </div>
-          <div class="modal-field">
-            <label class="modal-label">ETD</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newDepPlanned" class="modal-input" placeholder="13:37" style="width: 80px;" />
-              <span id="localDepTime" class="time-local"></span>
-            </div>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">ETA</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newArrPlanned" class="modal-input" placeholder="16:20" style="width: 80px;" />
-              <span id="localArrTime" class="time-local"></span>
-            </div>
-          </div>
+          ${renderTimesGrid({
+            etdId: "newDepPlanned", etaId: "newArrPlanned",
+            atdId: "newDepActual",  ataId: "newArrActual",
+            etdLabel: flightType === "OVR" ? "ECT" : "ETD",
+            etaLabel: "ETA",
+            atdLabel: flightType === "OVR" ? "ACT" : "ATD",
+            ataLabel: "ATA",
+            etaDisabled: flightType === "OVR",
+            ataDisabled: flightType === "OVR"
+          })}
         </div>
-        <!-- Hidden checkboxes for compatibility -->
-        <input type="checkbox" id="showLocalTimeDep" style="display: none;" />
-        <input type="checkbox" id="showLocalTimeArr" style="display: none;" />
       </section>
 
       <!-- Operational Section -->
@@ -3013,54 +3109,9 @@ function openNewFlightModal(flightType = "DEP") {
     });
   }
 
-  // Bind local time display handlers
-  const depTimeInput = document.getElementById("newDepPlanned");
-  const arrTimeInput = document.getElementById("newArrPlanned");
-  const showLocalDepCheck = document.getElementById("showLocalTimeDep");
-  const showLocalArrCheck = document.getElementById("showLocalTimeArr");
-  const showLocalToggle = document.getElementById("showLocalTimeToggle");
-  const timeDisplayMode = document.getElementById("timeDisplayMode");
-  const localDepSpan = document.getElementById("localDepTime");
-  const localArrSpan = document.getElementById("localArrTime");
-
-  function updateLocalDepTime() {
-    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
-      const utcTime = depTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
-      const offset = getTimezoneOffsetLabel();
-      localDepSpan.textContent = localTime ? `${localTime} (${offset})` : "";
-    } else if (localDepSpan) {
-      localDepSpan.textContent = "";
-    }
-  }
-
-  function updateLocalArrTime() {
-    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
-      const utcTime = arrTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
-      const offset = getTimezoneOffsetLabel();
-      localArrSpan.textContent = localTime ? `${localTime} (${offset})` : "";
-    } else if (localArrSpan) {
-      localArrSpan.textContent = "";
-    }
-  }
-
-  // Wire single toggle to both hidden checkboxes
-  if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
-    showLocalToggle.addEventListener('change', () => {
-      const isChecked = showLocalToggle.checked;
-      showLocalDepCheck.checked = isChecked;
-      showLocalArrCheck.checked = isChecked;
-      timeDisplayMode.textContent = isChecked ? 'Local' : 'UTC';
-      updateLocalDepTime();
-      updateLocalArrTime();
-    });
-  }
-
-  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
-  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalArrTime);
-  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
-  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
+  // Bind UTC/Local time mode toggle (persistent, single toggle)
+  bindTimeModeToggle("newFlightTimeModeToggle",
+    ["newDepPlanned", "newArrPlanned", "newDepActual", "newArrActual"]);
 
   // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
@@ -3068,6 +3119,8 @@ function openNewFlightModal(flightType = "DEP") {
     const dof = document.getElementById("newDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newDepPlanned")?.value || "";
     let arrPlanned = document.getElementById("newArrPlanned")?.value || "";
+    let depActual  = document.getElementById("newDepActual")?.value  || "";
+    let arrActual  = document.getElementById("newArrActual")?.value  || "";
     const pob = document.getElementById("newPob")?.value || "0";
     const tng = document.getElementById("newTng")?.value || "0";
     const callsignCode = document.getElementById("newCallsignCode")?.value || "";
@@ -3103,6 +3156,30 @@ function openNewFlightModal(flightType = "DEP") {
     if (arrValidation.normalized) {
       arrPlanned = arrValidation.normalized;
       document.getElementById("newArrPlanned").value = arrPlanned;
+    }
+
+    // Validate actual times
+    const depActualValidation = validateTime(depActual);
+    if (!depActualValidation.valid) {
+      showToast(`Actual departure time: ${depActualValidation.error}`, 'error');
+      return;
+    }
+    if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newDepActual").value = depActual; }
+
+    const arrActualValidation = validateTime(arrActual);
+    if (!arrActualValidation.valid) {
+      showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error');
+      return;
+    }
+    if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newArrActual").value = arrActual; }
+
+    // Convert Local→UTC if currently in LOCAL display mode
+    const _newSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_newSaveMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (depActual)  depActual  = convertLocalToUTC(depActual);
+      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
     }
 
     // Check for past times and show warning
@@ -3205,9 +3282,9 @@ function openNewFlightModal(flightType = "DEP") {
       arrAd: arrAd,
       arrName: arrName,
       depPlanned: depPlanned,
-      depActual: "",
+      depActual: depActual,
       arrPlanned: arrPlanned,
-      arrActual: "",
+      arrActual: arrActual,
       dof: dof,
       rules: document.getElementById("newRules")?.value || "VFR",
       flightType: document.getElementById("newFlightType")?.value || flightType,
@@ -3293,6 +3370,21 @@ function openNewFlightModal(flightType = "DEP") {
     if (depValidation.normalized) depPlanned = depValidation.normalized;
     const arrValidation = validateTime(arrPlanned);
     if (arrValidation.normalized) arrPlanned = arrValidation.normalized;
+    let scDepActual = document.getElementById("newDepActual")?.value || "";
+    let scArrActual = document.getElementById("newArrActual")?.value || "";
+    const scDepActualValidation = validateTime(scDepActual);
+    if (scDepActualValidation.normalized) scDepActual = scDepActualValidation.normalized;
+    const scArrActualValidation = validateTime(scArrActual);
+    if (scArrActualValidation.normalized) scArrActual = scArrActualValidation.normalized;
+
+    // Convert Local→UTC if in LOCAL display mode
+    const _scMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_scMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (scDepActual) scDepActual = convertLocalToUTC(scDepActual);
+      if (scArrActual) scArrActual = convertLocalToUTC(scArrActual);
+    }
 
     // Get all other form values (same as save handler)
     const pob = document.getElementById("newPob")?.value || "0";
@@ -3338,9 +3430,9 @@ function openNewFlightModal(flightType = "DEP") {
       arrAd: arrAd,
       arrName: arrName,
       depPlanned: depPlanned,
-      depActual: depPlanned || currentTime,
+      depActual: scDepActual || depPlanned || currentTime,
       arrPlanned: arrPlanned,
-      arrActual: arrPlanned || currentTime,
+      arrActual: scArrActual || arrPlanned || currentTime,
       dof: dof,
       rules: document.getElementById("newRules")?.value || "VFR",
       flightType: selectedFlightType,
@@ -3481,29 +3573,14 @@ function openNewLocFlightModal() {
             <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">
-              <input type="checkbox" id="showLocalTimeLocToggle" style="margin-right: 4px;" />
-              Times shown in: <strong id="locTimeDisplayMode">UTC</strong>
-            </label>
+            <label class="modal-label">Times shown in:</label>
+            <button type="button" id="newLocTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
           </div>
-          <div class="modal-field">
-            <label class="modal-label">ETD</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newLocStart" class="modal-input" placeholder="12:30" style="width: 80px;" />
-              <span id="localLocDepTime" class="time-local"></span>
-            </div>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">ETA</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="newLocEnd" class="modal-input" placeholder="13:30" style="width: 80px;" />
-              <span id="localLocArrTime" class="time-local"></span>
-            </div>
-          </div>
+          ${renderTimesGrid({
+            etdId: "newLocStart",       etaId: "newLocEnd",
+            atdId: "newLocStartActual", ataId: "newLocEndActual"
+          })}
         </div>
-        <!-- Hidden checkboxes for compatibility -->
-        <input type="checkbox" id="showLocalTimeLocDep" style="display: none;" />
-        <input type="checkbox" id="showLocalTimeLocArr" style="display: none;" />
       </section>
 
       <!-- OPERATIONAL Section -->
@@ -3791,57 +3868,17 @@ function openNewLocFlightModal() {
     });
   });
 
-  // Wire local time display toggle (single toggle mirrors standard modal pattern)
-  const depTimeInput = document.getElementById("newLocStart");
-  const arrTimeInput = document.getElementById("newLocEnd");
-  const showLocalDepCheck = document.getElementById("showLocalTimeLocDep");
-  const showLocalArrCheck = document.getElementById("showLocalTimeLocArr");
-  const showLocalToggle = document.getElementById("showLocalTimeLocToggle");
-  const timeDisplayMode = document.getElementById("locTimeDisplayMode");
-  const localDepSpan = document.getElementById("localLocDepTime");
-  const localArrSpan = document.getElementById("localLocArrTime");
-
-  function updateLocalLocDepTime() {
-    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
-      const localTime = convertUTCToLocal(depTimeInput.value);
-      const offset = getTimezoneOffsetLabel();
-      localDepSpan.textContent = localTime ? `${localTime} (${offset})` : "";
-    } else if (localDepSpan) {
-      localDepSpan.textContent = "";
-    }
-  }
-
-  function updateLocalLocArrTime() {
-    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
-      const localTime = convertUTCToLocal(arrTimeInput.value);
-      const offset = getTimezoneOffsetLabel();
-      localArrSpan.textContent = localTime ? `${localTime} (${offset})` : "";
-    } else if (localArrSpan) {
-      localArrSpan.textContent = "";
-    }
-  }
-
-  if (showLocalToggle && showLocalDepCheck && showLocalArrCheck && timeDisplayMode) {
-    showLocalToggle.addEventListener('change', () => {
-      const isChecked = showLocalToggle.checked;
-      showLocalDepCheck.checked = isChecked;
-      showLocalArrCheck.checked = isChecked;
-      timeDisplayMode.textContent = isChecked ? 'Local' : 'UTC';
-      updateLocalLocDepTime();
-      updateLocalLocArrTime();
-    });
-  }
-
-  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalLocDepTime);
-  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalLocArrTime);
-  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalLocDepTime);
-  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalLocArrTime);
+  // Bind UTC/Local time mode toggle (persistent, single toggle)
+  bindTimeModeToggle("newLocTimeModeToggle",
+    ["newLocStart", "newLocEnd", "newLocStartActual", "newLocEndActual"]);
 
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newLocStart")?.value || "";
     let arrPlanned = document.getElementById("newLocEnd")?.value || "";
+    let depActual  = document.getElementById("newLocStartActual")?.value || "";
+    let arrActual  = document.getElementById("newLocEndActual")?.value  || "";
     const pob = document.getElementById("newLocPob")?.value || "0";
     const tng = document.getElementById("newLocTng")?.value || "0";
     const callsignCode = document.getElementById("newLocCallsignCode")?.value || "";
@@ -3858,6 +3895,23 @@ function openNewLocFlightModal() {
     const arrValidation = validateTime(arrPlanned);
     if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return; }
     if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newLocEnd").value = arrPlanned; }
+
+    const depActualValidation = validateTime(depActual);
+    if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return; }
+    if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newLocStartActual").value = depActual; }
+
+    const arrActualValidation = validateTime(arrActual);
+    if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return; }
+    if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newLocEndActual").value = arrActual; }
+
+    // Convert Local→UTC if in LOCAL display mode
+    const _locSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_locSaveMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (depActual)  depActual  = convertLocalToUTC(depActual);
+      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+    }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
     if (!pobValidation.valid) { showToast(pobValidation.error, 'error'); return; }
@@ -3925,9 +3979,9 @@ function openNewLocFlightModal() {
       arrAd: "EGOW",
       arrName: getLocationName("EGOW"),
       depPlanned: depPlanned,
-      depActual: "",
+      depActual: depActual,
       arrPlanned: arrPlanned,
-      arrActual: "",
+      arrActual: arrActual,
       dof: dof,
       rules: document.getElementById("newLocRules")?.value || "VFR",
       flightType: "LOC",
@@ -3991,6 +4045,21 @@ function openNewLocFlightModal() {
     if (depValidation.normalized) depPlanned = depValidation.normalized;
     const arrValidation = validateTime(arrPlanned);
     if (arrValidation.normalized) arrPlanned = arrValidation.normalized;
+    let locScDepActual = document.getElementById("newLocStartActual")?.value || "";
+    let locScArrActual = document.getElementById("newLocEndActual")?.value  || "";
+    const locScDepActualV = validateTime(locScDepActual);
+    if (locScDepActualV.normalized) locScDepActual = locScDepActualV.normalized;
+    const locScArrActualV = validateTime(locScArrActual);
+    if (locScArrActualV.normalized) locScArrActual = locScArrActualV.normalized;
+
+    // Convert Local→UTC if in LOCAL display mode
+    const _locCpMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_locCpMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (locScDepActual) locScDepActual = convertLocalToUTC(locScDepActual);
+      if (locScArrActual) locScArrActual = convertLocalToUTC(locScArrActual);
+    }
 
     const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
     if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
@@ -4044,9 +4113,9 @@ function openNewLocFlightModal() {
       arrAd: "EGOW",
       arrName: getLocationName("EGOW"),
       depPlanned: depPlanned,
-      depActual: depPlanned || currentTime,
+      depActual: locScDepActual || depPlanned || currentTime,
       arrPlanned: arrPlanned,
-      arrActual: arrPlanned || currentTime,
+      arrActual: locScArrActual || arrPlanned || currentTime,
       dof: dof,
       rules: document.getElementById("newLocRules")?.value || "VFR",
       flightType: "LOC",
@@ -4198,47 +4267,22 @@ function openEditMovementModal(m) {
             <label class="modal-label">Date of Flight (DOF)</label>
             <input id="editDOF" type="date" class="modal-input" value="${m.dof || getTodayDateString()}" />
           </div>
-          <div class="modal-field"></div>
           <div class="modal-field">
-            <label class="modal-label">ETD</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editDepPlanned" class="modal-input" value="${m.depPlanned || ""}" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer;">
-                <input type="checkbox" id="showLocalTimeEditDep" style="margin: 0 4px;" />
-                <span id="localEditDepTime" class="time-local"></span>
-              </label>
-            </div>
+            <label class="modal-label">Times shown in:</label>
+            <button type="button" id="editTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
           </div>
-          <div class="modal-field">
-            <label class="modal-label">ATD</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editDepActual" class="modal-input" value="${m.depActual || ""}" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer;">
-                <input type="checkbox" id="showLocalTimeEditDepActual" style="margin: 0 4px;" />
-                <span id="localEditDepActualTime" class="time-local"></span>
-              </label>
-            </div>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">ETA</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editArrPlanned" class="modal-input" value="${m.arrPlanned || ""}" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer;">
-                <input type="checkbox" id="showLocalTimeEditArr" style="margin: 0 4px;" />
-                <span id="localEditArrTime" class="time-local"></span>
-              </label>
-            </div>
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">ATA</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input id="editArrActual" class="modal-input" value="${m.arrActual || ""}" style="width: 80px;" />
-              <label style="font-size: 10px; color: #666; cursor: pointer;">
-                <input type="checkbox" id="showLocalTimeEditArrActual" style="margin: 0 4px;" />
-                <span id="localEditArrActualTime" class="time-local"></span>
-              </label>
-            </div>
-          </div>
+          ${renderTimesGrid({
+            etdId: "editDepPlanned", etaId: "editArrPlanned",
+            atdId: "editDepActual",  ataId: "editArrActual",
+            etdLabel: flightType === "OVR" ? "ECT" : "ETD",
+            etaLabel: "ETA",
+            atdLabel: flightType === "OVR" ? "ACT" : "ATD",
+            ataLabel: "ATA",
+            etdVal: m.depPlanned || "", etaVal: m.arrPlanned || "",
+            atdVal: m.depActual  || "", ataVal: m.arrActual  || "",
+            etaDisabled: flightType === "OVR",
+            ataDisabled: flightType === "OVR"
+          })}
         </div>
       </section>
 
@@ -4530,87 +4574,9 @@ function openEditMovementModal(m) {
     });
   }
 
-  // Bind local time display handlers for all time fields
-  const depPlannedInput = document.getElementById("editDepPlanned");
-  const depActualInput = document.getElementById("editDepActual");
-  const arrPlannedInput = document.getElementById("editArrPlanned");
-  const arrActualInput = document.getElementById("editArrActual");
-
-  const showLocalDepPlannedCheck = document.getElementById("showLocalTimeEditDep");
-  const showLocalDepActualCheck = document.getElementById("showLocalTimeEditDepActual");
-  const showLocalArrPlannedCheck = document.getElementById("showLocalTimeEditArr");
-  const showLocalArrActualCheck = document.getElementById("showLocalTimeEditArrActual");
-
-  const localDepPlannedSpan = document.getElementById("localEditDepTime");
-  const localDepActualSpan = document.getElementById("localEditDepActualTime");
-  const localArrPlannedSpan = document.getElementById("localEditArrTime");
-  const localArrActualSpan = document.getElementById("localEditArrActualTime");
-
-  function updateLocalTime(checkbox, input, span) {
-    if (checkbox && checkbox.checked && input && span) {
-      const utcTime = input.value;
-      const localTime = convertUTCToLocal(utcTime);
-      const offset = getTimezoneOffsetLabel();
-      span.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
-    } else if (span) {
-      span.textContent = "";
-    }
-  }
-
-  if (showLocalDepPlannedCheck) {
-    showLocalDepPlannedCheck.addEventListener("change", () =>
-      updateLocalTime(showLocalDepPlannedCheck, depPlannedInput, localDepPlannedSpan));
-  }
-  if (depPlannedInput) {
-    depPlannedInput.addEventListener("input", () =>
-      updateLocalTime(showLocalDepPlannedCheck, depPlannedInput, localDepPlannedSpan));
-  }
-
-  if (showLocalDepActualCheck) {
-    showLocalDepActualCheck.addEventListener("change", () =>
-      updateLocalTime(showLocalDepActualCheck, depActualInput, localDepActualSpan));
-  }
-  if (depActualInput) {
-    depActualInput.addEventListener("input", () =>
-      updateLocalTime(showLocalDepActualCheck, depActualInput, localDepActualSpan));
-  }
-
-  if (showLocalArrPlannedCheck) {
-    showLocalArrPlannedCheck.addEventListener("change", () =>
-      updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan));
-  }
-  if (arrPlannedInput) {
-    arrPlannedInput.addEventListener("input", () =>
-      updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan));
-  }
-
-  if (showLocalArrActualCheck) {
-    showLocalArrActualCheck.addEventListener("change", () =>
-      updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
-  }
-  if (arrActualInput) {
-    arrActualInput.addEventListener("input", () =>
-      updateLocalTime(showLocalArrActualCheck, arrActualInput, localArrActualSpan));
-  }
-
-  // Auto-update ETA when ETD changes
-  if (depPlannedInput && arrPlannedInput) {
-    depPlannedInput.addEventListener("input", () => {
-      const etd = depPlannedInput.value;
-      const eta = arrPlannedInput.value;
-
-      if (etd && etd.trim() !== "") {
-        const etdMinutes = timeToMinutes(etd);
-        const etaMinutes = timeToMinutes(eta);
-
-        // If ETA is not set or ETA is before ETD, set ETA to ETD + 20 minutes
-        if (!eta || eta.trim() === "" || etaMinutes <= etdMinutes) {
-          arrPlannedInput.value = addMinutesToTime(etd, 20);
-          updateLocalTime(showLocalArrPlannedCheck, arrPlannedInput, localArrPlannedSpan);
-        }
-      }
-    });
-  }
+  // Bind UTC/Local time mode toggle (persistent, single toggle)
+  bindTimeModeToggle("editTimeModeToggle",
+    ["editDepPlanned", "editArrPlanned", "editDepActual", "editArrActual"]);
 
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
@@ -4671,6 +4637,15 @@ function openEditMovementModal(m) {
     if (arrActualValidation.normalized) {
       arrActual = arrActualValidation.normalized;
       document.getElementById("editArrActual").value = arrActual;
+    }
+
+    // Convert Local→UTC if currently in LOCAL display mode
+    const _editSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_editSaveMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (depActual)  depActual  = convertLocalToUTC(depActual);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
     }
 
     // Check for past times and show warning
@@ -4825,6 +4800,15 @@ function openEditMovementModal(m) {
     if (arrPlannedValidation.normalized) arrPlanned = arrPlannedValidation.normalized;
     const arrActualValidation = validateTime(arrActual);
     if (arrActualValidation.normalized) arrActual = arrActualValidation.normalized;
+
+    // Convert Local→UTC if in LOCAL display mode
+    const _editCpMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_editCpMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (depActual)  depActual  = convertLocalToUTC(depActual);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+    }
 
     // Set actual times if not provided
     if (!depActual) depActual = depPlanned || currentTime;
@@ -4982,29 +4966,17 @@ function openDuplicateMovementModal(m) {
         <label class="modal-label">Date of Flight (DOF)</label>
         <input id="dupDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
       </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Departure (ETD / ECT) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeDupDep" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="dupDepPlanned" class="modal-input" value="${newETD}" style="width: 80px;" />
-          <span id="localDupDepTime" style="font-size: 12px; color: #666;"></span>
+      <div class="modal-section-grid" style="margin-top: 8px;">
+        <div class="modal-field">
+          <label class="modal-label">Times shown in:</label>
+          <button type="button" id="dupTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
         </div>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">
-          Estimated Arrival (ETA) - UTC
-          <span style="font-size: 11px; font-weight: normal; margin-left: 8px;">
-            <input type="checkbox" id="showLocalTimeDupArr" style="margin: 0 4px;"/>Show Local Time
-          </span>
-        </label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="dupArrPlanned" class="modal-input" value="${newETA}" style="width: 80px;" />
-          <span id="localDupArrTime" style="font-size: 12px; color: #666;"></span>
-        </div>
+        <div class="modal-field"></div>
+        ${renderTimesGrid({
+          etdId: "dupDepPlanned", etaId: "dupArrPlanned",
+          atdId: "dupDepActual",  ataId: "dupArrActual",
+          etdVal: newETD, etaVal: newETA
+        })}
       </div>
       <div class="modal-field">
         <label class="modal-label">POB</label>
@@ -5037,47 +5009,18 @@ function openDuplicateMovementModal(m) {
     });
   }
 
-  // Bind local time display handlers
-  const depTimeInput = document.getElementById("dupDepPlanned");
-  const arrTimeInput = document.getElementById("dupArrPlanned");
-  const showLocalDepCheck = document.getElementById("showLocalTimeDupDep");
-  const showLocalArrCheck = document.getElementById("showLocalTimeDupArr");
-  const localDepSpan = document.getElementById("localDupDepTime");
-  const localArrSpan = document.getElementById("localDupArrTime");
-
-  function updateLocalDepTime() {
-    if (showLocalDepCheck && showLocalDepCheck.checked && depTimeInput && localDepSpan) {
-      const utcTime = depTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
-      const offset = getTimezoneOffsetLabel();
-      localDepSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
-    } else if (localDepSpan) {
-      localDepSpan.textContent = "";
-    }
-  }
-
-  function updateLocalArrTime() {
-    if (showLocalArrCheck && showLocalArrCheck.checked && arrTimeInput && localArrSpan) {
-      const utcTime = arrTimeInput.value;
-      const localTime = convertUTCToLocal(utcTime);
-      const offset = getTimezoneOffsetLabel();
-      localArrSpan.textContent = localTime ? `Local: ${localTime} (${offset})` : "";
-    } else if (localArrSpan) {
-      localArrSpan.textContent = "";
-    }
-  }
-
-  if (showLocalDepCheck) showLocalDepCheck.addEventListener("change", updateLocalDepTime);
-  if (showLocalArrCheck) showLocalArrCheck.addEventListener("change", updateLocalArrTime);
-  if (depTimeInput) depTimeInput.addEventListener("input", updateLocalDepTime);
-  if (arrTimeInput) arrTimeInput.addEventListener("input", updateLocalArrTime);
+  // Bind UTC/Local time mode toggle (persistent, single toggle)
+  bindTimeModeToggle("dupTimeModeToggle",
+    ["dupDepPlanned", "dupArrPlanned", "dupDepActual", "dupArrActual"]);
 
   // Bind save handler with validation
   document.querySelector(".js-save-dup")?.addEventListener("click", () => {
     // Get form values
     const dof = document.getElementById("dupDOF")?.value || getTodayDateString();
-    const depPlanned = document.getElementById("dupDepPlanned")?.value || "";
-    const arrPlanned = document.getElementById("dupArrPlanned")?.value || "";
+    let depPlanned = document.getElementById("dupDepPlanned")?.value || "";
+    let arrPlanned = document.getElementById("dupArrPlanned")?.value || "";
+    let depActual  = document.getElementById("dupDepActual")?.value  || "";
+    let arrActual  = document.getElementById("dupArrActual")?.value  || "";
     const pob = document.getElementById("dupPob")?.value || "0";
     const tng = document.getElementById("dupTng")?.value || "0";
     const callsign = document.getElementById("dupCallsign")?.value || "";
@@ -5094,11 +5037,36 @@ function openDuplicateMovementModal(m) {
       showToast(`Departure time: ${depValidation.error}`, 'error');
       return;
     }
+    if (depValidation.normalized) depPlanned = depValidation.normalized;
 
     const arrValidation = validateTime(arrPlanned);
     if (!arrValidation.valid) {
       showToast(`Arrival time: ${arrValidation.error}`, 'error');
       return;
+    }
+    if (arrValidation.normalized) arrPlanned = arrValidation.normalized;
+
+    const depActualValidation = validateTime(depActual);
+    if (!depActualValidation.valid) {
+      showToast(`Actual departure time: ${depActualValidation.error}`, 'error');
+      return;
+    }
+    if (depActualValidation.normalized) depActual = depActualValidation.normalized;
+
+    const arrActualValidation = validateTime(arrActual);
+    if (!arrActualValidation.valid) {
+      showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error');
+      return;
+    }
+    if (arrActualValidation.normalized) arrActual = arrActualValidation.normalized;
+
+    // Convert Local→UTC if in LOCAL display mode
+    const _dupSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
+    if (_dupSaveMode === "LOCAL") {
+      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      if (depActual)  depActual  = convertLocalToUTC(depActual);
+      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
     }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
@@ -5158,9 +5126,9 @@ function openDuplicateMovementModal(m) {
       arrAd: arrAd,
       arrName: arrName,
       depPlanned: depPlanned,
-      depActual: "",
+      depActual: depActual,
       arrPlanned: arrPlanned,
-      arrActual: "",
+      arrActual: arrActual,
       dof: dof,
       rules: document.getElementById("dupRules")?.value || m.rules || "VFR",
       flightType: selectedFlightType,

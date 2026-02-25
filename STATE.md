@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-17 (Europe/London) — P0 Hardening: modal-clear policy enforcement, invariant check, stress test, engineering rules
+Last updated: 2026-02-25 (Europe/London) — Sprint: Unified Times form + persistent UTC/Local toggle across all modals
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -86,6 +86,44 @@ A lightweight, **standalone desktop application** ("FDMS Lite") for local ATC/op
 ---
 
 ## 2) Implementation Status
+
+### 2.0 Sprint — Unified Times Form (2026-02-25)
+
+**Summary**: All create/edit/duplicate modals now share a common 2×2 Times grid
+(ETD | ETA / ATD | ATA) with a single persistent UTC/Local mode toggle.
+
+**Changes delivered**:
+- Unified Times form across all create/edit/duplicate modals (New DEP/ARR/OVR, New LOC, Edit, Duplicate)
+- Persistent UTC/Local input mode toggle (`config.timeInputMode`); persists via existing localStorage config mechanism
+- Removed per-field local time checkboxes (showLocalTimeEditDep, showLocalTimeEditDepActual, showLocalTimeEditArr, showLocalTimeEditArrActual, showLocalTimeToggle, showLocalTimeDep, showLocalTimeArr, showLocalTimeLocToggle, showLocalTimeDupDep, showLocalTimeDupArr)
+- Added `convertLocalToUTC()` to datamodel.js (inverse of existing `convertUTCToLocal()`)
+- Added `renderTimesGrid()` helper in ui_liveboard.js
+- Added `bindTimeModeToggle()` helper in ui_liveboard.js
+- Added actual-time fields to modals that previously only had planned fields:
+  - New DEP/ARR/OVR: `newDepActual`, `newArrActual`
+  - New LOC: `newLocStartActual`, `newLocEndActual`
+  - Duplicate: `dupDepActual`, `dupArrActual`
+- OVR: ETA/ATA fields present in grid but disabled; labels ECT/ACT applied
+- Save handlers convert Local→UTC before writing to movement fields
+- `docs/TIMING.md` added (canonical timing semantics reference)
+
+**Files changed**:
+- `src/js/datamodel.js` — added `timeInputMode: "UTC"` to defaultConfig; added `convertLocalToUTC()`
+- `src/js/ui_liveboard.js` — added `renderTimesGrid()`, `bindTimeModeToggle()`; updated all 4 modals; updated all save handlers
+- `docs/TIMING.md` — new documentation file
+
+**Manual verification checklist**:
+- [ ] Open New DEP modal — Times grid shows 4 fields (ETD, ETA, ATD, ATA), toggle button reads "UTC"
+- [ ] Open New ARR modal — same 4-field grid
+- [ ] Open New LOC modal — same 4-field grid
+- [ ] Open New OVR modal — ETD label = "ECT", ATD label = "ACT", ETA and ATA fields disabled
+- [ ] Open Edit modal — same 4-field grid, no per-field checkboxes
+- [ ] Open Duplicate modal — same 4-field grid
+- [ ] Toggle UTC→Local in any modal — all non-empty input values convert; button shows "Local"
+- [ ] Toggle Local→UTC — values convert back to UTC
+- [ ] Close modal, reopen — toggle state persists (same mode remembered from config)
+- [ ] Enter times in Local mode, save, reopen in UTC mode — stored times are correct UTC strings
+- [ ] OVR: enter ECT in Local mode, save; stored depPlanned is UTC
 
 ### 2.1 Completed (believed stable)
 **Bidirectional Calendar ↔ Booking ↔ Strip sync**
