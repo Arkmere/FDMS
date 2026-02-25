@@ -50,7 +50,8 @@ const defaultConfig = {
   // Reciprocal strip creation settings
   depToArrOffsetMinutes: 180,        // DEP→ARR: Arrival time = ETD/ATD + this (default 3 hours)
   arrToDepOffsetMinutes: 30,         // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
-  inlineEditIdleMs: 120000           // Inline-edit idle timeout before auto-cancel (ms); min enforced 5000
+  inlineEditIdleMs: 120000,          // Inline-edit idle timeout before auto-cancel (ms); min enforced 5000
+  timeInputMode: "UTC"               // Time input display mode in modals: "UTC" or "LOCAL"
 };
 
 // Configuration state
@@ -1111,6 +1112,29 @@ export function convertUTCToLocal(utcTime) {
   if (localHours >= 24) localHours -= 24;
 
   return `${String(localHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/**
+ * Convert local time to UTC time based on configured offset (inverse of convertUTCToLocal)
+ * @param {string} localTime - Time in HH:MM format (Local)
+ * @returns {string} Time in HH:MM format (UTC)
+ */
+export function convertLocalToUTC(localTime) {
+  if (!localTime) return "";
+  const match = localTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return localTime;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const offsetHours = config.timezoneOffsetHours;
+
+  let utcHours = hours - offsetHours;
+
+  // Handle day wraparound
+  if (utcHours < 0) utcHours += 24;
+  if (utcHours >= 24) utcHours -= 24;
+
+  return `${String(utcHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 /**
