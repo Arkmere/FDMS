@@ -3420,7 +3420,7 @@ function openNewLocFlightModal() {
           </div>
           <div class="modal-field">
             <label class="modal-label">WTC</label>
-            <input id="newLocWtcDisplay" class="modal-input is-derived" placeholder="L, J" disabled />
+            <select id="newLocWtc" class="modal-input"></select>
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -3627,14 +3627,49 @@ function openNewLocFlightModal() {
   const egowCodeInput = document.getElementById("newLocEgowCode");
   const unitCodeInput = document.getElementById("newLocUnitCode");
 
-  // WTC display auto-update
-  const locWtcDisplay = document.getElementById('newLocWtcDisplay');
-  const updateLocWtcDisplay = () => {
-    if (!locWtcDisplay) return;
-    const t = typeInput?.value || '';
-    locWtcDisplay.value = t ? (getWTC(t, 'LOC', getConfig().wtcSystem || 'ICAO') || '') : '';
-  };
-  typeInput?.addEventListener('input', updateLocWtcDisplay);
+  // LOC WTC select: constrained to wtcSystem, with autofill + manual-override support
+  const locWtcSelect = document.getElementById('newLocWtc');
+  let locWtcDirty = false;
+
+  function locWtcOpts() {
+    const key = String((getConfig().wtcSystem || 'ICAO')).toUpperCase();
+    return (_WTC_OPTIONS && _WTC_OPTIONS[key]) ? _WTC_OPTIONS[key] : ['L','S','M','H','J'];
+  }
+
+  function setLocWtcOptions() {
+    if (!locWtcSelect) return;
+    const opts = locWtcOpts();
+    locWtcSelect.innerHTML =
+      `<option value=""></option>` +
+      opts.map(o => `<option value="${o}">${o}</option>`).join('');
+  }
+
+  function extractLeadingToken(s) {
+    const m = String(s || '').trim().toUpperCase().match(/^[A-Za-z]+/);
+    return m ? m[0] : '';
+  }
+
+  function computeLocWtcFromCurrentForm() {
+    const type = document.getElementById('newLocType')?.value || '';
+    if (!type) return '';
+    const sys = (getConfig().wtcSystem || 'ICAO');
+    const w = getWTC(type, 'LOC', sys) || '';
+    return extractLeadingToken(w);
+  }
+
+  function maybeAutofillLocWtc() {
+    if (!locWtcSelect) return;
+    if (locWtcDirty && locWtcSelect.value) return; // user manual override wins
+    const raw = computeLocWtcFromCurrentForm();
+    const allowed = new Set(locWtcOpts());
+    locWtcSelect.value = allowed.has(raw) ? raw : '';
+  }
+
+  setLocWtcOptions();
+  maybeAutofillLocWtc();
+
+  locWtcSelect?.addEventListener('change', () => { locWtcDirty = true; });
+  typeInput?.addEventListener('input', maybeAutofillLocWtc);
 
   // Apply automatic uppercase conversion to aviation-related fields
   makeInputUppercase(callsignCodeInput);
@@ -3652,6 +3687,8 @@ function openNewLocFlightModal() {
         const vkbType = regData['TYPE'];
         if (vkbType && vkbType !== '-' && vkbType !== '') {
           typeInput.value = vkbType;
+          // Programmatic type set doesn't fire 'input'; trigger LOC WTC autofill manually
+          maybeAutofillLocWtc();
         }
         const egowFlightType = regData['EGOW FLIGHT TYPE'];
         if (egowFlightType && egowFlightType !== '-' && egowFlightType !== '' && egowCodeInput) {
@@ -3692,6 +3729,8 @@ function openNewLocFlightModal() {
         const inferredType = inferTypeFromReg(regInput.value);
         if (inferredType) {
           typeInput.value = inferredType;
+          // Programmatic fallback type set; trigger LOC WTC autofill manually
+          maybeAutofillLocWtc();
         }
       }
     });
@@ -3841,7 +3880,22 @@ function openNewLocFlightModal() {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
     const aircraftType = document.getElementById("newLocType")?.value || "";
-    const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
+    // WTC: manual select override wins; fall back to computed value
+    const wtcManual = (document.getElementById("newLocWtc")?.value || "").trim().toUpperCase();
+    const wtcComputed = (() => {
+      const w = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO") || "";
+      const m = w.trim().toUpperCase().match(/^[A-Z]+/);
+      return m ? m[0] : "";
+    })();
+    const wtcAllowed = new Set(
+      (_WTC_OPTIONS && _WTC_OPTIONS[String((getConfig().wtcSystem || 'ICAO')).toUpperCase()])
+      || ['L','S','M','H','J']
+    );
+    const wtc = wtcManual || wtcComputed;
+    if (wtc && !wtcAllowed.has(wtc)) {
+      showToast('Invalid WTC category', 'error');
+      return;
+    }
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
 
@@ -3946,7 +4000,22 @@ function openNewLocFlightModal() {
     const popularName = regData ? (regData['POPULAR NAME'] || "") : "";
     const voiceCallsign = getVoiceCallsignForDisplay(callsign, regValue);
     const aircraftType = document.getElementById("newLocType")?.value || "";
-    const wtc = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO");
+    // WTC: manual select override wins; fall back to computed value
+    const wtcManual = (document.getElementById("newLocWtc")?.value || "").trim().toUpperCase();
+    const wtcComputed = (() => {
+      const w = getWTC(aircraftType, "LOC", getConfig().wtcSystem || "ICAO") || "";
+      const m = w.trim().toUpperCase().match(/^[A-Z]+/);
+      return m ? m[0] : "";
+    })();
+    const wtcAllowed = new Set(
+      (_WTC_OPTIONS && _WTC_OPTIONS[String((getConfig().wtcSystem || 'ICAO')).toUpperCase()])
+      || ['L','S','M','H','J']
+    );
+    const wtc = wtcManual || wtcComputed;
+    if (wtc && !wtcAllowed.has(wtc)) {
+      showToast('Invalid WTC category', 'error');
+      return;
+    }
     const operator = regData ? (regData['OPERATOR'] || "") : "";
     const notes = regData ? (regData['NOTES'] || "") : "";
 
