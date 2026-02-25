@@ -996,6 +996,48 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 - Military serials intentionally ignored by normaliser (prefix list is EU-civil only)
 - All existing test suites unaffected
 
+### 4.14 Sprint: New LOC Modal WTC — editable select, autofill, wtcSystem-constrained
+
+**Branch:** `claude/fix-newloc-wtc-editable-QLjBR`
+
+#### Changes made (`src/js/ui_liveboard.js` only)
+
+- **HTML template**: `<input id="newLocWtcDisplay" disabled>` replaced with `<select id="newLocWtc" class="modal-input">` in `openNewLocFlightModal()` modal template
+- **WTC select wiring block** (replaces old `locWtcDisplay` / `updateLocWtcDisplay` block):
+  - `locWtcOpts()` — returns `_WTC_OPTIONS[getConfig().wtcSystem]` (defaults to ICAO set)
+  - `setLocWtcOptions()` — populates select with blank + system options at modal open
+  - `computeLocWtcFromCurrentForm()` — calls `getWTC(type, 'LOC', sys)` → `extractLeadingToken()`
+  - `maybeAutofillLocWtc()` — skips if `locWtcDirty && select.value` (user override wins); otherwise sets select to computed value if it is in the allowed set
+  - `locWtcDirty` flag — set on user `change` event; prevents autofill overwriting a manual selection
+  - Autofill triggered by: modal open, `newLocType` input event, VKB programmatic type fill (explicit `maybeAutofillLocWtc()` calls in both VKB lookup and fallback inference paths)
+- **Both save handlers** (`.js-save-loc` and `.js-save-complete-loc`):
+  - `wtcManual = document.getElementById("newLocWtc")?.value` — manual select wins
+  - `wtcComputed` — `getWTC(...)` result with leading-token extraction (same as New Strip)
+  - `wtcAllowed` Set built from `_WTC_OPTIONS[wtcSystem]`
+  - `wtc = wtcManual || wtcComputed`
+  - Defensive guard: if `wtc` non-empty and not in `wtcAllowed` → `showToast('Invalid WTC category', 'error'); return;`
+
+#### Invariants
+
+- No `modalRoot.innerHTML =` assignments introduced (confirmed by grep — only comments at lines 67, 2367)
+- Modal lifecycle hardening unchanged; `closeActiveModal()` call path unmodified
+- No changes to counters, daily stats, formation semantics, OVR separation, inline idle timeout, or timeline logic
+
+#### Deliverables checklist
+
+- [x] `<select id="newLocWtc">` in LOC modal HTML
+- [x] `locWtcOpts()`, `setLocWtcOptions()`, `computeLocWtcFromCurrentForm()`, `maybeAutofillLocWtc()`, `locWtcDirty` wired in `openNewLocFlightModal()`
+- [x] Autofill on modal open + `newLocType` input + VKB programmatic type fill (both paths)
+- [x] Save handler: `wtcManual || wtcComputed` with defensive `wtcAllowed` guard
+- [x] Save & Complete handler: same WTC block
+- [x] No `modalRoot.innerHTML =` live assignments introduced
+- [x] `STATE.md` updated
+
+#### NO-DRIFT confirmation
+
+- No changes to modal lifecycle, data model, daily stats, OVR separation, idle timeout, or timeline rules
+- All existing sprint test suites unaffected (only `openNewLocFlightModal` WTC wiring changed)
+
 ---
 
 ## 5) Operating Procedure (Manager–Worker)
