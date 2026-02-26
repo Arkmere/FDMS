@@ -675,487 +675,510 @@
 
         <!-- ADMIN -->
         <section id="tab-admin" class="tab-panel hidden">
-          <div class="page-title">Admin</div>
-          <div class="page-subtitle">
-            LocalStorage persistence is enabled. Reset restores demo seed (and overwrites local session data).
-          </div>
+          <div class="admin-shell">
 
-          <!-- Init Status -->
-          <div class="panel">
-            <h3>System Status</h3>
-            <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
-              <strong>⏳ Initialising...</strong>
-            </div>
-          </div>
+            <!-- Left sidebar navigation -->
+            <nav class="admin-nav" id="adminNav">
+              <button class="admin-nav-btn active" data-section="admin-sec-status">System Status</button>
+              <button class="admin-nav-btn" data-section="admin-sec-session">Session</button>
+              <button class="admin-nav-btn" data-section="admin-sec-offsets">Flight Offsets</button>
+              <button class="admin-nav-btn" data-section="admin-sec-autoactivate">Auto-Activation</button>
+              <button class="admin-nav-btn" data-section="admin-sec-timezone">Timezone &amp; Display</button>
+              <button class="admin-nav-btn" data-section="admin-sec-wtc">Wake Turbulence</button>
+              <button class="admin-nav-btn" data-section="admin-sec-history">History &amp; Timeline</button>
+              <button class="admin-nav-btn" data-section="admin-sec-profiles">Booking Profiles</button>
+              <button class="admin-nav-btn admin-nav-btn--danger" data-section="admin-sec-danger">Danger Zone</button>
+            </nav>
 
-          <!-- Diagnostics Panel -->
-          <div class="panel">
-            <h3>Diagnostics</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 6px; font-weight: bold; width: 200px;">Last Init Time:</td>
-                <td id="diagInitTime" style="padding: 6px; font-family: monospace;">—</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
-                <td id="diagRenderTime" style="padding: 6px; font-family: monospace;">—</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px; font-weight: bold;">Storage Key:</td>
-                <td id="diagStorageKey" style="padding: 6px; font-family: monospace;">—</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
-                <td id="diagMovementCount" style="padding: 6px; font-family: monospace;">—</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px; font-weight: bold;">Last Error:</td>
-                <td id="diagLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">None</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
-                <td id="diagStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
-              </tr>
-            </table>
-          </div>
+            <!-- Right content area -->
+            <div class="admin-content" id="adminContent">
 
-          <!-- Session Management -->
-          <div class="panel">
-            <h3>Session Management</h3>
-            <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
-              Backup your movement data to a JSON file or restore from a previous backup.
-            </p>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Backup session data to JSON file">Backup to JSON</button>
-              <button class="btn btn-primary" id="btnImportSession" type="button" aria-label="Restore session data from JSON file">Restore from JSON</button>
-            </div>
-            <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
-          </div>
+              <!-- Sticky save bar (shown for config sections 3–7) -->
+              <div class="admin-save-bar hidden" id="adminSaveBar">
+                <span class="admin-save-status" id="adminSaveStatus">All changes saved</span>
+                <button class="btn btn-secondary" id="adminDiscardBtn" type="button" disabled>Discard</button>
+                <button class="btn btn-primary" id="adminSaveBtn" type="button" disabled>Save</button>
+              </div>
 
-          <!-- History Settings -->
-          <div class="panel">
-            <h3>History Settings</h3>
-            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-              Control which alerts are displayed in the History tab's expanded strip details. Time-based alerts are hidden by default as they are less relevant for historical movements.
-            </div>
+              <!-- ── SECTION 1: System Status ── -->
+              <div class="admin-section" id="admin-sec-status">
+                <div class="page-title">Admin</div>
+                <div class="page-subtitle">
+                  LocalStorage persistence is enabled. Reset restores demo seed (and overwrites local session data).
+                </div>
 
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configHistoryShowTimeAlerts" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: bold;">Show time-based alerts</span>
-                </label>
-                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
-                  Includes: "Movement is X hours old", Overdue (preliminary &amp; full) action alerts
+                <div class="panel">
+                  <h3>System Status</h3>
+                  <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
+                    <strong>⏳ Initialising...</strong>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <h3>Diagnostics</h3>
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold; width: 200px;">Last Init Time:</td>
+                      <td id="diagInitTime" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
+                      <td id="diagRenderTime" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Storage Key:</td>
+                      <td id="diagStorageKey" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
+                      <td id="diagMovementCount" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Last Error:</td>
+                      <td id="diagLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">None</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
+                      <td id="diagStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                  </table>
                 </div>
               </div>
 
-              <div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configHistoryShowEmergencyAlerts" style="cursor: pointer;" checked>
-                  <span style="font-size: 12px; font-weight: bold;">Show emergency alerts</span>
-                </label>
-                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
-                  Includes: Squawk 7500 (hijack), 7600 (radio failure), 7700 (general emergency)
+              <!-- ── SECTION 2: Session ── -->
+              <div class="admin-section hidden" id="admin-sec-session">
+                <div class="panel">
+                  <h3>Session Management</h3>
+                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Backup your movement data to a JSON file for safekeeping.
+                  </p>
+                  <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Backup session data to JSON file">Backup to JSON</button>
                 </div>
               </div>
 
-              <div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configHistoryShowCallsignAlerts" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: bold;">Show callsign confusion alerts</span>
-                </label>
-                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
-                  Includes: Registration confusion, VKB contraction, similar callsign, military callsign conflicts
+              <!-- ── SECTION 3: Flight Offsets ── -->
+              <div class="admin-section hidden" id="admin-sec-offsets">
+                <div class="panel">
+                  <h3>Flight Offsets</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Default time offsets for new movements (minutes from current time):
+                  </div>
+
+                  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+                    <thead>
+                      <tr style="border-bottom: 1px solid #ddd;">
+                        <th style="text-align: left; padding: 6px; font-weight: bold;">Flight Type</th>
+                        <th style="text-align: left; padding: 6px; font-weight: bold;">Offset (minutes)</th>
+                        <th style="text-align: left; padding: 6px; font-weight: bold;">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">DEP</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configDepOffset" min="0" max="180"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">ARR</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configArrOffset" min="0" max="180"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to now + this</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">LOC</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configLocOffset" min="0" max="180"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">LOC Duration</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configLocDuration" min="5" max="180"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to ETD + this (default flight duration)</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">OVR Offset</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configOvrOffset" min="0" max="180"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">EOFT defaults to now + this (Expected On Frequency Time)</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">OVR Duration</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configOvrDuration" min="1" max="60"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">ELFT = EOFT + this (time on frequency, default 5 min)</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px; font-weight: bold;">OVR Activate</td>
+                        <td style="padding: 6px;">
+                          <input type="number" id="configOvrAutoActivate" min="5" max="120"
+                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">Auto-activate this many minutes before EOFT</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <!-- Reciprocal Strip Settings -->
+                  <div style="margin-top: 16px; padding: 12px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                      Reciprocal Strip Time Offsets
+                    </label>
+                    <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                      Default time calculation when creating reciprocal strips (DEP→ARR or ARR→DEP):
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR (minutes)</label>
+                        <input type="number" id="configDepToArrOffset" min="0" max="720" placeholder="180"
+                          style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        <div style="font-size: 10px; color: #888;">ETA = ETD/ATD + this (default 3 hours)</div>
+                      </div>
+                      <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP (minutes)</label>
+                        <input type="number" id="configArrToDepOffset" min="0" max="720" placeholder="30"
+                          style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                        <div style="font-size: 10px; color: #888;">ETD = ETA/ATA + this (default 30 min)</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configHistoryShowWtcAlerts" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: bold;">Show wake turbulence category alerts</span>
-                </label>
-                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
-                  Highlights aircraft meeting or exceeding the configured WTC threshold
-                </div>
-              </div>
-            </div>
-          </div>
+              <!-- ── SECTION 4: Auto-Activation ── -->
+              <div class="admin-section hidden" id="admin-sec-autoactivate">
+                <div class="panel">
+                  <h3>Auto-Activation</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    PLANNED movements will automatically transition to ACTIVE status when within the configured time window. Movements created with past times are always activated immediately.
+                  </div>
 
-          <!-- Timeline Settings -->
-          <div class="panel">
-            <h3>Day View / Timeline Settings</h3>
-            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-              Configure the timeline display above the Strip Bay on the Live Board.
-            </div>
+                  <!-- DEP Row -->
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                      <input type="checkbox" id="configAutoActivateDepEnabled" style="cursor: pointer;">
+                      <span style="font-size: 12px; font-weight: 500;">Departures</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="number" id="configAutoActivateDepMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                      <span style="font-size: 11px; color: #666;">min before ETD</span>
+                    </div>
+                  </div>
 
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configTimelineEnabled" style="cursor: pointer;" checked>
-                  <span style="font-size: 12px; font-weight: bold;">Show timeline on Live Board</span>
-                </label>
-                <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
-                  Display a visual timeline showing planned and active movements throughout the day
-                </div>
-              </div>
+                  <!-- ARR Row -->
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                      <input type="checkbox" id="configAutoActivateArrEnabled" style="cursor: pointer;">
+                      <span style="font-size: 12px; font-weight: 500;">Arrivals</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="number" id="configAutoActivateArrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                      <span style="font-size: 11px; color: #666;">min before ETA</span>
+                    </div>
+                  </div>
 
-              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <div>
-                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Start Hour (UTC)</label>
-                  <select id="configTimelineStartHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
-                    <option value="0">00:00</option>
-                    <option value="4">04:00</option>
-                    <option value="5">05:00</option>
-                    <option value="6" selected>06:00</option>
-                    <option value="7">07:00</option>
-                    <option value="8">08:00</option>
-                  </select>
-                </div>
-                <div>
-                  <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">End Hour (UTC)</label>
-                  <select id="configTimelineEndHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
-                    <option value="18">18:00</option>
-                    <option value="20">20:00</option>
-                    <option value="22" selected>22:00</option>
-                    <option value="23">23:00</option>
-                    <option value="24">24:00 (midnight)</option>
-                  </select>
-                </div>
-              </div>
-              <div style="font-size: 11px; color: #666;">
-                Timeline will display movements scheduled within this UTC time window.
-              </div>
-            </div>
-          </div>
+                  <!-- LOC Row -->
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                      <input type="checkbox" id="configAutoActivateLocEnabled" style="cursor: pointer;">
+                      <span style="font-size: 12px; font-weight: 500;">Local Flights</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="number" id="configAutoActivateLocMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                      <span style="font-size: 11px; color: #666;">min before ETD</span>
+                    </div>
+                  </div>
 
-          <!-- Configuration -->
-          <div class="panel">
-            <h3>Configuration</h3>
-            <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-              Default time offsets for new movements (minutes from current time):
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
-              <thead>
-                <tr style="border-bottom: 1px solid #ddd;">
-                  <th style="text-align: left; padding: 6px; font-weight: bold;">Flight Type</th>
-                  <th style="text-align: left; padding: 6px; font-weight: bold;">Offset (minutes)</th>
-                  <th style="text-align: left; padding: 6px; font-weight: bold;">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">DEP</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configDepOffset"
-                      min="0"
-                      max="180"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">ARR</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configArrOffset"
-                      min="0"
-                      max="180"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to now + this</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">LOC</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configLocOffset"
-                      min="0"
-                      max="180"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">LOC Duration</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configLocDuration"
-                      min="5"
-                      max="180"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to ETD + this (default flight duration)</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">OVR Offset</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configOvrOffset"
-                      min="0"
-                      max="180"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">EOFT defaults to now + this (Expected On Frequency Time)</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">OVR Duration</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configOvrDuration"
-                      min="1"
-                      max="60"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">ELFT = EOFT + this (time on frequency, default 5 min)</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px; font-weight: bold;">OVR Activate</td>
-                  <td style="padding: 6px;">
-                    <input
-                      type="number"
-                      id="configOvrAutoActivate"
-                      min="5"
-                      max="120"
-                      style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                    />
-                  </td>
-                  <td style="padding: 6px; font-size: 11px; color: #666;">Auto-activate this many minutes before EOFT</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <!-- Reciprocal Strip Settings -->
-            <div style="margin-top: 16px; margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 4px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Reciprocal Strip Time Offsets
-              </label>
-              <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
-                Default time calculation when creating reciprocal strips (DEP→ARR or ARR→DEP):
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR (minutes)</label>
-                  <input
-                    type="number"
-                    id="configDepToArrOffset"
-                    min="0"
-                    max="720"
-                    placeholder="180"
-                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                  />
-                  <div style="font-size: 10px; color: #888;">ETA = ETD/ATD + this (default 3 hours)</div>
-                </div>
-                <div>
-                  <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP (minutes)</label>
-                  <input
-                    type="number"
-                    id="configArrToDepOffset"
-                    min="0"
-                    max="720"
-                    placeholder="30"
-                    style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;"
-                  />
-                  <div style="font-size: 10px; color: #888;">ETD = ETA/ATA + this (default 30 min)</div>
-                </div>
-              </div>
-            </div>
-
-            <div style="margin-top: 16px; margin-bottom: 12px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 4px;">
-                Timezone Offset (Local time relative to UTC)
-              </label>
-              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
-                <select id="configTimezoneOffset" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
-                  <option value="-12">UTC-12</option>
-                  <option value="-11">UTC-11</option>
-                  <option value="-10">UTC-10</option>
-                  <option value="-9">UTC-9</option>
-                  <option value="-8">UTC-8</option>
-                  <option value="-7">UTC-7</option>
-                  <option value="-6">UTC-6</option>
-                  <option value="-5">UTC-5</option>
-                  <option value="-4">UTC-4</option>
-                  <option value="-3">UTC-3</option>
-                  <option value="-2">UTC-2</option>
-                  <option value="-1">UTC-1</option>
-                  <option value="0" selected>UTC (GMT)</option>
-                  <option value="1">UTC+1 (BST)</option>
-                  <option value="2">UTC+2</option>
-                  <option value="3">UTC+3</option>
-                  <option value="4">UTC+4</option>
-                  <option value="5">UTC+5</option>
-                  <option value="6">UTC+6</option>
-                  <option value="7">UTC+7</option>
-                  <option value="8">UTC+8</option>
-                  <option value="9">UTC+9</option>
-                  <option value="10">UTC+10</option>
-                  <option value="11">UTC+11</option>
-                  <option value="12">UTC+12</option>
-                </select>
-              </div>
-              <div style="font-size: 11px; color: #666;">
-                Times are stored as UTC. This setting affects local time conversions shown in modals.
-              </div>
-            </div>
-
-            <div style="margin-top: 16px; margin-bottom: 12px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Banner Local Time Display
-              </label>
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configHideLocalIfSame" style="cursor: pointer;">
-                  <span style="font-size: 12px;">Hide local time in banner if same as UTC</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configAlwaysHideLocal" style="cursor: pointer;">
-                  <span style="font-size: 12px;">Always hide local time in banner</span>
-                </label>
-              </div>
-              <div style="font-size: 11px; color: #666; margin-top: 6px;">
-                Control visibility of local time in the top-right banner clock display.
-              </div>
-            </div>
-
-            <div style="margin-top: 16px; margin-bottom: 12px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Alert Display Options
-              </label>
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="checkbox" id="configEnableAlertTooltips" style="cursor: pointer;">
-                  <span style="font-size: 12px;">Enable alert tooltips on hover</span>
-                </label>
-              </div>
-              <div style="font-size: 11px; color: #666; margin-top: 6px;">
-                Show alert details when hovering over highlighted movement strips. All alerts are always visible in the expanded Details view.
-              </div>
-            </div>
-
-            <div style="margin-top: 16px; margin-bottom: 12px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Auto-Activation
-              </label>
-              <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                PLANNED movements will automatically transition to ACTIVE status when within the configured time window. Movements created with past times are always activated immediately.
-              </div>
-
-              <!-- DEP Row -->
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
-                  <input type="checkbox" id="configAutoActivateDepEnabled" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: 500;">Departures</span>
-                </label>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <input type="number" id="configAutoActivateDepMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
-                  <span style="font-size: 11px; color: #666;">min before ETD</span>
+                  <!-- OVR Row -->
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
+                      <input type="checkbox" id="configAutoActivateOvrEnabled" style="cursor: pointer;">
+                      <span style="font-size: 12px; font-weight: 500;">Overflights</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="number" id="configAutoActivateOvrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
+                      <span style="font-size: 11px; color: #666;">min before EOFT</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- ARR Row -->
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
-                  <input type="checkbox" id="configAutoActivateArrEnabled" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: 500;">Arrivals</span>
-                </label>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <input type="number" id="configAutoActivateArrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
-                  <span style="font-size: 11px; color: #666;">min before ETA</span>
+              <!-- ── SECTION 5: Timezone & Display ── -->
+              <div class="admin-section hidden" id="admin-sec-timezone">
+                <div class="panel">
+                  <h3>Timezone &amp; Display</h3>
+
+                  <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 4px;">
+                      Timezone Offset (Local time relative to UTC)
+                    </label>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                      <select id="configTimezoneOffset" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                        <option value="-12">UTC-12</option>
+                        <option value="-11">UTC-11</option>
+                        <option value="-10">UTC-10</option>
+                        <option value="-9">UTC-9</option>
+                        <option value="-8">UTC-8</option>
+                        <option value="-7">UTC-7</option>
+                        <option value="-6">UTC-6</option>
+                        <option value="-5">UTC-5</option>
+                        <option value="-4">UTC-4</option>
+                        <option value="-3">UTC-3</option>
+                        <option value="-2">UTC-2</option>
+                        <option value="-1">UTC-1</option>
+                        <option value="0" selected>UTC (GMT)</option>
+                        <option value="1">UTC+1 (BST)</option>
+                        <option value="2">UTC+2</option>
+                        <option value="3">UTC+3</option>
+                        <option value="4">UTC+4</option>
+                        <option value="5">UTC+5</option>
+                        <option value="6">UTC+6</option>
+                        <option value="7">UTC+7</option>
+                        <option value="8">UTC+8</option>
+                        <option value="9">UTC+9</option>
+                        <option value="10">UTC+10</option>
+                        <option value="11">UTC+11</option>
+                        <option value="12">UTC+12</option>
+                      </select>
+                    </div>
+                    <div style="font-size: 11px; color: #666;">
+                      Times are stored as UTC. This setting affects local time conversions shown in modals.
+                    </div>
+                  </div>
+
+                  <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                      Banner Local Time Display
+                    </label>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHideLocalIfSame" style="cursor: pointer;">
+                        <span style="font-size: 12px;">Hide local time in banner if same as UTC</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configAlwaysHideLocal" style="cursor: pointer;">
+                        <span style="font-size: 12px;">Always hide local time in banner</span>
+                      </label>
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 6px;">
+                      Control visibility of local time in the top-right banner clock display.
+                    </div>
+                  </div>
+
+                  <div style="margin-bottom: 8px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                      Alert Display Options
+                    </label>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configEnableAlertTooltips" style="cursor: pointer;">
+                        <span style="font-size: 12px;">Enable alert tooltips on hover</span>
+                      </label>
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 6px;">
+                      Show alert details when hovering over highlighted movement strips. All alerts are always visible in the expanded Details view.
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- LOC Row -->
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
-                  <input type="checkbox" id="configAutoActivateLocEnabled" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: 500;">Local Flights</span>
-                </label>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <input type="number" id="configAutoActivateLocMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
-                  <span style="font-size: 11px; color: #666;">min before ETD</span>
+              <!-- ── SECTION 6: Wake Turbulence ── -->
+              <div class="admin-section hidden" id="admin-sec-wtc">
+                <div class="panel">
+                  <h3>Wake Turbulence Category Alert</h3>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <label style="font-size: 12px;">WTC System:</label>
+                    <select id="configWtcSystem" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                      <option value="ICAO">ICAO (L/M/H)</option>
+                      <option value="UK">UK CAP 493 (L/S/LM/UM/H/J)</option>
+                      <option value="RECAT">RECAT-EU (F/E/D/C/B/A)</option>
+                    </select>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <label style="font-size: 12px;">Alert if WTC is:</label>
+                    <select id="configWtcThreshold" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                      <!-- Options dynamically populated based on WTC system -->
+                    </select>
+                  </div>
+                  <div style="font-size: 11px; color: #666;">
+                    Highlights WTC field in yellow and shows warning in Alerts section for aircraft meeting or exceeding the selected category.
+                  </div>
                 </div>
               </div>
 
-              <!-- OVR Row -->
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 120px;">
-                  <input type="checkbox" id="configAutoActivateOvrEnabled" style="cursor: pointer;">
-                  <span style="font-size: 12px; font-weight: 500;">Overflights</span>
-                </label>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <input type="number" id="configAutoActivateOvrMinutes" min="5" max="120" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;">
-                  <span style="font-size: 11px; color: #666;">min before EOFT</span>
+              <!-- ── SECTION 7: History & Timeline ── -->
+              <div class="admin-section hidden" id="admin-sec-history">
+                <div class="panel">
+                  <h3>History Settings</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Control which alerts are displayed in the History tab's expanded strip details. Time-based alerts are hidden by default as they are less relevant for historical movements.
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHistoryShowTimeAlerts" style="cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: bold;">Show time-based alerts</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Includes: "Movement is X hours old", Overdue (preliminary &amp; full) action alerts
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHistoryShowEmergencyAlerts" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Show emergency alerts</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Includes: Squawk 7500 (hijack), 7600 (radio failure), 7700 (general emergency)
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHistoryShowCallsignAlerts" style="cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: bold;">Show callsign confusion alerts</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Includes: Registration confusion, VKB contraction, similar callsign, military callsign conflicts
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configHistoryShowWtcAlerts" style="cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: bold;">Show wake turbulence category alerts</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Highlights aircraft meeting or exceeding the configured WTC threshold
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <h3>Day View / Timeline Settings</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Configure the timeline display above the Strip Bay on the Live Board.
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configTimelineEnabled" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Show timeline on Live Board</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Display a visual timeline showing planned and active movements throughout the day
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                      <div>
+                        <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Start Hour (UTC)</label>
+                        <select id="configTimelineStartHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                          <option value="0">00:00</option>
+                          <option value="4">04:00</option>
+                          <option value="5">05:00</option>
+                          <option value="6" selected>06:00</option>
+                          <option value="7">07:00</option>
+                          <option value="8">08:00</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">End Hour (UTC)</label>
+                        <select id="configTimelineEndHour" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">
+                          <option value="18">18:00</option>
+                          <option value="20">20:00</option>
+                          <option value="22" selected>22:00</option>
+                          <option value="23">23:00</option>
+                          <option value="24">24:00 (midnight)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="font-size: 11px; color: #666;">
+                      Timeline will display movements scheduled within this UTC time window.
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style="margin-top: 16px; margin-bottom: 12px;">
-              <label style="display: block; font-weight: bold; margin-bottom: 8px;">
-                Wake Turbulence Category Alert
-              </label>
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                <label style="font-size: 12px;">WTC System:</label>
-                <select id="configWtcSystem" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
-                  <option value="ICAO">ICAO (L/M/H)</option>
-                  <option value="UK">UK CAP 493 (L/S/LM/UM/H/J)</option>
-                  <option value="RECAT">RECAT-EU (F/E/D/C/B/A)</option>
-                </select>
+              <!-- ── SECTION 8: Booking Profiles (immediate save) ── -->
+              <div class="admin-section hidden" id="admin-sec-profiles">
+                <div class="panel" id="bookingProfilesPanel">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="margin:0;">Booking Profiles</h3>
+                    <button class="btn btn-primary btn-small" id="btnNewProfile" type="button">+ New Profile</button>
+                  </div>
+                  <p style="font-size:11px;color:#666;margin:0 0 10px;">Saved aircraft/contact profiles for repeat visitors. Auto-filled when the same registration is entered on the Booking form.</p>
+                  <input type="text" id="profileSearchInput" placeholder="Search by registration, type, callsign, contact…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;box-sizing:border-box;margin-bottom:10px;" />
+                  <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                      <thead>
+                        <tr style="background:#f5f5f5;border-bottom:2px solid #ddd;">
+                          <th style="text-align:left;padding:6px 8px;">Registration</th>
+                          <th style="text-align:left;padding:6px 8px;">Type</th>
+                          <th style="text-align:left;padding:6px 8px;">Callsign</th>
+                          <th style="text-align:left;padding:6px 8px;">Contact</th>
+                          <th style="text-align:left;padding:6px 8px;">Last saved</th>
+                          <th style="text-align:right;padding:6px 8px;"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="profilesTableBody">
+                        <tr><td colspan="6" style="color:#999;padding:12px;text-align:center;">No profiles saved.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                <label style="font-size: 12px;">Alert if WTC is:</label>
-                <select id="configWtcThreshold" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
-                  <!-- Options dynamically populated based on WTC system -->
-                </select>
-              </div>
-              <div style="font-size: 11px; color: #666;">
-                Highlights WTC field in yellow and shows warning in Alerts section for aircraft meeting or exceeding the selected category.
-              </div>
-            </div>
 
-            <button class="btn btn-primary" id="btnSaveConfig" type="button">Save Configuration</button>
-          </div>
+              <!-- ── SECTION 9: Danger Zone ── -->
+              <div class="admin-section hidden" id="admin-sec-danger">
+                <div class="panel">
+                  <div class="admin-danger-zone">
+                    <h3>Danger Zone</h3>
+                    <p style="font-size: 12px; color: #555; margin-bottom: 16px;">
+                      These actions are destructive and cannot be undone.
+                    </p>
 
-          <!-- Booking Profiles -->
-          <div class="panel" id="bookingProfilesPanel">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-              <h3 style="margin:0;">Booking Profiles</h3>
-              <button class="btn btn-primary btn-small" id="btnNewProfile" type="button">+ New Profile</button>
-            </div>
-            <p style="font-size:11px;color:#666;margin:0 0 10px;">Saved aircraft/contact profiles for repeat visitors. Auto-filled when the same registration is entered on the Booking form.</p>
-            <input type="text" id="profileSearchInput" placeholder="Search by registration, type, callsign, contact…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;box-sizing:border-box;margin-bottom:10px;" />
-            <div style="overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                <thead>
-                  <tr style="background:#f5f5f5;border-bottom:2px solid #ddd;">
-                    <th style="text-align:left;padding:6px 8px;">Registration</th>
-                    <th style="text-align:left;padding:6px 8px;">Type</th>
-                    <th style="text-align:left;padding:6px 8px;">Callsign</th>
-                    <th style="text-align:left;padding:6px 8px;">Contact</th>
-                    <th style="text-align:left;padding:6px 8px;">Last saved</th>
-                    <th style="text-align:right;padding:6px 8px;"></th>
-                  </tr>
-                </thead>
-                <tbody id="profilesTableBody">
-                  <tr><td colspan="6" style="color:#999;padding:12px;text-align:center;">No profiles saved.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                      <div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">Restore from JSON</div>
+                        <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                          Restore session data from a previous backup. All current movement data will be overwritten.
+                        </div>
+                        <button class="btn btn-danger" id="btnImportSession" type="button" aria-label="Restore session data from JSON file">Restore from JSON</button>
+                        <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
+                      </div>
+
+                      <div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">Reset to Demo Data</div>
+                        <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                          Replace all movement data with the built-in demo seed. All current data will be lost.
+                        </div>
+                        <button class="btn btn-danger" id="btnResetToDemo" type="button">Reset to Demo Data</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /admin-content -->
+          </div><!-- /admin-shell -->
         </section>
       </main>
     </div>

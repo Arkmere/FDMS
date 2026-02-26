@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-25 (Europe/London) — Sprint: Unified Times form + persistent UTC/Local toggle across all modals
+Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1 — two-pane layout with dirty-state tracking and Danger Zone
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -1075,6 +1075,73 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 
 - No changes to modal lifecycle, data model, daily stats, OVR separation, idle timeout, or timeline rules
 - All existing sprint test suites unaffected (only `openNewLocFlightModal` WTC wiring changed)
+
+---
+
+### 4.15 Sprint: Admin IA v1 — Two-pane Admin layout with dirty-state tracking
+
+**Base:** `main @ ca85d2d`  **Branch:** `claude/admin-ia-v1-THSv8`
+
+#### Changes
+
+**`src/index.html`**
+- Replaced the single-column Admin tab body with `<div class="admin-shell">` containing:
+  - `<nav class="admin-nav" id="adminNav">` — left sidebar with 9 named section buttons
+  - `<div class="admin-content" id="adminContent">` — right scrollable content pane
+- Sticky Save bar: `#adminSaveBar` (hidden by default), `#adminSaveStatus` pill, `#adminSaveBtn`, `#adminDiscardBtn`
+- **9 sections** (each a `<div class="admin-section [hidden]" id="admin-sec-*">`):
+  1. `admin-sec-status` — System Status + Diagnostics (no Save bar)
+  2. `admin-sec-session` — Backup to JSON only (no Save bar)
+  3. `admin-sec-offsets` — Flight Offsets table + Reciprocal Strip Settings (Save bar shown)
+  4. `admin-sec-autoactivate` — Auto-Activation per flight type (Save bar shown)
+  5. `admin-sec-timezone` — Timezone offset + Banner Local Time + Alert Tooltips (Save bar shown)
+  6. `admin-sec-wtc` — Wake Turbulence system + threshold (Save bar shown)
+  7. `admin-sec-history` — History Settings + Day View / Timeline Settings (Save bar shown)
+  8. `admin-sec-profiles` — Booking Profiles (immediate save — no Save bar)
+  9. `admin-sec-danger` — Danger Zone: Restore from JSON + Reset to Demo Data (no Save bar)
+- **All input IDs unchanged** — no regression to existing JS consumers
+- Removed `#btnSaveConfig` (replaced by sticky Save bar)
+- Moved "Restore from JSON" button + `#importFileInput` from Session section to Danger Zone
+- Added `#btnResetToDemo` button in Danger Zone
+
+**`src/css/vectair.css`**
+- Added Admin layout styles: `.admin-shell`, `.admin-nav`, `.admin-nav-btn`, `.admin-nav-btn--danger`, `.admin-content`
+- Added `.admin-section` / `.admin-section.hidden` visibility rules
+- Added `.admin-save-bar`, `.admin-save-status--dirty`, `.admin-save-status--clean`
+- Added `.admin-danger-zone` (red-accented panel)
+- Added `.btn-danger` (red button variant)
+
+**`src/js/app.js`**
+- Added `resetMovementsToDemo` to datamodel.js imports
+- Added `adminConfirm(message, onConfirm)` — lightweight inline confirmation dialog
+- Replaced `initAdminPanelHandlers()` body with:
+  - **Section navigation**: sidebar `.admin-nav-btn` clicks → toggle section visibility + Save bar visibility
+  - **Export handler**: unchanged — `#btnExportSession` → export JSON
+  - **Restore handler** (Danger Zone): `#btnImportSession` → `adminConfirm()` → `fileInput.click()` → import
+  - **Reset handler** (Danger Zone): `#btnResetToDemo` → `adminConfirm()` → `resetMovementsToDemo()` → re-render
+  - **Config load**: identical to previous — all config values loaded into inputs on init
+  - **Dirty-state tracking**: `takeSnapshot()` / `applySnapshot()` / `isDirty()` / `checkDirty()` functions; `change`/`input` event listeners on all tracked inputs; Save bar buttons enabled/disabled accordingly
+  - **`saveAdminConfig()`**: extracted from old `btnSaveConfig` handler; re-takes snapshot after save → resets dirty state
+  - **Discard**: `applySnapshot(_configSnapshot)` restores inputs to last-saved values
+
+#### Invariants maintained
+- No config key IDs renamed
+- No changes to Live Board, timeline, booking sync, WTC logic, inline edit, or modal lifecycle
+- Booking Profiles (`#admin-sec-profiles`) behaviour unchanged — direct save via `initBookingProfilesAdmin()`
+- `initAdminPanel()` stub in `ui_liveboard.js` untouched
+
+#### Manual verification checklist
+- [ ] Admin tab shows 2-pane layout: sidebar on left, content on right
+- [ ] Clicking each of 9 sidebar buttons shows the correct section
+- [ ] Save bar is visible only on sections 3–7 (Offsets, Auto-Activation, Timezone, WTC, History)
+- [ ] Save bar starts with "All changes saved" and disabled buttons
+- [ ] Changing any config input shows "Unsaved changes" and enables Save/Discard
+- [ ] Save button persists config and resets Save bar to clean state
+- [ ] Discard button restores inputs to last-saved state
+- [ ] "Backup to JSON" in Session section works as before
+- [ ] "Restore from JSON" in Danger Zone shows confirmation dialog before proceeding
+- [ ] "Reset to Demo Data" in Danger Zone shows confirmation dialog before proceeding
+- [ ] Booking Profiles section unaffected
 
 ---
 
