@@ -31,6 +31,7 @@ import { reconcileLinks } from "./services/bookingSync.js";
 import {
   exportSessionJSON,
   importSessionJSON,
+  resetMovementsToDemo,
   getStorageInfo,
   getStorageQuota,
   getConfig,
@@ -387,11 +388,64 @@ function updateInitStatus(message, isComplete = false) {
   }
 }
 
-function initAdminPanelHandlers() {
-  const btnExport = document.getElementById("btnExportSession");
-  const btnImport = document.getElementById("btnImportSession");
-  const fileInput = document.getElementById("importFileInput");
+/**
+ * Show a lightweight inline confirmation dialog.
+ * @param {string} message - Text to display
+ * @param {Function} onConfirm - Called when user confirms
+ */
+function adminConfirm(message, onConfirm) {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
 
+  const dialog = document.createElement('div');
+  dialog.style.cssText = 'background:#fff;border-radius:6px;padding:24px 24px 20px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);';
+  dialog.innerHTML = `
+    <div style="font-size:13px;line-height:1.5;margin-bottom:18px;">${escapeHtml(message)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" id="_adminConfirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="_adminConfirmOk">Confirm</button>
+    </div>
+  `;
+
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  const cleanup = () => { if (backdrop.parentNode) document.body.removeChild(backdrop); };
+
+  dialog.querySelector('#_adminConfirmCancel').addEventListener('click', cleanup);
+  dialog.querySelector('#_adminConfirmOk').addEventListener('click', () => { cleanup(); onConfirm(); });
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(); });
+}
+
+function initAdminPanelHandlers() {
+  // ── Section navigation ─────────────────────────────────────────
+  const navBtns = document.querySelectorAll('.admin-nav-btn');
+  const sections = document.querySelectorAll('.admin-section');
+  const adminSaveBar = document.getElementById('adminSaveBar');
+
+  // Sections that show the sticky Save bar (config sections 3–7)
+  const CONFIG_SECTIONS = new Set([
+    'admin-sec-offsets',
+    'admin-sec-autoactivate',
+    'admin-sec-timezone',
+    'admin-sec-wtc',
+    'admin-sec-history'
+  ]);
+
+  function showAdminSection(sectionId) {
+    navBtns.forEach(b => b.classList.toggle('active', b.dataset.section === sectionId));
+    sections.forEach(s => s.classList.toggle('hidden', s.id !== sectionId));
+    if (adminSaveBar) {
+      adminSaveBar.classList.toggle('hidden', !CONFIG_SECTIONS.has(sectionId));
+    }
+  }
+
+  navBtns.forEach(btn => {
+    btn.addEventListener('click', () => showAdminSection(btn.dataset.section));
+  });
+
+  // ── Session export ─────────────────────────────────────────────
+  const btnExport = document.getElementById("btnExportSession");
   if (btnExport) {
     btnExport.addEventListener("click", () => {
       try {
@@ -410,9 +464,16 @@ function initAdminPanelHandlers() {
     });
   }
 
+  // ── Danger Zone: Restore from JSON ────────────────────────────
+  const btnImport = document.getElementById("btnImportSession");
+  const fileInput = document.getElementById("importFileInput");
+
   if (btnImport && fileInput) {
     btnImport.addEventListener("click", () => {
-      fileInput.click();
+      adminConfirm(
+        "Restore from JSON will overwrite ALL current movement data with the selected backup file. This cannot be undone. Continue?",
+        () => fileInput.click()
+      );
     });
 
     fileInput.addEventListener("change", (e) => {
@@ -444,7 +505,30 @@ function initAdminPanelHandlers() {
     });
   }
 
-  // Configuration handlers
+  // ── Danger Zone: Reset to Demo ────────────────────────────────
+  const btnResetToDemo = document.getElementById("btnResetToDemo");
+  if (btnResetToDemo) {
+    btnResetToDemo.addEventListener("click", () => {
+      adminConfirm(
+        "Reset to Demo Data will replace ALL current movement data with the built-in demo seed. All your data will be permanently lost. Continue?",
+        () => {
+          try {
+            resetMovementsToDemo();
+            renderLiveBoard();
+            renderHistoryBoard();
+            renderReports();
+            diagnostics.lastRenderTime = new Date().toISOString();
+            updateDiagnostics();
+            showToast("Reset to demo data complete", 'success');
+          } catch (e) {
+            showToast(`Reset failed: ${e.message}`, 'error');
+          }
+        }
+      );
+    });
+  }
+
+  // ── Configuration inputs ───────────────────────────────────────
   const configDepOffset = document.getElementById("configDepOffset");
   const configArrOffset = document.getElementById("configArrOffset");
   const configLocOffset = document.getElementById("configLocOffset");
@@ -479,7 +563,26 @@ function initAdminPanelHandlers() {
   // Reciprocal strip settings
   const configDepToArrOffset = document.getElementById("configDepToArrOffset");
   const configArrToDepOffset = document.getElementById("configArrToDepOffset");
-  const btnSaveConfig = document.getElementById("btnSaveConfig");
+
+  // All tracked config inputs (order matters only for snapshot key identity)
+  const CHECKBOX_IDS = [
+    'configHideLocalIfSame', 'configAlwaysHideLocal', 'configEnableAlertTooltips',
+    'configAutoActivateDepEnabled', 'configAutoActivateArrEnabled',
+    'configAutoActivateLocEnabled', 'configAutoActivateOvrEnabled',
+    'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
+    'configHistoryShowCallsignAlerts', 'configHistoryShowWtcAlerts',
+    'configTimelineEnabled'
+  ];
+  const VALUE_IDS = [
+    'configDepOffset', 'configArrOffset', 'configLocOffset', 'configLocDuration',
+    'configOvrOffset', 'configOvrDuration', 'configOvrAutoActivate',
+    'configTimezoneOffset',
+    'configAutoActivateDepMinutes', 'configAutoActivateArrMinutes',
+    'configAutoActivateLocMinutes', 'configAutoActivateOvrMinutes',
+    'configWtcSystem', 'configWtcThreshold',
+    'configTimelineStartHour', 'configTimelineEndHour',
+    'configDepToArrOffset', 'configArrToDepOffset'
+  ];
 
   // Helper to populate WTC threshold options based on system
   const populateWtcThresholdOptions = (system) => {
@@ -565,6 +668,7 @@ function initAdminPanelHandlers() {
     // Add change listener to repopulate threshold options
     configWtcSystem.addEventListener('change', () => {
       populateWtcThresholdOptions(configWtcSystem.value);
+      checkDirty();
     });
   }
   if (configWtcThreshold) configWtcThreshold.value = currentConfig.wtcAlertThreshold || "off";
@@ -584,96 +688,183 @@ function initAdminPanelHandlers() {
   if (configDepToArrOffset) configDepToArrOffset.value = currentConfig.depToArrOffsetMinutes ?? 180;
   if (configArrToDepOffset) configArrToDepOffset.value = currentConfig.arrToDepOffsetMinutes ?? 30;
 
-  if (btnSaveConfig) {
-    btnSaveConfig.addEventListener("click", () => {
-      const depOffset = parseInt(configDepOffset?.value || "10", 10);
-      const arrOffset = parseInt(configArrOffset?.value || "90", 10);
-      const locOffset = parseInt(configLocOffset?.value || "10", 10);
-      const locDuration = parseInt(configLocDuration?.value || "40", 10);
-      const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
-      const ovrDuration = parseInt(configOvrDuration?.value || "5", 10);
-      const ovrAutoActivate = parseInt(configOvrAutoActivate?.value || "30", 10);
-      const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
-      const hideLocalIfSame = configHideLocalIfSame?.checked || false;
-      const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
-      const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
-      // Auto-activation settings per flight type
-      const autoActivateDepEnabled = configAutoActivateDepEnabled?.checked || false;
-      const autoActivateDepMinutes = parseInt(configAutoActivateDepMinutes?.value || "30", 10);
-      const autoActivateArrEnabled = configAutoActivateArrEnabled?.checked !== false;
-      const autoActivateArrMinutes = parseInt(configAutoActivateArrMinutes?.value || "30", 10);
-      const autoActivateLocEnabled = configAutoActivateLocEnabled?.checked || false;
-      const autoActivateLocMinutes = parseInt(configAutoActivateLocMinutes?.value || "30", 10);
-      const autoActivateOvrEnabled = configAutoActivateOvrEnabled?.checked !== false;
-      const autoActivateOvrMinutes = parseInt(configAutoActivateOvrMinutes?.value || "30", 10);
-      const wtcSystem = configWtcSystem?.value || "ICAO";
-      const wtcThreshold = configWtcThreshold?.value || "off";
-      // History alert visibility settings
-      const historyShowTimeAlerts = configHistoryShowTimeAlerts?.checked || false;
-      const historyShowEmergencyAlerts = configHistoryShowEmergencyAlerts?.checked !== false;
-      const historyShowCallsignAlerts = configHistoryShowCallsignAlerts?.checked || false;
-      const historyShowWtcAlerts = configHistoryShowWtcAlerts?.checked || false;
-      // Timeline settings
-      const timelineEnabled = configTimelineEnabled?.checked !== false;
-      const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
-      const timelineEndHour = parseInt(configTimelineEndHour?.value || "22", 10);
-      // Reciprocal strip settings
-      const depToArrOffset = parseInt(configDepToArrOffset?.value || "180", 10);
-      const arrToDepOffset = parseInt(configArrToDepOffset?.value || "30", 10);
+  // ── Dirty state tracking ───────────────────────────────────────
+  const adminSaveBtn = document.getElementById('adminSaveBtn');
+  const adminDiscardBtn = document.getElementById('adminDiscardBtn');
+  const adminSaveStatus = document.getElementById('adminSaveStatus');
 
-      // Validate all offsets
-      if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
-          isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
-          isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
-          isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
-          isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
-          isNaN(ovrDuration) || ovrDuration < 1 || ovrDuration > 60 ||
-          isNaN(ovrAutoActivate) || ovrAutoActivate < 5 || ovrAutoActivate > 120 ||
-          isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
-          isNaN(autoActivateDepMinutes) || autoActivateDepMinutes < 5 || autoActivateDepMinutes > 120 ||
-          isNaN(autoActivateArrMinutes) || autoActivateArrMinutes < 5 || autoActivateArrMinutes > 120 ||
-          isNaN(autoActivateLocMinutes) || autoActivateLocMinutes < 5 || autoActivateLocMinutes > 120 ||
-          isNaN(autoActivateOvrMinutes) || autoActivateOvrMinutes < 5 || autoActivateOvrMinutes > 120) {
-        showToast("Please enter valid configuration values", 'error');
-        return;
+  function takeSnapshot() {
+    const snap = {};
+    CHECKBOX_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) snap[id] = el.checked;
+    });
+    VALUE_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) snap[id] = el.value;
+    });
+    return snap;
+  }
+
+  function applySnapshot(snap) {
+    CHECKBOX_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && id in snap) el.checked = snap[id];
+    });
+    VALUE_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && id in snap) el.value = snap[id];
+    });
+    // Re-sync WTC threshold options after restoring WTC system
+    if (configWtcSystem) {
+      populateWtcThresholdOptions(configWtcSystem.value);
+      if (configWtcThreshold && snap['configWtcThreshold']) {
+        configWtcThreshold.value = snap['configWtcThreshold'];
       }
+    }
+  }
 
-      updateConfig({
-        depOffsetMinutes: depOffset,
-        arrOffsetMinutes: arrOffset,
-        locOffsetMinutes: locOffset,
-        locFlightDurationMinutes: locDuration,
-        ovrOffsetMinutes: ovrOffset,
-        ovrFlightDurationMinutes: ovrDuration,
-        ovrAutoActivateMinutes: ovrAutoActivate,
-        timezoneOffsetHours: timezoneOffset,
-        hideLocalTimeInBannerIfSame: hideLocalIfSame,
-        alwaysHideLocalTimeInBanner: alwaysHideLocal,
-        enableAlertTooltips: enableAlertTooltips,
-        // Auto-activation settings per flight type
-        autoActivateDepEnabled: autoActivateDepEnabled,
-        autoActivateDepMinutes: autoActivateDepMinutes,
-        autoActivateArrEnabled: autoActivateArrEnabled,
-        autoActivateArrMinutes: autoActivateArrMinutes,
-        autoActivateLocEnabled: autoActivateLocEnabled,
-        autoActivateLocMinutes: autoActivateLocMinutes,
-        autoActivateOvrEnabled: autoActivateOvrEnabled,
-        autoActivateOvrMinutes: autoActivateOvrMinutes,
-        wtcSystem: wtcSystem,
-        wtcAlertThreshold: wtcThreshold,
-        historyShowTimeAlerts: historyShowTimeAlerts,
-        historyShowEmergencyAlerts: historyShowEmergencyAlerts,
-        historyShowCallsignAlerts: historyShowCallsignAlerts,
-        historyShowWtcAlerts: historyShowWtcAlerts,
-        timelineEnabled: timelineEnabled,
-        timelineStartHour: timelineStartHour,
-        timelineEndHour: timelineEndHour,
-        depToArrOffsetMinutes: depToArrOffset,
-        arrToDepOffsetMinutes: arrToDepOffset
-      });
-      showToast("Configuration saved successfully", 'success');
-      // Re-render timeline with new settings
-      renderTimeline();
+  let _configSnapshot = takeSnapshot();
+
+  function isDirty() {
+    for (const id of CHECKBOX_IDS) {
+      const el = document.getElementById(id);
+      if (el && el.checked !== _configSnapshot[id]) return true;
+    }
+    for (const id of VALUE_IDS) {
+      const el = document.getElementById(id);
+      if (el && el.value !== _configSnapshot[id]) return true;
+    }
+    return false;
+  }
+
+  function checkDirty() {
+    const dirty = isDirty();
+    if (adminSaveBtn) adminSaveBtn.disabled = !dirty;
+    if (adminDiscardBtn) adminDiscardBtn.disabled = !dirty;
+    if (adminSaveStatus) {
+      if (dirty) {
+        adminSaveStatus.textContent = 'Unsaved changes';
+        adminSaveStatus.className = 'admin-save-status admin-save-status--dirty';
+      } else {
+        adminSaveStatus.textContent = 'All changes saved';
+        adminSaveStatus.className = 'admin-save-status admin-save-status--clean';
+      }
+    }
+  }
+
+  // Attach change listeners to all config inputs
+  [...CHECKBOX_IDS, ...VALUE_IDS].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', checkDirty);
+    if (el && el.type === 'number') el.addEventListener('input', checkDirty);
+  });
+
+  // Initial state
+  checkDirty();
+
+  // ── Save config action ─────────────────────────────────────────
+  function saveAdminConfig() {
+    const depOffset = parseInt(configDepOffset?.value || "10", 10);
+    const arrOffset = parseInt(configArrOffset?.value || "90", 10);
+    const locOffset = parseInt(configLocOffset?.value || "10", 10);
+    const locDuration = parseInt(configLocDuration?.value || "40", 10);
+    const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
+    const ovrDuration = parseInt(configOvrDuration?.value || "5", 10);
+    const ovrAutoActivate = parseInt(configOvrAutoActivate?.value || "30", 10);
+    const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
+    const hideLocalIfSame = configHideLocalIfSame?.checked || false;
+    const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
+    const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+    // Auto-activation settings per flight type
+    const autoActivateDepEnabled = configAutoActivateDepEnabled?.checked || false;
+    const autoActivateDepMinutes = parseInt(configAutoActivateDepMinutes?.value || "30", 10);
+    const autoActivateArrEnabled = configAutoActivateArrEnabled?.checked !== false;
+    const autoActivateArrMinutes = parseInt(configAutoActivateArrMinutes?.value || "30", 10);
+    const autoActivateLocEnabled = configAutoActivateLocEnabled?.checked || false;
+    const autoActivateLocMinutes = parseInt(configAutoActivateLocMinutes?.value || "30", 10);
+    const autoActivateOvrEnabled = configAutoActivateOvrEnabled?.checked !== false;
+    const autoActivateOvrMinutes = parseInt(configAutoActivateOvrMinutes?.value || "30", 10);
+    const wtcSystem = configWtcSystem?.value || "ICAO";
+    const wtcThreshold = configWtcThreshold?.value || "off";
+    // History alert visibility settings
+    const historyShowTimeAlerts = configHistoryShowTimeAlerts?.checked || false;
+    const historyShowEmergencyAlerts = configHistoryShowEmergencyAlerts?.checked !== false;
+    const historyShowCallsignAlerts = configHistoryShowCallsignAlerts?.checked || false;
+    const historyShowWtcAlerts = configHistoryShowWtcAlerts?.checked || false;
+    // Timeline settings
+    const timelineEnabled = configTimelineEnabled?.checked !== false;
+    const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
+    const timelineEndHour = parseInt(configTimelineEndHour?.value || "22", 10);
+    // Reciprocal strip settings
+    const depToArrOffset = parseInt(configDepToArrOffset?.value || "180", 10);
+    const arrToDepOffset = parseInt(configArrToDepOffset?.value || "30", 10);
+
+    // Validate all offsets
+    if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
+        isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
+        isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
+        isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
+        isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
+        isNaN(ovrDuration) || ovrDuration < 1 || ovrDuration > 60 ||
+        isNaN(ovrAutoActivate) || ovrAutoActivate < 5 || ovrAutoActivate > 120 ||
+        isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
+        isNaN(autoActivateDepMinutes) || autoActivateDepMinutes < 5 || autoActivateDepMinutes > 120 ||
+        isNaN(autoActivateArrMinutes) || autoActivateArrMinutes < 5 || autoActivateArrMinutes > 120 ||
+        isNaN(autoActivateLocMinutes) || autoActivateLocMinutes < 5 || autoActivateLocMinutes > 120 ||
+        isNaN(autoActivateOvrMinutes) || autoActivateOvrMinutes < 5 || autoActivateOvrMinutes > 120) {
+      showToast("Please enter valid configuration values", 'error');
+      return;
+    }
+
+    updateConfig({
+      depOffsetMinutes: depOffset,
+      arrOffsetMinutes: arrOffset,
+      locOffsetMinutes: locOffset,
+      locFlightDurationMinutes: locDuration,
+      ovrOffsetMinutes: ovrOffset,
+      ovrFlightDurationMinutes: ovrDuration,
+      ovrAutoActivateMinutes: ovrAutoActivate,
+      timezoneOffsetHours: timezoneOffset,
+      hideLocalTimeInBannerIfSame: hideLocalIfSame,
+      alwaysHideLocalTimeInBanner: alwaysHideLocal,
+      enableAlertTooltips: enableAlertTooltips,
+      // Auto-activation settings per flight type
+      autoActivateDepEnabled: autoActivateDepEnabled,
+      autoActivateDepMinutes: autoActivateDepMinutes,
+      autoActivateArrEnabled: autoActivateArrEnabled,
+      autoActivateArrMinutes: autoActivateArrMinutes,
+      autoActivateLocEnabled: autoActivateLocEnabled,
+      autoActivateLocMinutes: autoActivateLocMinutes,
+      autoActivateOvrEnabled: autoActivateOvrEnabled,
+      autoActivateOvrMinutes: autoActivateOvrMinutes,
+      wtcSystem: wtcSystem,
+      wtcAlertThreshold: wtcThreshold,
+      historyShowTimeAlerts: historyShowTimeAlerts,
+      historyShowEmergencyAlerts: historyShowEmergencyAlerts,
+      historyShowCallsignAlerts: historyShowCallsignAlerts,
+      historyShowWtcAlerts: historyShowWtcAlerts,
+      timelineEnabled: timelineEnabled,
+      timelineStartHour: timelineStartHour,
+      timelineEndHour: timelineEndHour,
+      depToArrOffsetMinutes: depToArrOffset,
+      arrToDepOffsetMinutes: arrToDepOffset
+    });
+
+    // Re-take snapshot so dirty state resets to clean
+    _configSnapshot = takeSnapshot();
+    checkDirty();
+    showToast("Configuration saved", 'success');
+    renderTimeline();
+  }
+
+  if (adminSaveBtn) adminSaveBtn.addEventListener('click', saveAdminConfig);
+
+  // ── Discard action ─────────────────────────────────────────────
+  if (adminDiscardBtn) {
+    adminDiscardBtn.addEventListener('click', () => {
+      applySnapshot(_configSnapshot);
+      checkDirty();
     });
   }
 }
