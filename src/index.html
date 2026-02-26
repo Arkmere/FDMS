@@ -704,7 +704,7 @@
               <div class="admin-section" id="admin-sec-status">
                 <div class="page-title">Admin</div>
                 <div class="page-subtitle">
-                  LocalStorage persistence is enabled. Reset restores demo seed (and overwrites local session data).
+                  Status and high-level diagnostics for this local FDMS instance. All data is stored in browser LocalStorage.
                 </div>
 
                 <div class="panel">
@@ -750,7 +750,7 @@
                 <div class="panel">
                   <h3>Session Management</h3>
                   <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Backup your movement data to a JSON file for safekeeping.
+                    Backup local FDMS data to a JSON file. To restore a previous backup or reset to demo data, use the <strong>Danger Zone</strong> section.
                   </p>
                   <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Backup session data to JSON file">Backup to JSON</button>
                 </div>
@@ -760,15 +760,18 @@
               <div class="admin-section hidden" id="admin-sec-offsets">
                 <div class="panel">
                   <h3>Flight Offsets</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">
+                    Defaults applied when creating new movements. All values are in minutes. Changes require Save.
+                  </div>
                   <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Default time offsets for new movements (minutes from current time):
+                    Times are stored as UTC. Local display uses the configured timezone offset.
                   </div>
 
                   <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
                     <thead>
                       <tr style="border-bottom: 1px solid #ddd;">
                         <th style="text-align: left; padding: 6px; font-weight: bold;">Flight Type</th>
-                        <th style="text-align: left; padding: 6px; font-weight: bold;">Offset (minutes)</th>
+                        <th style="text-align: left; padding: 6px; font-weight: bold;">Offset</th>
                         <th style="text-align: left; padding: 6px; font-weight: bold;">Description</th>
                       </tr>
                     </thead>
@@ -776,56 +779,77 @@
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">DEP</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configDepOffset" min="0" max="180"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configDepOffset" min="0" max="180"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">ARR</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configArrOffset" min="0" max="180"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configArrOffset" min="0" max="180"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to now + this</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">LOC</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configLocOffset" min="0" max="180"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configLocOffset" min="0" max="180"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">LOC Duration</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configLocDuration" min="5" max="180"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configLocDuration" min="5" max="180"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to ETD + this (default flight duration)</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">OVR Offset</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configOvrOffset" min="0" max="180"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configOvrOffset" min="0" max="180"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">EOFT defaults to now + this (Expected On Frequency Time)</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">OVR Duration</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configOvrDuration" min="1" max="60"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configOvrDuration" min="1" max="60"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ELFT = EOFT + this (time on frequency, default 5 min)</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">OVR Activate</td>
                         <td style="padding: 6px;">
-                          <input type="number" id="configOvrAutoActivate" min="5" max="120"
-                            style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configOvrAutoActivate" min="5" max="120"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">Auto-activate this many minutes before EOFT</td>
                       </tr>
@@ -842,16 +866,22 @@
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR (minutes)</label>
-                        <input type="number" id="configDepToArrOffset" min="0" max="720" placeholder="180"
-                          style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
-                        <div style="font-size: 10px; color: #888;">ETA = ETD/ATD + this (default 3 hours)</div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">DEP → ARR</label>
+                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                          <input type="number" id="configDepToArrOffset" min="0" max="720" placeholder="180"
+                            style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="font-size:11px;color:#888;">min</span>
+                        </span>
+                        <div style="font-size: 10px; color: #888; margin-top: 2px;">ETA = ETD/ATD + this (default 3 hours)</div>
                       </div>
                       <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP (minutes)</label>
-                        <input type="number" id="configArrToDepOffset" min="0" max="720" placeholder="30"
-                          style="width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
-                        <div style="font-size: 10px; color: #888;">ETD = ETA/ATA + this (default 30 min)</div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 4px;">ARR → DEP</label>
+                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                          <input type="number" id="configArrToDepOffset" min="0" max="720" placeholder="30"
+                            style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                          <span style="font-size:11px;color:#888;">min</span>
+                        </span>
+                        <div style="font-size: 10px; color: #888; margin-top: 2px;">ETD = ETA/ATA + this (default 30 min)</div>
                       </div>
                     </div>
                   </div>
@@ -863,7 +893,7 @@
                 <div class="panel">
                   <h3>Auto-Activation</h3>
                   <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    PLANNED movements will automatically transition to ACTIVE status when within the configured time window. Movements created with past times are always activated immediately.
+                    Controls automatic PLANNED → ACTIVE transitions. Enable per flight type and set the window (min before ETD/ETA/EOFT). Movements with past times activate immediately. Changes require Save.
                   </div>
 
                   <!-- DEP Row -->
@@ -920,6 +950,9 @@
               <div class="admin-section hidden" id="admin-sec-timezone">
                 <div class="panel">
                   <h3>Timezone &amp; Display</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 16px;">
+                    Affects local time display in the banner clock and in modal time inputs. All times are stored as UTC internally. Changes require Save.
+                  </div>
 
                   <div style="margin-bottom: 20px;">
                     <label style="display: block; font-weight: bold; margin-bottom: 4px;">
@@ -999,6 +1032,9 @@
               <div class="admin-section hidden" id="admin-sec-wtc">
                 <div class="panel">
                   <h3>Wake Turbulence Category Alert</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Sets the WTC classification model and alert threshold for visual highlighting on strips. Does not affect stored WTC values. Changes require Save.
+                  </div>
                   <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                     <label style="font-size: 12px;">WTC System:</label>
                     <select id="configWtcSystem" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
@@ -1024,7 +1060,7 @@
                 <div class="panel">
                   <h3>History Settings</h3>
                   <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Control which alerts are displayed in the History tab's expanded strip details. Time-based alerts are hidden by default as they are less relevant for historical movements.
+                    Controls which alert categories appear in the History tab's expanded strip details. Time-based alerts are hidden by default as they are less relevant for historical movements. Changes require Save.
                   </div>
 
                   <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -1073,7 +1109,7 @@
                 <div class="panel">
                   <h3>Day View / Timeline Settings</h3>
                   <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Configure the timeline display above the Strip Bay on the Live Board.
+                    Configures the time range and visibility of the Live Board timeline. Start and end hours are in UTC. Changes require Save.
                   </div>
 
                   <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -1124,7 +1160,8 @@
                     <h3 style="margin:0;">Booking Profiles</h3>
                     <button class="btn btn-primary btn-small" id="btnNewProfile" type="button">+ New Profile</button>
                   </div>
-                  <p style="font-size:11px;color:#666;margin:0 0 10px;">Saved aircraft/contact profiles for repeat visitors. Auto-filled when the same registration is entered on the Booking form.</p>
+                  <p style="font-size:11px;color:#666;margin:0 0 6px;">Saved aircraft/contact profiles for repeat visitors. Auto-filled when the same registration is entered on the Booking form.</p>
+                  <p style="font-size:11px;color:#2e7d32;font-weight:500;margin:0 0 10px;">Changes here save immediately — they are not part of the Save / Discard workflow.</p>
                   <input type="text" id="profileSearchInput" placeholder="Search by registration, type, callsign, contact…" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;box-sizing:border-box;margin-bottom:10px;" />
                   <div style="overflow-x:auto;">
                     <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1152,14 +1189,14 @@
                   <div class="admin-danger-zone">
                     <h3>Danger Zone</h3>
                     <p style="font-size: 12px; color: #555; margin-bottom: 16px;">
-                      These actions are destructive and cannot be undone.
+                      Destructive actions that overwrite local movement data. These cannot be undone.
                     </p>
 
                     <div style="display: flex; flex-direction: column; gap: 20px;">
                       <div>
                         <div style="font-weight: bold; margin-bottom: 4px;">Restore from JSON</div>
                         <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
-                          Restore session data from a previous backup. All current movement data will be overwritten.
+                          Overwrite all current movement strips (and any configuration present in the backup file) with the contents of a previous JSON backup. A summary will be shown before confirming.
                         </div>
                         <button class="btn btn-danger" id="btnImportSession" type="button" aria-label="Restore session data from JSON file">Restore from JSON</button>
                         <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-label="Select JSON file to import" />
@@ -1168,7 +1205,7 @@
                       <div>
                         <div style="font-weight: bold; margin-bottom: 4px;">Reset to Demo Data</div>
                         <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
-                          Replace all movement data with the built-in demo seed. All current data will be lost.
+                          Replace all current movement strips with the built-in demo seed. Configuration settings (offsets, timezone, etc.) are not affected.
                         </div>
                         <button class="btn btn-danger" id="btnResetToDemo" type="button">Reset to Demo Data</button>
                       </div>
