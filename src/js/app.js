@@ -390,22 +390,38 @@ function updateInitStatus(message, isComplete = false) {
 
 /**
  * Show a lightweight inline confirmation dialog.
- * @param {string} message - Text to display
- * @param {Function} onConfirm - Called when user confirms
+ * @param {string} message       - Plain-text message (safely escaped)
+ * @param {Function} onConfirm   - Called when user confirms (no-op if confirmEnabled=false)
+ * @param {string} [detailsHtml] - Optional pre-sanitised HTML rendered below message
+ * @param {boolean} [confirmEnabled] - When false, Confirm button is disabled
  */
-function adminConfirm(message, onConfirm) {
+function adminConfirm(message, onConfirm, detailsHtml = '', confirmEnabled = true) {
   const backdrop = document.createElement('div');
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
 
   const dialog = document.createElement('div');
-  dialog.style.cssText = 'background:#fff;border-radius:6px;padding:24px 24px 20px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);';
-  dialog.innerHTML = `
-    <div style="font-size:13px;line-height:1.5;margin-bottom:18px;">${escapeHtml(message)}</div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-secondary" id="_adminConfirmCancel">Cancel</button>
-      <button class="btn btn-danger" id="_adminConfirmOk">Confirm</button>
-    </div>
+  dialog.style.cssText = 'background:#fff;border-radius:6px;padding:24px 24px 20px;max-width:480px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);';
+
+  // Use textContent for the main message to prevent XSS
+  const messageDiv = document.createElement('div');
+  messageDiv.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:' + (detailsHtml ? '12px' : '18px') + ';';
+  messageDiv.textContent = message;
+  dialog.appendChild(messageDiv);
+
+  if (detailsHtml) {
+    const detailsDiv = document.createElement('div');
+    detailsDiv.style.cssText = 'margin-bottom:18px;';
+    detailsDiv.innerHTML = detailsHtml; // caller is responsible for safe content
+    dialog.appendChild(detailsDiv);
+  }
+
+  const buttonsDiv = document.createElement('div');
+  buttonsDiv.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+  buttonsDiv.innerHTML = `
+    <button class="btn btn-secondary" id="_adminConfirmCancel">Cancel</button>
+    <button class="btn btn-danger" id="_adminConfirmOk"${confirmEnabled ? '' : ' disabled style="opacity:0.5;cursor:not-allowed;"'}>Confirm</button>
   `;
+  dialog.appendChild(buttonsDiv);
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
@@ -413,7 +429,10 @@ function adminConfirm(message, onConfirm) {
   const cleanup = () => { if (backdrop.parentNode) document.body.removeChild(backdrop); };
 
   dialog.querySelector('#_adminConfirmCancel').addEventListener('click', cleanup);
-  dialog.querySelector('#_adminConfirmOk').addEventListener('click', () => { cleanup(); onConfirm(); });
+  const okBtn = dialog.querySelector('#_adminConfirmOk');
+  if (confirmEnabled) {
+    okBtn.addEventListener('click', () => { cleanup(); onConfirm(); });
+  }
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(); });
 }
 
@@ -465,41 +484,79 @@ function initAdminPanelHandlers() {
   }
 
   // ── Danger Zone: Restore from JSON ────────────────────────────
+  // Flow: button click → open file picker → file selected → parse →
+  //       show preflight summary in confirm dialog → on confirm → import.
   const btnImport = document.getElementById("btnImportSession");
   const fileInput = document.getElementById("importFileInput");
 
   if (btnImport && fileInput) {
-    btnImport.addEventListener("click", () => {
-      adminConfirm(
-        "Restore from JSON will overwrite ALL current movement data with the selected backup file. This cannot be undone. Continue?",
-        () => fileInput.click()
-      );
-    });
+    // Open file picker directly — confirmation comes after file selection
+    btnImport.addEventListener("click", () => { fileInput.click(); });
 
     fileInput.addEventListener("change", (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      fileInput.value = ""; // reset so the same file can be re-selected if needed
 
       const reader = new FileReader();
       reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          const result = importSessionJSON(data);
+        let parsedData = null;
+        let summaryHtml = '';
+        let confirmEnabled = true;
 
-          if (result.success) {
-            renderLiveBoard();
-            renderHistoryBoard();
-            renderReports();
-            diagnostics.lastRenderTime = new Date().toISOString();
-            updateDiagnostics();
-            showToast(`Restore successful! Loaded ${result.count} movements`, 'success');
-          } else {
-            showToast(`Restore failed: ${result.error}`, 'error');
-          }
-        } catch (e) {
-          showToast(`Restore failed: ${e.message}`, 'error');
+        try {
+          parsedData = JSON.parse(ev.target.result);
+
+          // Build summary — best effort, never throw
+          const movementsCount = Array.isArray(parsedData?.movements)
+            ? parsedData.movements.length
+            : (Array.isArray(parsedData) ? parsedData.length : '—');
+          const profilesCount = Array.isArray(parsedData?.bookingProfiles)
+            ? parsedData.bookingProfiles.length : '—';
+          const bookingsCount = Array.isArray(parsedData?.bookings)
+            ? parsedData.bookings.length : '—';
+          const hasConfig = parsedData?.config != null ? 'Yes' : 'No';
+
+          summaryHtml = `
+            <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
+              <div><span style="color:#555;display:inline-block;width:140px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+              <div><span style="color:#555;display:inline-block;width:140px;">Movements:</span><strong>${movementsCount}</strong></div>
+              <div><span style="color:#555;display:inline-block;width:140px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
+              <div><span style="color:#555;display:inline-block;width:140px;">Bookings:</span><strong>${bookingsCount}</strong></div>
+              <div><span style="color:#555;display:inline-block;width:140px;">Config present:</span><strong>${hasConfig}</strong></div>
+            </div>`;
+        } catch (_parseErr) {
+          confirmEnabled = false;
+          summaryHtml = `
+            <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
+              Unable to read summary — file is not valid JSON. Confirm is blocked.
+            </div>`;
         }
-        fileInput.value = "";
+
+        adminConfirm(
+          parsedData
+            ? `Restore will overwrite ALL current local movement data with the contents of "${file.name}". This cannot be undone.`
+            : `"${file.name}" cannot be read as FDMS backup data.`,
+          () => {
+            try {
+              const result = importSessionJSON(parsedData);
+              if (result.success) {
+                renderLiveBoard();
+                renderHistoryBoard();
+                renderReports();
+                diagnostics.lastRenderTime = new Date().toISOString();
+                updateDiagnostics();
+                showToast(`Restore successful! Loaded ${result.count} movements`, 'success');
+              } else {
+                showToast(`Restore failed: ${result.error}`, 'error');
+              }
+            } catch (err) {
+              showToast(`Restore failed: ${err.message}`, 'error');
+            }
+          },
+          summaryHtml,
+          confirmEnabled
+        );
       };
       reader.readAsText(file);
     });
@@ -510,7 +567,7 @@ function initAdminPanelHandlers() {
   if (btnResetToDemo) {
     btnResetToDemo.addEventListener("click", () => {
       adminConfirm(
-        "Reset to Demo Data will replace ALL current movement data with the built-in demo seed. All your data will be permanently lost. Continue?",
+        "This will replace all current movement strips with the built-in demo seed data. Configuration settings (offsets, timezone, etc.) are not affected. This cannot be undone.",
         () => {
           try {
             resetMovementsToDemo();

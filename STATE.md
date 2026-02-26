@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1 — two-pane layout with dirty-state tracking and Danger Zone
+Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1.1 — microcopy, explicit units, restore preflight summary
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -1142,6 +1142,54 @@ Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
 - [ ] "Restore from JSON" in Danger Zone shows confirmation dialog before proceeding
 - [ ] "Reset to Demo Data" in Danger Zone shows confirmation dialog before proceeding
 - [ ] Booking Profiles section unaffected
+
+---
+
+### 4.16 Sprint: Admin IA v1.1 — Microcopy, units, restore preflight
+
+**Base:** `claude/admin-ia-v1-THSv7`  **Branch:** `claude/admin-ia-v1_1-THSv7`
+
+#### Ticket A — Section microcopy + explicit units (`src/index.html`)
+
+- **Section 1 (System Status)**: page-subtitle updated → "Status and high-level diagnostics for this local FDMS instance."
+- **Section 2 (Session)**: description updated → "Backup local FDMS data … Restore is in Danger Zone section."
+- **Section 3 (Flight Offsets)**: added two description lines: what it affects + UTC storage note + "Changes require Save"; every minute-valued input (7 in table + 2 reciprocal strip) now shows an adjacent `min` label.
+- **Section 4 (Auto-Activation)**: description updated → "Controls automatic PLANNED → ACTIVE transitions … Changes require Save." (row labels already carried "min before …")
+- **Section 5 (Timezone & Display)**: added description → "Affects local time display … UTC internally. Changes require Save."
+- **Section 6 (Wake Turbulence)**: added description → "Sets WTC model and alert threshold … does not affect stored WTC values. Changes require Save."
+- **Section 7 (History)**: updated description → "Controls which alert categories appear … Changes require Save."
+- **Section 7 (Timeline)**: updated description → "Configures time range and visibility … Start/end in UTC. Changes require Save."
+- **Section 8 (Booking Profiles)**: added green note → "Changes here save immediately — not part of Save / Discard workflow."
+- **Section 9 (Danger Zone)**: updated overall description + reset description to state configuration is NOT overwritten; restore description notes a summary will be shown.
+
+All input IDs unchanged.
+
+#### Ticket B — Restore preflight summary (`src/js/app.js`)
+
+- **`adminConfirm()`** extended: new optional params `detailsHtml` (string, pre-sanitised) and `confirmEnabled` (boolean, default true). Main message set via `.textContent` (XSS-safe). Details HTML injected into separate div. Confirm button disabled via HTML attribute when `confirmEnabled=false`.
+- **Restore flow refactored**: button click → file picker opened directly (no pre-confirm). File selection → `FileReader.onload` → client-side JSON parse → build summary HTML (filename, movements count, booking profiles count, bookings count, config presence) → `adminConfirm(message, onConfirm, summaryHtml, true)`.
+- **Invalid JSON path**: parse error → summary shows error text with red styling → `adminConfirm(…, summaryHtml, false)` → Confirm button disabled.
+- Restore implementation (`importSessionJSON` call + re-render) unchanged.
+
+#### Ticket C — Reset-to-Demo copy clarity (`src/js/app.js`)
+
+- Reset confirmation text updated from vague "All your data will be permanently lost" to: "This will replace all current movement strips with the built-in demo seed data. Configuration settings (offsets, timezone, etc.) are not affected. This cannot be undone." — matches actual `resetMovementsToDemo()` behaviour.
+
+#### Invariants maintained
+- No config keys, IDs, or persistence mechanics changed
+- No Live Board / timeline / booking sync / modal lifecycle changes
+- `importSessionJSON` and `resetMovementsToDemo` implementations untouched
+
+#### Manual verification checklist
+- [ ] Every Admin section has a visible description line
+- [ ] Offset table inputs show "min" suffix; auto-activate rows already had "min before …"
+- [ ] Timeline labels read "Start Hour (UTC)" / "End Hour (UTC)"
+- [ ] Booking Profiles shows green "saves immediately" note
+- [ ] Changing an offset → dirty state triggers → Save works (no regression)
+- [ ] Restore from JSON: click button → file picker opens → select valid file → confirm dialog shows filename + counts → cancel → no change
+- [ ] Restore from JSON: confirm → import proceeds → success toast
+- [ ] Restore from JSON: select invalid/non-JSON file → dialog shows error, Confirm disabled
+- [ ] Reset to Demo: confirmation explicitly names what is/is not overwritten; cancel works
 
 ---
 
