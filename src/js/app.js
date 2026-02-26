@@ -468,12 +468,35 @@ function initAdminPanelHandlers() {
   if (btnExport) {
     btnExport.addEventListener("click", () => {
       try {
-        const data = exportSessionJSON();
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const rawData = exportSessionJSON();
+
+        // Compute counts from the payload
+        const movementsCount = Array.isArray(rawData.movements) ? rawData.movements.length : 0;
+        const bookingsCount  = Array.isArray(rawData.bookings)  ? rawData.bookings.length  : 0;
+        const profilesCount  = Array.isArray(rawData.bookingProfiles) ? rawData.bookingProfiles.length : 0;
+
+        // Wrap in v1.2 envelope
+        const envelope = {
+          fdmsBackup: {
+            schemaVersion: 1,
+            createdAtUtc: new Date().toISOString(),
+            createdBy: { app: "Vectair FDMS Lite", gitCommit: "unknown", host: "local" },
+            counts: { movements: movementsCount, bookings: bookingsCount, bookingProfiles: profilesCount }
+          },
+          payload: rawData
+        };
+
+        // Timestamped filename: fdms_backup_YYYYMMDD_HHMMZ.json
+        const now = new Date();
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const ts = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}_${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}Z`;
+        const filename = `fdms_backup_${ts}.json`;
+
+        const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `fdms-backup-${new Date().toISOString().split("T")[0]}.json`;
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
         showToast("Backup created successfully", 'success');
