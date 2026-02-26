@@ -508,7 +508,8 @@ function initAdminPanelHandlers() {
 
   // ── Danger Zone: Restore from JSON ────────────────────────────
   // Flow: button click → open file picker → file selected → parse →
-  //       show preflight summary in confirm dialog → on confirm → import.
+  //       detect format (new envelope / old v2 / old v1) → show preflight
+  //       summary with metadata in confirm dialog → on confirm → import.
   const btnImport = document.getElementById("btnImportSession");
   const fileInput = document.getElementById("importFileInput");
 
@@ -523,53 +524,125 @@ function initAdminPanelHandlers() {
 
       const reader = new FileReader();
       reader.onload = (ev) => {
-        let parsedData = null;
+        let dataForImport = null; // unwrapped payload passed to importSessionJSON
         let summaryHtml = '';
         let confirmEnabled = true;
 
         try {
-          parsedData = JSON.parse(ev.target.result);
+          const parsed = JSON.parse(ev.target.result);
 
-          // Build summary — best effort, never throw
-          const movementsCount = Array.isArray(parsedData?.movements)
-            ? parsedData.movements.length
-            : (Array.isArray(parsedData) ? parsedData.length : '—');
-          const profilesCount = Array.isArray(parsedData?.bookingProfiles)
-            ? parsedData.bookingProfiles.length : '—';
-          const bookingsCount = Array.isArray(parsedData?.bookings)
-            ? parsedData.bookings.length : '—';
-          const hasConfig = parsedData?.config != null ? 'Yes' : 'No';
+          // ── Format detection ──────────────────────────────────────
+          // New envelope: { fdmsBackup: {...}, payload: {...} }
+          // Old v2:       { version: number, movements: [...] }
+          // Old v1:       bare array of movements
+          // Anything else: unrecognized → block confirm
+          let format = 'unrecognized';
+          let meta = null;
 
-          summaryHtml = `
-            <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
-              <div><span style="color:#555;display:inline-block;width:140px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
-              <div><span style="color:#555;display:inline-block;width:140px;">Movements:</span><strong>${movementsCount}</strong></div>
-              <div><span style="color:#555;display:inline-block;width:140px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
-              <div><span style="color:#555;display:inline-block;width:140px;">Bookings:</span><strong>${bookingsCount}</strong></div>
-              <div><span style="color:#555;display:inline-block;width:140px;">Config present:</span><strong>${hasConfig}</strong></div>
-            </div>`;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              && parsed.fdmsBackup && parsed.payload) {
+            format = 'envelope';
+            meta = parsed.fdmsBackup;
+            dataForImport = parsed.payload;
+          } else if (Array.isArray(parsed)) {
+            format = 'v1';
+            dataForImport = parsed;
+          } else if (parsed && typeof parsed === 'object'
+                     && typeof parsed.version === 'number'
+                     && Array.isArray(parsed.movements)) {
+            format = 'v2';
+            dataForImport = parsed;
+          }
+
+          if (format === 'unrecognized') {
+            confirmEnabled = false;
+            summaryHtml = `
+              <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
+                Unrecognized file structure — this does not appear to be an FDMS backup. Confirm is blocked.
+              </div>`;
+          } else {
+            // ── Resolve counts ────────────────────────────────────
+            const payload = (format === 'envelope') ? dataForImport : dataForImport;
+            const movementsCount = meta?.counts?.movements != null
+              ? meta.counts.movements
+              : (Array.isArray(payload?.movements) ? payload.movements.length
+                 : (Array.isArray(payload) ? payload.length : '—'));
+            const bookingsCount = meta?.counts?.bookings != null
+              ? meta.counts.bookings
+              : (Array.isArray(payload?.bookings) ? payload.bookings.length : '—');
+            const profilesCount = meta?.counts?.bookingProfiles != null
+              ? meta.counts.bookingProfiles
+              : (Array.isArray(payload?.bookingProfiles) ? payload.bookingProfiles.length : '—');
+            const hasConfig = payload?.config != null ? 'Yes' : 'No';
+
+            // ── Format createdAt ──────────────────────────────────
+            let createdAtStr = '—';
+            if (meta?.createdAtUtc) {
+              try {
+                const d = new Date(meta.createdAtUtc);
+                createdAtStr = d.toUTCString();
+              } catch (_) { createdAtStr = meta.createdAtUtc; }
+            }
+
+            const schemaVersion = meta?.schemaVersion != null ? meta.schemaVersion : '—';
+            const schemaLabel = format === 'envelope'
+              ? `v${schemaVersion} (current)`
+              : (format === 'v2' ? 'v0 (legacy v2)' : 'v0 (legacy v1)');
+
+            // ── Warning banners ───────────────────────────────────
+            let warningHtml = '';
+            if (format !== 'envelope') {
+              warningHtml += `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ Legacy backup format detected. Metadata (timestamp, counts) is unavailable.
+              </div>`;
+            } else if (typeof schemaVersion === 'number' && schemaVersion > 1) {
+              warningHtml += `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ This backup was created by a newer version of FDMS (schema v${schemaVersion}). Some data may not be restored.
+              </div>`;
+            }
+            if (movementsCount === 0 || movementsCount === '0') {
+              warningHtml += `
+              <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:4px;padding:8px 12px;font-size:12px;color:#6d4c00;margin-bottom:6px;">
+                ⚠ This backup contains 0 movements.
+              </div>`;
+            }
+
+            summaryHtml = `
+              ${warningHtml}
+              <div style="background:#f5f5f5;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.8;">
+                <div><span style="color:#555;display:inline-block;width:148px;">File:</span><strong>${escapeHtml(file.name)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Created (UTC):</span><strong>${escapeHtml(createdAtStr)}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Schema:</span><strong>${escapeHtml(String(schemaLabel))}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Movements:</span><strong>${movementsCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Booking profiles:</span><strong>${profilesCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Bookings:</span><strong>${bookingsCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:148px;">Config present:</span><strong>${hasConfig}</strong></div>
+              </div>`;
+          }
         } catch (_parseErr) {
           confirmEnabled = false;
           summaryHtml = `
             <div style="background:#fff3f3;border:1px solid #ffcdd2;border-radius:4px;padding:10px 12px;font-size:12px;color:#c62828;">
-              Unable to read summary — file is not valid JSON. Confirm is blocked.
+              Unable to read file — not valid JSON. Confirm is blocked.
             </div>`;
         }
 
         adminConfirm(
-          parsedData
+          dataForImport
             ? `Restore will overwrite ALL current local movement data with the contents of "${file.name}". This cannot be undone.`
-            : `"${file.name}" cannot be read as FDMS backup data.`,
+            : `"${file.name}" cannot be restored as FDMS backup data.`,
           () => {
             try {
-              const result = importSessionJSON(parsedData);
+              const result = importSessionJSON(dataForImport);
               if (result.success) {
                 renderLiveBoard();
                 renderHistoryBoard();
                 renderReports();
                 diagnostics.lastRenderTime = new Date().toISOString();
                 updateDiagnostics();
-                showToast(`Restore successful! Loaded ${result.count} movements`, 'success');
+                showToast(`Restore applied from "${file.name}" — ${result.count} movements loaded`, 'success');
               } else {
                 showToast(`Restore failed: ${result.error}`, 'error');
               }
