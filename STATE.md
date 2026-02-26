@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1.1 — microcopy, explicit units, restore preflight summary
+Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1.2 — backup envelope metadata, timestamped filenames, restore format detection
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -1190,6 +1190,51 @@ All input IDs unchanged.
 - [ ] Restore from JSON: confirm → import proceeds → success toast
 - [ ] Restore from JSON: select invalid/non-JSON file → dialog shows error, Confirm disabled
 - [ ] Reset to Demo: confirmation explicitly names what is/is not overwritten; cancel works
+
+---
+
+### 4.17 Sprint: Admin IA v1.2 — Backup envelope, timestamped filenames, restore format detection
+
+**Base:** `claude/admin-ia-v1_1-THSv7`  **Branch:** `claude/admin-ia-v1_2-THSv7`
+
+#### Ticket A — Backup metadata envelope + timestamped filename (`src/js/app.js`, `src/index.html`)
+
+- **Export handler** wraps `exportSessionJSON()` output in a metadata envelope before download:
+  ```json
+  { "fdmsBackup": { "schemaVersion": 1, "createdAtUtc": "...", "createdBy": {...}, "counts": {...} }, "payload": <rawData> }
+  ```
+  - `counts` mirrors `rawData.movements.length`, `rawData.bookings.length`, `rawData.bookingProfiles.length` (0 if absent).
+  - `createdBy`: `{ app: "Vectair FDMS Lite", gitCommit: "unknown", host: "local" }`.
+- **Timestamped filename**: `fdms_backup_YYYYMMDD_HHMMZ.json` (UTC, zero-padded).
+- **Session section copy** (`src/index.html`): updated to note backups include metadata (timestamp, counts); restore note points to Danger Zone.
+
+#### Ticket B — Restore preflight: format detection + metadata display (`src/js/app.js`)
+
+- **Three-way format detection** in `fileInput.change` handler:
+  - `envelope`: `parsed.fdmsBackup && parsed.payload` → `dataForImport = parsed.payload`; `meta = parsed.fdmsBackup`.
+  - `v1`: bare array → `dataForImport = parsed`; no meta.
+  - `v2`: `{ version: number, movements: array }` → `dataForImport = parsed`; no meta.
+  - `unrecognized`: confirm blocked; error banner shown.
+- **Preflight summary** shows: filename, createdAt UTC (formatted), schema version label, movements/bookings/profiles counts, config presence.
+- **Non-blocking warning banners** (amber) for: legacy format (v0), future schema version (>1), zero-movement backup.
+- **Blocked confirm** (red banner) for: invalid JSON, unrecognized structure.
+- **Toast** on success: `Restore applied from "${file.name}" — ${result.count} movements loaded`.
+- `importSessionJSON` and all re-render calls unchanged.
+
+#### Invariants maintained
+- No config keys, IDs, or persistence mechanics changed
+- No Live Board / timeline / booking sync / modal lifecycle changes
+- `importSessionJSON` implementation untouched; legacy payloads passed directly
+
+#### Manual verification checklist
+- [ ] Export: click Backup → file named `fdms_backup_YYYYMMDD_HHMMZ.json` downloads
+- [ ] Export: open file — top-level keys are `fdmsBackup` and `payload`; `fdmsBackup.counts` matches movement/booking counts
+- [ ] Restore new envelope: select backup file → preflight shows filename, createdAt, schema "v1 (current)", counts, config → confirm → data loads
+- [ ] Restore legacy v2: select old `{ version, movements }` file → preflight shows amber "Legacy backup format" warning; no createdAt or schema shown → confirm → data loads
+- [ ] Restore legacy v1: select bare-array file → same amber warning → confirm → data loads
+- [ ] Restore invalid JSON: confirm button disabled; red error banner shown
+- [ ] Restore unrecognized structure (e.g. `{}`): confirm button disabled; "Unrecognized file structure" red banner shown
+- [ ] Zero-movement backup: amber "contains 0 movements" warning; confirm still enabled
 
 ---
 
