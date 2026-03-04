@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-02-26 (Europe/London) — Sprint: Admin IA v1.2 — backup envelope metadata, timestamped filenames, restore format detection
+Last updated: 2026-03-04 (Europe/London) — Sprint: New Movement Forms Planned/Active Toggle
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -86,6 +86,35 @@ A lightweight, **standalone desktop application** ("FDMS Lite") for local ATC/op
 ---
 
 ## 2) Implementation Status
+
+### 2.0 Sprint — New Movement Forms Planned/Active Toggle (2026-03-04)
+
+**Summary**: Added a Planned/Active toggle to the Timings section of all New movement creation forms (DEP/ARR/OVR via `openNewFlightModal()` and LOC via `openNewLocFlightModal()`). Planned mode shows only estimated time fields (ETD/ETA or ECT for OVR); Active mode shows only actual time fields (ATD/ATA or ACT for OVR). Save & Complete button is hidden in Planned mode and only visible in Active mode.
+
+**Changes delivered**:
+- Added `bindNewFormTimingToggle()` helper in `ui_liveboard.js`: toggles `[data-timing-group="planned"]` / `[data-timing-group="actual"]` field visibility and gates the Save & Complete button.
+- `openNewFlightModal()` (DEP/ARR/OVR): replaced `renderTimesGrid()` call with inline field HTML using `data-timing-group` attributes; added `id="newFlightTimingToggle"` Planned/Active button alongside the UTC/Local toggle; added `bindNewFormTimingToggle()` call; updated save handler to be timing-mode aware (validates/converts only visible fields; zeroes out hidden group before writing to movement).
+- `openNewLocFlightModal()` (LOC): same pattern with `id="newLocTimingToggle"`, `newLocStart`/`newLocEnd` (planned) and `newLocStartActual`/`newLocEndActual` (actual).
+- Save & Complete buttons on both modals default to `display: none` in HTML (reinforced by `bindNewFormTimingToggle` on init).
+- Stored schema unchanged: `depPlanned`, `depActual`, `arrPlanned`, `arrActual` remain canonical UTC HH:MM strings.
+- `renderTimesGrid()` and `bindTimeModeToggle()` are unchanged; Edit/Duplicate modals are unaffected.
+
+**Files changed**:
+- `src/js/ui_liveboard.js` — added `bindNewFormTimingToggle()`; updated `openNewFlightModal()` and `openNewLocFlightModal()` markup, bindings, and save handlers.
+
+**Smoke checklist** (manual — to be verified by Stuart):
+- [ ] DEP: Open New form → default is Planned; only ETD/ETA shown; Save&Complete hidden.
+- [ ] DEP: Toggle to Active → only ATD/ATA shown; Save&Complete appears.
+- [ ] ARR: same as DEP.
+- [ ] OVR: Open New form → Planned shows ECT only (ETA disabled/hidden); toggle to Active shows ACT only (ATA disabled/hidden).
+- [ ] LOC: Open New form → Planned shows ETD/ETA; Active shows ATD/ATA; Save&Complete gated correctly.
+- [ ] Enter times in Local mode (any type); Save; reopen in Edit modal → stored values are correct UTC strings.
+- [ ] UTC/Local toggle still works in both Planned and Active modes (converts all 4 inputs regardless of visibility).
+- [ ] Save in Planned mode: movement has depPlanned/arrPlanned set; depActual/arrActual empty.
+- [ ] Save in Active mode (regular Save): movement has depActual/arrActual set; depPlanned/arrPlanned empty.
+- [ ] Save & Complete (Active mode only): movement created with COMPLETED status; actual times populated.
+- [ ] Edit/Duplicate modals: no change — all 4 fields still shown, no Planned/Active toggle present.
+- [ ] No console errors throughout.
 
 ### 2.0 Sprint — Unified Times Form (2026-02-25)
 
