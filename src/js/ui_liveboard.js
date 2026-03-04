@@ -1003,6 +1003,46 @@ function bindTimeModeToggle(toggleBtnId, inputIds) {
 }
 
 /**
+ * Bind the Planned/Active timing mode toggle for a new-movement modal.
+ *
+ * Elements with data-timing-group="planned" are shown only in Planned mode;
+ * elements with data-timing-group="actual" are shown only in Active mode.
+ * The Save & Complete button is hidden in Planned mode and shown in Active mode.
+ *
+ * Default state: Planned.
+ *
+ * @param {string} toggleBtnId        — ID of the Planned/Active toggle <button>
+ * @param {string} saveCompleteBtnSel — CSS selector for the Save & Complete button
+ */
+function bindNewFormTimingToggle(toggleBtnId, saveCompleteBtnSel) {
+  const toggleBtn = document.getElementById(toggleBtnId);
+  if (!toggleBtn) return;
+  const saveCompleteBtn = document.querySelector(saveCompleteBtnSel);
+
+  const applyMode = (mode) => {
+    document.querySelectorAll('[data-timing-group="planned"]').forEach(el => {
+      el.style.display = mode === "planned" ? "" : "none";
+    });
+    document.querySelectorAll('[data-timing-group="actual"]').forEach(el => {
+      el.style.display = mode === "active" ? "" : "none";
+    });
+    if (saveCompleteBtn) {
+      saveCompleteBtn.style.display = mode === "active" ? "" : "none";
+    }
+    toggleBtn.textContent = mode === "planned" ? "Planned" : "Active";
+    toggleBtn.dataset.timingMode = mode;
+  };
+
+  // Initialise to Planned (default)
+  applyMode("planned");
+
+  toggleBtn.addEventListener("click", () => {
+    const newMode = (toggleBtn.dataset.timingMode || "planned") === "planned" ? "active" : "planned";
+    applyMode(newMode);
+  });
+}
+
+/**
  * Get status rank for sorting (ACTIVE first, then PLANNED, then others)
  * @param {string} status - Movement status
  * @returns {number} Rank value (lower = higher priority)
@@ -2746,19 +2786,33 @@ function openNewFlightModal(flightType = "DEP") {
             <input id="newDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">Times shown in:</label>
-            <button type="button" id="newFlightTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+              <div>
+                <label class="modal-label">Times shown in:</label>
+                <button type="button" id="newFlightTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
+              </div>
+              <div>
+                <label class="modal-label">Mode:</label>
+                <button type="button" id="newFlightTimingToggle" class="btn btn-ghost" data-timing-mode="planned" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">Planned</button>
+              </div>
+            </div>
           </div>
-          ${renderTimesGrid({
-            etdId: "newDepPlanned", etaId: "newArrPlanned",
-            atdId: "newDepActual",  ataId: "newArrActual",
-            etdLabel: flightType === "OVR" ? "ECT" : "ETD",
-            etaLabel: "ETA",
-            atdLabel: flightType === "OVR" ? "ACT" : "ATD",
-            ataLabel: "ATA",
-            etaDisabled: flightType === "OVR",
-            ataDisabled: flightType === "OVR"
-          })}
+          <div class="modal-field" data-timing-group="planned">
+            <label class="modal-label">${flightType === "OVR" ? "ECT" : "ETD"}</label>
+            <input id="newDepPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="planned">
+            <label class="modal-label">ETA</label>
+            <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display: none;">
+            <label class="modal-label">${flightType === "OVR" ? "ACT" : "ATD"}</label>
+            <input id="newDepActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display: none;">
+            <label class="modal-label">ATA</label>
+            <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
+          </div>
         </div>
       </section>
 
@@ -2868,7 +2922,7 @@ function openNewFlightModal(flightType = "DEP") {
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
-        <button class="btn btn-secondary-modal js-save-complete-flight" type="button">Save & Complete</button>
+        <button class="btn btn-secondary-modal js-save-complete-flight" type="button" style="display: none;">Save &amp; Complete</button>
         <button class="btn btn-primary js-save-flight" type="button">Save</button>
       </div>
     </div>
@@ -3113,6 +3167,9 @@ function openNewFlightModal(flightType = "DEP") {
   bindTimeModeToggle("newFlightTimeModeToggle",
     ["newDepPlanned", "newArrPlanned", "newDepActual", "newArrActual"]);
 
+  // Bind Planned/Active timing mode toggle (gates field visibility and Save & Complete)
+  bindNewFormTimingToggle("newFlightTimingToggle", ".js-save-complete-flight");
+
   // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     // Get form values
@@ -3127,6 +3184,15 @@ function openNewFlightModal(flightType = "DEP") {
     const flightNumber = document.getElementById("newFlightNumber")?.value || "";
     const callsign = callsignCode + flightNumber; // Combine for full callsign
 
+    // Determine which field group is active (planned or actual)
+    const _timingMode = document.getElementById("newFlightTimingToggle")?.dataset.timingMode || "planned";
+    // Zero-out the hidden group so only visible fields are written
+    if (_timingMode === "planned") {
+      depActual = ""; arrActual = "";
+    } else {
+      depPlanned = ""; arrPlanned = "";
+    }
+
     // Validate inputs
     const dofValidation = validateDate(dof);
     if (!dofValidation.valid) {
@@ -3134,52 +3200,54 @@ function openNewFlightModal(flightType = "DEP") {
       return;
     }
 
-    const depValidation = validateTime(depPlanned);
-    if (!depValidation.valid) {
-      showToast(`Departure time: ${depValidation.error}`, 'error');
-      return;
+    if (_timingMode === "planned") {
+      // Validate planned time fields only
+      const depValidation = validateTime(depPlanned);
+      if (!depValidation.valid) {
+        showToast(`Departure time: ${depValidation.error}`, 'error');
+        return;
+      }
+      if (depValidation.normalized) {
+        depPlanned = depValidation.normalized;
+        document.getElementById("newDepPlanned").value = depPlanned;
+      }
+
+      const arrValidation = validateTime(arrPlanned);
+      if (!arrValidation.valid) {
+        showToast(`Arrival time: ${arrValidation.error}`, 'error');
+        return;
+      }
+      if (arrValidation.normalized) {
+        arrPlanned = arrValidation.normalized;
+        document.getElementById("newArrPlanned").value = arrPlanned;
+      }
+    } else {
+      // Validate actual time fields only
+      const depActualValidation = validateTime(depActual);
+      if (!depActualValidation.valid) {
+        showToast(`Actual departure time: ${depActualValidation.error}`, 'error');
+        return;
+      }
+      if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newDepActual").value = depActual; }
+
+      const arrActualValidation = validateTime(arrActual);
+      if (!arrActualValidation.valid) {
+        showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error');
+        return;
+      }
+      if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newArrActual").value = arrActual; }
     }
 
-    // Use normalized time if provided
-    if (depValidation.normalized) {
-      depPlanned = depValidation.normalized;
-      document.getElementById("newDepPlanned").value = depPlanned;
-    }
-
-    const arrValidation = validateTime(arrPlanned);
-    if (!arrValidation.valid) {
-      showToast(`Arrival time: ${arrValidation.error}`, 'error');
-      return;
-    }
-
-    // Use normalized time if provided
-    if (arrValidation.normalized) {
-      arrPlanned = arrValidation.normalized;
-      document.getElementById("newArrPlanned").value = arrPlanned;
-    }
-
-    // Validate actual times
-    const depActualValidation = validateTime(depActual);
-    if (!depActualValidation.valid) {
-      showToast(`Actual departure time: ${depActualValidation.error}`, 'error');
-      return;
-    }
-    if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newDepActual").value = depActual; }
-
-    const arrActualValidation = validateTime(arrActual);
-    if (!arrActualValidation.valid) {
-      showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error');
-      return;
-    }
-    if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newArrActual").value = arrActual; }
-
-    // Convert Local→UTC if currently in LOCAL display mode
+    // Convert Local→UTC if currently in LOCAL display mode (only for the active field group)
     const _newSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
     if (_newSaveMode === "LOCAL") {
-      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
-      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
-      if (depActual)  depActual  = convertLocalToUTC(depActual);
-      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+      if (_timingMode === "planned") {
+        if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+        if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      } else {
+        if (depActual)  depActual  = convertLocalToUTC(depActual);
+        if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+      }
     }
 
     // Check for past times and show warning
@@ -3573,13 +3641,33 @@ function openNewLocFlightModal() {
             <input id="newLocDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
           </div>
           <div class="modal-field">
-            <label class="modal-label">Times shown in:</label>
-            <button type="button" id="newLocTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+              <div>
+                <label class="modal-label">Times shown in:</label>
+                <button type="button" id="newLocTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
+              </div>
+              <div>
+                <label class="modal-label">Mode:</label>
+                <button type="button" id="newLocTimingToggle" class="btn btn-ghost" data-timing-mode="planned" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">Planned</button>
+              </div>
+            </div>
           </div>
-          ${renderTimesGrid({
-            etdId: "newLocStart",       etaId: "newLocEnd",
-            atdId: "newLocStartActual", ataId: "newLocEndActual"
-          })}
+          <div class="modal-field" data-timing-group="planned">
+            <label class="modal-label">ETD</label>
+            <input id="newLocStart" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="planned">
+            <label class="modal-label">ETA</label>
+            <input id="newLocEnd" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display: none;">
+            <label class="modal-label">ATD</label>
+            <input id="newLocStartActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display: none;">
+            <label class="modal-label">ATA</label>
+            <input id="newLocEndActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
         </div>
       </section>
 
@@ -3689,7 +3777,7 @@ function openNewLocFlightModal() {
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
-        <button class="btn btn-secondary-modal js-save-complete-loc" type="button">Save & Complete</button>
+        <button class="btn btn-secondary-modal js-save-complete-loc" type="button" style="display: none;">Save &amp; Complete</button>
         <button class="btn btn-primary js-save-loc" type="button">Save</button>
       </div>
     </div>
@@ -3872,6 +3960,9 @@ function openNewLocFlightModal() {
   bindTimeModeToggle("newLocTimeModeToggle",
     ["newLocStart", "newLocEnd", "newLocStartActual", "newLocEndActual"]);
 
+  // Bind Planned/Active timing mode toggle (gates field visibility and Save & Complete)
+  bindNewFormTimingToggle("newLocTimingToggle", ".js-save-complete-loc");
+
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
@@ -3885,32 +3976,46 @@ function openNewLocFlightModal() {
     const flightNumber = document.getElementById("newLocFlightNumber")?.value || "";
     const callsign = callsignCode + flightNumber;
 
+    // Determine which field group is active (planned or actual)
+    const _locTimingMode = document.getElementById("newLocTimingToggle")?.dataset.timingMode || "planned";
+    // Zero-out the hidden group so only visible fields are written
+    if (_locTimingMode === "planned") {
+      depActual = ""; arrActual = "";
+    } else {
+      depPlanned = ""; arrPlanned = "";
+    }
+
     const dofValidation = validateDate(dof);
     if (!dofValidation.valid) { showToast(dofValidation.error, 'error'); return; }
 
-    const depValidation = validateTime(depPlanned);
-    if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return; }
-    if (depValidation.normalized) { depPlanned = depValidation.normalized; document.getElementById("newLocStart").value = depPlanned; }
+    if (_locTimingMode === "planned") {
+      const depValidation = validateTime(depPlanned);
+      if (!depValidation.valid) { showToast(`Departure time: ${depValidation.error}`, 'error'); return; }
+      if (depValidation.normalized) { depPlanned = depValidation.normalized; document.getElementById("newLocStart").value = depPlanned; }
 
-    const arrValidation = validateTime(arrPlanned);
-    if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return; }
-    if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newLocEnd").value = arrPlanned; }
+      const arrValidation = validateTime(arrPlanned);
+      if (!arrValidation.valid) { showToast(`Arrival time: ${arrValidation.error}`, 'error'); return; }
+      if (arrValidation.normalized) { arrPlanned = arrValidation.normalized; document.getElementById("newLocEnd").value = arrPlanned; }
+    } else {
+      const depActualValidation = validateTime(depActual);
+      if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return; }
+      if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newLocStartActual").value = depActual; }
 
-    const depActualValidation = validateTime(depActual);
-    if (!depActualValidation.valid) { showToast(`Actual departure time: ${depActualValidation.error}`, 'error'); return; }
-    if (depActualValidation.normalized) { depActual = depActualValidation.normalized; document.getElementById("newLocStartActual").value = depActual; }
+      const arrActualValidation = validateTime(arrActual);
+      if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return; }
+      if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newLocEndActual").value = arrActual; }
+    }
 
-    const arrActualValidation = validateTime(arrActual);
-    if (!arrActualValidation.valid) { showToast(`Actual arrival time: ${arrActualValidation.error}`, 'error'); return; }
-    if (arrActualValidation.normalized) { arrActual = arrActualValidation.normalized; document.getElementById("newLocEndActual").value = arrActual; }
-
-    // Convert Local→UTC if in LOCAL display mode
+    // Convert Local→UTC if in LOCAL display mode (only for the active field group)
     const _locSaveMode = (getConfig().timeInputMode || "UTC").toUpperCase();
     if (_locSaveMode === "LOCAL") {
-      if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
-      if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
-      if (depActual)  depActual  = convertLocalToUTC(depActual);
-      if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+      if (_locTimingMode === "planned") {
+        if (depPlanned) depPlanned = convertLocalToUTC(depPlanned);
+        if (arrPlanned) arrPlanned = convertLocalToUTC(arrPlanned);
+      } else {
+        if (depActual)  depActual  = convertLocalToUTC(depActual);
+        if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
+      }
     }
 
     const pobValidation = validateNumberRange(pob, 0, 999, "POB");
