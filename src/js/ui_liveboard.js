@@ -1740,16 +1740,17 @@ function generateMovementAlerts(m) {
     }
     if (startMin === null || !Number.isFinite(startMin)) return null;
 
+    const movDur = (mov.durationMinutes > 0) ? mov.durationMinutes : getDefaultFlightDuration(movFt);
     let endMin = null;
     if (movFt === 'ARR' || movFt === 'LOC') {
       if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
       else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + getDefaultFlightDuration(movFt);
+      else endMin = startMin + movDur;
     } else {
-      // DEP / OVR: raw arrActual/arrPlanned as end, else offset projection
+      // DEP / OVR: raw arrActual/arrPlanned as end, else projection
       if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
       else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + getDefaultFlightDuration(movFt);
+      else endMin = startMin + movDur;
     }
     if (!Number.isFinite(endMin)) return null;
     // Handle overnight wrap
@@ -1809,14 +1810,6 @@ function generateMovementAlerts(m) {
       }
     }
 
-    // Guardrail: check if abbreviation key collides with known VKB contractions (single-strip risk)
-    if (thisKey.length === 3 && isKnownContraction(thisKey)) {
-      alerts.push({
-        type: 'callsign_confusion_contraction',
-        severity: 'warning',
-        message: `Abbreviated callsign risk: "${thisKey}" matches a known callsign contraction. Avoid abbreviated registration callsign.`
-      });
-    }
   }
 
   // 2. University Air Squadron (UA_) abbreviated callsign confusion
@@ -1939,7 +1932,7 @@ function renderExpandedRow(tbody, m, context = 'live') {
       if (isEmergencyAlert && !config.historyShowEmergencyAlerts) return false;
 
       // Callsign confusion/collision alerts
-      const isCallsignAlert = ['callsign_collision_reg', 'callsign_collision_ua', 'callsign_confusion_reg', 'callsign_confusion_contraction', 'callsign_confusion_ua', 'callsign_confusion_military'].includes(alert.type);
+      const isCallsignAlert = ['callsign_collision_reg', 'callsign_collision_ua', 'callsign_confusion_reg', 'callsign_confusion_ua', 'callsign_confusion_military'].includes(alert.type);
       if (isCallsignAlert && !config.historyShowCallsignAlerts) return false;
 
       // WTC alerts
@@ -2263,7 +2256,6 @@ export function renderLiveBoard() {
     );
     const hasCallsignConfusion = alerts.some(a =>
       a.type === 'callsign_confusion_reg' ||
-      a.type === 'callsign_confusion_contraction' ||
       a.type === 'callsign_confusion_ua' ||
       a.type === 'callsign_confusion_military'
     );
@@ -2903,6 +2895,11 @@ function openNewFlightModal(flightType = "DEP") {
             <label class="modal-label">${flightType === "OVR" ? "ALFT" : "ATA"}</label>
             <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
           </div>
+          <div class="modal-field">
+            <label class="modal-label">Duration</label>
+            <input id="newDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" />
+            <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
+          </div>
         </div>
       </section>
 
@@ -3477,6 +3474,7 @@ function openNewFlightModal(flightType = "DEP") {
       squawk: squawkValue,
       route: routeValue,
       clearance: clearanceValue,
+      durationMinutes: (() => { const v = parseInt(document.getElementById("newDuration")?.value || "", 10); return v > 0 ? v : null; })(),
     };
 
     // Validate and read formation (must happen before enrichMovementData)
@@ -3625,6 +3623,7 @@ function openNewFlightModal(flightType = "DEP") {
       squawk: squawkValue,
       route: routeValue,
       clearance: clearanceValue,
+      durationMinutes: (() => { const v = parseInt(document.getElementById("newDuration")?.value || "", 10); return v > 0 ? v : null; })(),
       formation: null
     };
 
@@ -3771,6 +3770,11 @@ function openNewLocFlightModal() {
           <div class="modal-field" data-timing-group="actual" style="display: none;">
             <label class="modal-label">ATA</label>
             <input id="newLocEndActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Duration</label>
+            <input id="newLocDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" />
+            <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
           </div>
         </div>
       </section>
@@ -4229,6 +4233,7 @@ function openNewLocFlightModal() {
       squawk: squawkValue,
       route: routeValue,
       clearance: clearanceValue,
+      durationMinutes: (() => { const v = parseInt(document.getElementById("newLocDuration")?.value || "", 10); return v > 0 ? v : null; })(),
       formation: locFormation || null
     };
 
@@ -6106,10 +6111,6 @@ function getTimelineConfig() {
 function getDefaultFlightDuration(flightType) {
   const cfg = getConfig();
   const ft = (flightType || '').toUpperCase();
-  // Global override (DEP/ARR only): if configured, use it instead of per-type defaults
-  if (cfg.flightDurationMinutes && (ft === 'DEP' || ft === 'ARR')) {
-    return cfg.flightDurationMinutes;
-  }
   switch (ft) {
     case 'LOC': return cfg.locFlightDurationMinutes || 40;
     case 'DEP': return cfg.depFlightDurationMinutes || 60;
@@ -6220,9 +6221,10 @@ function renderTimelineTracks() {
       return;
     }
 
-    // Default duration of 60 minutes if no end time
+    // Fall back to per-strip duration or admin default when no end time is stored
     if (!Number.isFinite(endMinutes)) {
-      endMinutes = startMinutes + 60;
+      const ft = (m.flightType || '').toUpperCase();
+      endMinutes = startMinutes + ((m.durationMinutes > 0) ? m.durationMinutes : getDefaultFlightDuration(ft));
     }
 
     // Handle overnight flights (end time < start time)

@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-06 (Europe/London) — Sprint: OVR timing labels / Flight Duration override / Abbrev two-level alerting
+Last updated: 2026-03-06 (Europe/London) — Sprint: Per-type DEP/ARR durations, per-strip Duration field, contraction advisory removed
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -1402,6 +1402,60 @@ All input IDs unchanged.
 - [ ] Two strips with same reg abbrev, one ACTIVE + one PLANNED with overlapping windows → yellow `callsign-confusion` highlight, "Potential abbreviated callsign overlap" in Details
 - [ ] When PLANNED becomes ACTIVE (collision condition): alert upgrades from yellow to red
 - [ ] When one of two conflicting ACTIVE strips is completed: red alert clears
+
+---
+
+### 4.19 Sprint: Per-type DEP/ARR durations, per-strip Duration field, contraction advisory removed
+
+**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit 23dce3f)
+**Branch:** `claude/durations-per-type-and-per-strip-no-global-advisory`
+
+#### 1) Global "Flight Duration" override removed; per-type DEP/ARR Duration added
+
+- **`datamodel.js`**: removed `flightDurationMinutes: null` from `defaultConfig`. `depFlightDurationMinutes` (60) and `arrFlightDurationMinutes` (60) retained.
+- **`index.html`** (Admin → Flight Offsets): removed "Flight Duration" global row (`configFlightDuration`); added "DEP Duration" (`configDepDuration`) and "ARR Duration" (`configArrDuration`) rows, matching the existing LOC/OVR duration row pattern.
+- **`app.js`**: variable bindings, `VALUE_IDS` dirty-state tracking, load, validation, and `updateConfig` updated — `depFlightDurationMinutes` / `arrFlightDurationMinutes` are now admin-settable.
+- **`ui_liveboard.js`** `getDefaultFlightDuration()`: global override block removed; function now reads `cfg.depFlightDurationMinutes` / `cfg.arrFlightDurationMinutes` directly (these already existed; now properly saved from admin).
+
+#### 2) OVR Activate removed from Flight Offsets
+
+- **`index.html`**: "OVR Activate" row removed from Flight Offsets table. Auto-Activation page remains the sole control for OVR activation lead time.
+- **`app.js`**: `configOvrAutoActivate` variable, `VALUE_IDS` entry, load line, validation clause, and `ovrAutoActivateMinutes` save entry removed from Flight Offsets admin handler. `ovrAutoActivateMinutes` remains in `defaultConfig` as a legacy key; Auto-Activation section (`configAutoActivateOvrMinutes`) is unaffected.
+
+#### 3) Per-strip Duration field in New modals
+
+- **New DEP/ARR/OVR modal**: `<input id="newDuration">` added to Times section (below the last time field). `placeholder="default"`, labelled "min (timeline only)".
+- **New LOC modal**: `<input id="newLocDuration">` added to Times section identically.
+- **Save handlers** (both `js-save-flight` and `js-save-complete-flight` for DEP/ARR/OVR; `js-save-loc` for LOC): read the input and store `movement.durationMinutes` (null if blank or ≤0).
+- **`getMovementWindow()`** (abbrev overlap prediction): uses `mov.durationMinutes || getDefaultFlightDuration(movFt)` for projected end time.
+- **`renderTimelineTracks()`** (timeline bar): uses `m.durationMinutes || getDefaultFlightDuration(ft)` when no end time is stored (replaces the former hardcoded 60-min fallback).
+
+#### 4) Contraction advisory removed
+
+- `callsign_confusion_contraction` alert is no longer computed, pushed, or checked:
+  - Block removed from `generateMovementAlerts()` (was "Guardrail: check if abbreviation key collides with known VKB contractions").
+  - `callsign_confusion_contraction` removed from `isCallsignAlert` filter guard (history view).
+  - `callsign_confusion_contraction` removed from `hasCallsignConfusion` check (strip callsign class).
+- Yellow/red overlap and collision alerts (`callsign_confusion_reg`, `callsign_collision_reg`, `callsign_confusion_ua`, `callsign_collision_ua`) are fully preserved.
+
+#### Invariants maintained
+- Canonical UTC HH:MM time storage untouched.
+- `durationMinutes` is never written to actual time fields.
+- Active-strip actual guard unchanged.
+- Counter/totals, booking sync, WTC, modal lifecycle, formations: untouched.
+- Edit/Duplicate modals unchanged.
+
+#### Manual smoke checklist
+- [ ] Admin → Flight Offsets: DEP Duration and ARR Duration present; "Flight Duration" global row gone; "OVR Activate" row gone
+- [ ] Admin → Auto-Activation: OVR activation control still present and functional
+- [ ] New DEP modal → Times: "Duration" field visible; blank = uses admin DEP Duration default
+- [ ] New ARR modal → Times: "Duration" field visible; blank = uses admin ARR Duration default
+- [ ] New LOC modal → Times: "Duration" field visible; blank = uses LOC Duration default
+- [ ] New OVR modal → Times: "Duration" field visible; blank = uses OVR Duration default
+- [ ] New movement with Duration=90 → timeline bar extends 90 min from start
+- [ ] New movement with Duration blank → timeline bar extends per admin default
+- [ ] Single strip with registration-as-callsign: NO "matches a known callsign contraction" advisory
+- [ ] Yellow/red overlap and collision alerts still trigger correctly with two conflicting strips
 
 ---
 

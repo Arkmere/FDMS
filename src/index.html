@@ -791,6 +791,17 @@
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETD defaults to now + this</td>
                       </tr>
                       <tr>
+                        <td style="padding: 6px; font-weight: bold;">DEP Duration</td>
+                        <td style="padding: 6px;">
+                          <span style="display:inline-flex;align-items:center;gap:4px;">
+                            <input type="number" id="configDepDuration" min="1" max="720"
+                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
+                            <span style="font-size:11px;color:#888;">min</span>
+                          </span>
+                        </td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">Default flight duration for timeline projection (default 60 min)</td>
+                      </tr>
+                      <tr>
                         <td style="padding: 6px; font-weight: bold;">ARR</td>
                         <td style="padding: 6px;">
                           <span style="display:inline-flex;align-items:center;gap:4px;">
@@ -802,15 +813,15 @@
                         <td style="padding: 6px; font-size: 11px; color: #666;">ETA defaults to now + this</td>
                       </tr>
                       <tr>
-                        <td style="padding: 6px; font-weight: bold;">Flight Duration</td>
+                        <td style="padding: 6px; font-weight: bold;">ARR Duration</td>
                         <td style="padding: 6px;">
                           <span style="display:inline-flex;align-items:center;gap:4px;">
-                            <input type="number" id="configFlightDuration" min="1" max="720" placeholder="—"
+                            <input type="number" id="configArrDuration" min="1" max="720"
                               style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
                             <span style="font-size:11px;color:#888;">min</span>
                           </span>
                         </td>
-                        <td style="padding: 6px; font-size: 11px; color: #666;">Timeline projection override for DEP &amp; ARR. Leave blank to use per-type defaults.</td>
+                        <td style="padding: 6px; font-size: 11px; color: #666;">Default flight duration for timeline projection (default 60 min)</td>
                       </tr>
                       <tr>
                         <td style="padding: 6px; font-weight: bold;">LOC</td>
@@ -855,17 +866,6 @@
                           </span>
                         </td>
                         <td style="padding: 6px; font-size: 11px; color: #666;">ELFT = EOFT + this (time on frequency, default 5 min)</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 6px; font-weight: bold;">OVR Activate</td>
-                        <td style="padding: 6px;">
-                          <span style="display:inline-flex;align-items:center;gap:4px;">
-                            <input type="number" id="configOvrAutoActivate" min="5" max="120"
-                              style="width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 3px;" />
-                            <span style="font-size:11px;color:#888;">min</span>
-                          </span>
-                        </td>
-                        <td style="padding: 6px; font-size: 11px; color: #666;">Auto-activate this many minutes before EOFT</td>
                       </tr>
                     </tbody>
                   </table>

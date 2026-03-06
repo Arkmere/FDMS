@@ -683,13 +683,13 @@ function initAdminPanelHandlers() {
 
   // ── Configuration inputs ───────────────────────────────────────
   const configDepOffset = document.getElementById("configDepOffset");
+  const configDepDuration = document.getElementById("configDepDuration");
   const configArrOffset = document.getElementById("configArrOffset");
-  const configFlightDuration = document.getElementById("configFlightDuration");
+  const configArrDuration = document.getElementById("configArrDuration");
   const configLocOffset = document.getElementById("configLocOffset");
   const configLocDuration = document.getElementById("configLocDuration");
   const configOvrOffset = document.getElementById("configOvrOffset");
   const configOvrDuration = document.getElementById("configOvrDuration");
-  const configOvrAutoActivate = document.getElementById("configOvrAutoActivate");
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
@@ -729,8 +729,8 @@ function initAdminPanelHandlers() {
     'configTimelineEnabled'
   ];
   const VALUE_IDS = [
-    'configDepOffset', 'configArrOffset', 'configFlightDuration', 'configLocOffset', 'configLocDuration',
-    'configOvrOffset', 'configOvrDuration', 'configOvrAutoActivate',
+    'configDepOffset', 'configDepDuration', 'configArrOffset', 'configArrDuration', 'configLocOffset', 'configLocDuration',
+    'configOvrOffset', 'configOvrDuration',
     'configTimezoneOffset',
     'configAutoActivateDepMinutes', 'configAutoActivateArrMinutes',
     'configAutoActivateLocMinutes', 'configAutoActivateOvrMinutes',
@@ -796,13 +796,13 @@ function initAdminPanelHandlers() {
   // Load current config values
   const currentConfig = getConfig();
   if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
+  if (configDepDuration) configDepDuration.value = currentConfig.depFlightDurationMinutes || 60;
   if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
-  if (configFlightDuration) configFlightDuration.value = currentConfig.flightDurationMinutes ?? '';
+  if (configArrDuration) configArrDuration.value = currentConfig.arrFlightDurationMinutes || 60;
   if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
   if (configLocDuration) configLocDuration.value = currentConfig.locFlightDurationMinutes || 40;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
   if (configOvrDuration) configOvrDuration.value = currentConfig.ovrFlightDurationMinutes || 5;
-  if (configOvrAutoActivate) configOvrAutoActivate.value = currentConfig.ovrAutoActivateMinutes || 30;
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
@@ -924,14 +924,13 @@ function initAdminPanelHandlers() {
   // ── Save config action ─────────────────────────────────────────
   function saveAdminConfig() {
     const depOffset = parseInt(configDepOffset?.value || "10", 10);
+    const depDuration = parseInt(configDepDuration?.value || "60", 10);
     const arrOffset = parseInt(configArrOffset?.value || "90", 10);
-    const flightDurationRaw = configFlightDuration?.value?.trim();
-    const flightDuration = flightDurationRaw ? parseInt(flightDurationRaw, 10) : null;
+    const arrDuration = parseInt(configArrDuration?.value || "60", 10);
     const locOffset = parseInt(configLocOffset?.value || "10", 10);
     const locDuration = parseInt(configLocDuration?.value || "40", 10);
     const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
     const ovrDuration = parseInt(configOvrDuration?.value || "5", 10);
-    const ovrAutoActivate = parseInt(configOvrAutoActivate?.value || "30", 10);
     const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
     const newFormUtcTogglePolicy = configNewFormUtcTogglePolicy?.value || "auto";
     const hideLocalIfSame = configHideLocalIfSame?.checked || false;
@@ -963,13 +962,13 @@ function initAdminPanelHandlers() {
 
     // Validate all offsets
     if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
+        isNaN(depDuration) || depDuration < 1 || depDuration > 720 ||
         isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
-        (flightDuration !== null && (isNaN(flightDuration) || flightDuration < 1 || flightDuration > 720)) ||
+        isNaN(arrDuration) || arrDuration < 1 || arrDuration > 720 ||
         isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
         isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
         isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
         isNaN(ovrDuration) || ovrDuration < 1 || ovrDuration > 60 ||
-        isNaN(ovrAutoActivate) || ovrAutoActivate < 5 || ovrAutoActivate > 120 ||
         isNaN(timezoneOffset) || timezoneOffset < -12 || timezoneOffset > 12 ||
         isNaN(autoActivateDepMinutes) || autoActivateDepMinutes < 5 || autoActivateDepMinutes > 120 ||
         isNaN(autoActivateArrMinutes) || autoActivateArrMinutes < 5 || autoActivateArrMinutes > 120 ||
@@ -981,13 +980,13 @@ function initAdminPanelHandlers() {
 
     updateConfig({
       depOffsetMinutes: depOffset,
+      depFlightDurationMinutes: depDuration,
       arrOffsetMinutes: arrOffset,
-      flightDurationMinutes: flightDuration,
+      arrFlightDurationMinutes: arrDuration,
       locOffsetMinutes: locOffset,
       locFlightDurationMinutes: locDuration,
       ovrOffsetMinutes: ovrOffset,
       ovrFlightDurationMinutes: ovrDuration,
-      ovrAutoActivateMinutes: ovrAutoActivate,
       timezoneOffsetHours: timezoneOffset,
       newFormUtcLocalTogglePolicy: newFormUtcTogglePolicy,
       hideLocalTimeInBannerIfSame: hideLocalIfSame,
