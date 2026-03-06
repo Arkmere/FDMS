@@ -17,6 +17,7 @@ const defaultConfig = {
   locFlightDurationMinutes: 40, // LOC: ETA = ETD + this (default flight duration)
   depFlightDurationMinutes: 60, // DEP: Default flight duration for timeline display
   arrFlightDurationMinutes: 60, // ARR: Default flight duration for timeline display
+  flightDurationMinutes: null,  // Optional global override: timeline projection duration for DEP+ARR (null = use per-type defaults)
   ovrFlightDurationMinutes: 5,  // OVR: ELFT = EOFT + this (time on frequency, default 5 min)
   ovrOffsetMinutes: 0,          // OVR: EOFT = now + this (when creating new OVR)
   ovrAutoActivateMinutes: 30,   // Legacy - kept for backwards compatibility

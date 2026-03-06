@@ -534,9 +534,18 @@ tr.strip.ft-ovr > td {
 }
 .call-main.callsign-confusion {
   text-decoration: underline;
-  text-decoration-color: #d32f2f;
+  text-decoration-color: #f57c00;
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
+}
+/* RED: live ACTIVE-ACTIVE collision — stronger visual than yellow risk */
+.call-main.callsign-collision {
+  text-decoration: underline;
+  text-decoration-color: #d32f2f;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 2px;
+  background-color: rgba(211, 47, 47, 0.1);
+  border-radius: 2px;
 }
 .wtc-alert {
   background-color: #ffeb3b;

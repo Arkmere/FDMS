@@ -1728,46 +1728,99 @@ function generateMovementAlerts(m) {
     return regNorm; // fallback
   }
 
+  // Helper: compute predicted ACTIVE window [startMin, endMin] for a movement.
+  // Returns null if window cannot be determined.
+  function getMovementWindow(mov) {
+    const movFt = (mov.flightType || '').toUpperCase();
+    let startMin = null;
+    if (mov.depActual) {
+      startMin = timeToMinutes(mov.depActual);
+    } else if (mov.depPlanned) {
+      startMin = timeToMinutes(mov.depPlanned);
+    }
+    if (startMin === null || !Number.isFinite(startMin)) return null;
+
+    let endMin = null;
+    if (movFt === 'ARR' || movFt === 'LOC') {
+      if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
+      else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
+      else endMin = startMin + getDefaultFlightDuration(movFt);
+    } else {
+      // DEP / OVR: raw arrActual/arrPlanned as end, else offset projection
+      if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
+      else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
+      else endMin = startMin + getDefaultFlightDuration(movFt);
+    }
+    if (!Number.isFinite(endMin)) return null;
+    // Handle overnight wrap
+    if (endMin < startMin) endMin += 24 * 60;
+    return { start: startMin, end: endMin };
+  }
+
+  // Overlap test: A.start <= B.end AND B.start <= A.end
+  function windowsOverlap(movA, movB) {
+    const winA = getMovementWindow(movA);
+    const winB = getMovementWindow(movB);
+    if (!winA || !winB) return false;
+    return winA.start <= winB.end && winB.start <= winA.end;
+  }
+
   // 1. Registration-based callsign confusion (UK CAP 413-aligned)
+  // Two severity levels:
+  //   RED (callsign_collision_reg): both this movement AND ≥1 conflict are ACTIVE right now.
+  //   YELLOW (callsign_confusion_reg): predicted ACTIVE windows overlap, but no live collision.
   if (thisRegNorm && thisCallsignNorm === thisRegNorm) {
     const thisKey = getRegAbbrevKey(thisRegNorm);
 
-    // Check for conflicts with other registration-based callsigns
+    // Find all other ACTIVE/PLANNED movements that share the same abbreviation key
     const conflictingRegs = activeOrPlannedMovements.filter(mov => {
       const otherCallsignRaw = (mov.callsignCode || '').toUpperCase().trim();
       const otherRegRaw = (mov.registration || '').toUpperCase().trim();
       const otherCallsignNorm = otherCallsignRaw.replace(/[-\s]/g, '');
       const otherRegNorm = otherRegRaw.replace(/[-\s]/g, '');
-
-      // Only consider if other also uses registration as callsign
       if (otherRegNorm && otherCallsignNorm === otherRegNorm) {
         const otherKey = getRegAbbrevKey(otherRegNorm);
-        // Conflict if same abbreviation key but different registrations
         return thisKey === otherKey && thisRegNorm !== otherRegNorm;
       }
       return false;
     });
 
     if (conflictingRegs.length > 0) {
-      const otherCallsigns = conflictingRegs.map(mov => mov.callsignCode).join(', ');
-      alerts.push({
-        type: 'callsign_confusion_reg',
-        severity: 'warning',
-        message: `Registration callsign conflict: ${m.callsignCode} and ${otherCallsigns} both abbreviate to "${thisKey}"`
-      });
+      // RED: this movement is ACTIVE and at least one conflicting movement is also ACTIVE
+      const activeConflicts = conflictingRegs.filter(mov => mov.status === 'ACTIVE');
+      if (m.status === 'ACTIVE' && activeConflicts.length > 0) {
+        const otherCallsigns = activeConflicts.map(mov => mov.callsignCode).join(', ');
+        alerts.push({
+          type: 'callsign_collision_reg',
+          severity: 'critical',
+          message: `Abbreviated callsign collision: ${m.callsignCode} and ${otherCallsigns} are both ACTIVE and abbreviate to "${thisKey}"`
+        });
+      } else {
+        // YELLOW: check for overlapping predicted windows (no live collision)
+        const overlapConflicts = conflictingRegs.filter(mov => windowsOverlap(m, mov));
+        if (overlapConflicts.length > 0) {
+          const otherCallsigns = overlapConflicts.map(mov => mov.callsignCode).join(', ');
+          alerts.push({
+            type: 'callsign_confusion_reg',
+            severity: 'warning',
+            message: `Potential abbreviated callsign overlap: ${m.callsignCode} and ${otherCallsigns} may be active concurrently (abbrev "${thisKey}")`
+          });
+        }
+      }
     }
 
-    // Guardrail: check if abbreviation key collides with known VKB contractions
+    // Guardrail: check if abbreviation key collides with known VKB contractions (single-strip risk)
     if (thisKey.length === 3 && isKnownContraction(thisKey)) {
       alerts.push({
         type: 'callsign_confusion_contraction',
         severity: 'warning',
-        message: `Abbrev collision: "${thisKey}" matches a callsign contraction. Avoid abbreviated registration callsign.`
+        message: `Abbreviated callsign risk: "${thisKey}" matches a known callsign contraction. Avoid abbreviated registration callsign.`
       });
     }
   }
 
   // 2. University Air Squadron (UA_) abbreviated callsign confusion
+  // Same two-level logic: RED for live ACTIVE collision, YELLOW for window overlap.
   const uaCodes = ['UAA', 'UAD', 'UAF', 'UAH', 'UAI', 'UAJ', 'UAM', 'UAO', 'UAQ', 'UAS', 'UAT', 'UAU', 'UAV', 'UAW', 'UAX', 'UAY'];
   let thisUaCode = null;
   let thisUaNumber = null;
@@ -1795,16 +1848,29 @@ function generateMovementAlerts(m) {
     });
 
     if (conflictingUa.length > 0) {
-      const otherCallsigns = conflictingUa.map(mov => mov.callsignCode).join(', ');
-      alerts.push({
-        type: 'callsign_confusion_ua',
-        severity: 'warning',
-        message: `UAS callsign conflict: ${m.callsignCode} and ${otherCallsigns} both abbreviate to "UNIFORM${thisUaNumber}"`
-      });
+      const activeConflicts = conflictingUa.filter(mov => mov.status === 'ACTIVE');
+      if (m.status === 'ACTIVE' && activeConflicts.length > 0) {
+        const otherCallsigns = activeConflicts.map(mov => mov.callsignCode).join(', ');
+        alerts.push({
+          type: 'callsign_collision_ua',
+          severity: 'critical',
+          message: `Abbreviated callsign collision: ${m.callsignCode} and ${otherCallsigns} are both ACTIVE and abbreviate to "UNIFORM${thisUaNumber}"`
+        });
+      } else {
+        const overlapConflicts = conflictingUa.filter(mov => windowsOverlap(m, mov));
+        if (overlapConflicts.length > 0) {
+          const otherCallsigns = overlapConflicts.map(mov => mov.callsignCode).join(', ');
+          alerts.push({
+            type: 'callsign_confusion_ua',
+            severity: 'warning',
+            message: `Potential abbreviated callsign overlap: ${m.callsignCode} and ${otherCallsigns} may be active concurrently (abbrev "UNIFORM${thisUaNumber}")`
+          });
+        }
+      }
     }
   }
 
-  // 3. Military non-standard vs ICAO abbreviation confusion
+  // 3. Military non-standard vs ICAO abbreviation confusion (unchanged — no collision level needed)
   const knownConflicts = [
     { military: 'CRMSN', icao: 'OUA', phonetic: 'CRIMSON' }
     // Add more known conflicts here as needed
@@ -1872,8 +1938,8 @@ function renderExpandedRow(tbody, m, context = 'live') {
       const isEmergencyAlert = ['emergency_hijack', 'emergency_radio', 'emergency_general'].includes(alert.type);
       if (isEmergencyAlert && !config.historyShowEmergencyAlerts) return false;
 
-      // Callsign confusion alerts
-      const isCallsignAlert = ['callsign_confusion_reg', 'callsign_confusion_contraction', 'callsign_confusion_ua', 'callsign_confusion_military'].includes(alert.type);
+      // Callsign confusion/collision alerts
+      const isCallsignAlert = ['callsign_collision_reg', 'callsign_collision_ua', 'callsign_confusion_reg', 'callsign_confusion_contraction', 'callsign_confusion_ua', 'callsign_confusion_military'].includes(alert.type);
       if (isCallsignAlert && !config.historyShowCallsignAlerts) return false;
 
       // WTC alerts
@@ -2117,19 +2183,22 @@ export function renderLiveBoard() {
     tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
     tr.dataset.id = String(m.id);
 
-    // Use semantic time fields based on flight type
+    // Use semantic time fields based on flight type.
+    // For ACTIVE strips, only show confirmed actual times; planned/offset-derived times
+    // are not displayed in the actuals slot to avoid misleading controllers.
     const ft = (m.flightType || "").toUpperCase();
+    const isActive = m.status === "ACTIVE";
     let depDisplay = "-";
     let arrDisplay = "-";
 
     if (ft === "DEP" || ft === "LOC") {
-      depDisplay = getATD(m) || getETD(m) || "-";
+      depDisplay = getATD(m) || (isActive ? "-" : getETD(m)) || "-";
     }
     if (ft === "ARR" || ft === "LOC") {
-      arrDisplay = getATA(m) || getETA(m) || "-";
+      arrDisplay = getATA(m) || (isActive ? "-" : getETA(m)) || "-";
     }
     if (ft === "OVR") {
-      depDisplay = getACT(m) || getECT(m) || "-";
+      depDisplay = getACT(m) || (isActive ? "-" : getECT(m)) || "-";
       arrDisplay = "-";
     }
 
@@ -2187,14 +2256,20 @@ export function renderLiveBoard() {
     const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
     const indicatorTitle = `${m.egowCode || ''}${m.unitCode ? ' - ' + m.unitCode : ''}`;
 
-    // Check for callsign confusion alerts
+    // Check for callsign confusion/collision alerts (two levels)
+    const hasCallsignCollision = alerts.some(a =>
+      a.type === 'callsign_collision_reg' ||
+      a.type === 'callsign_collision_ua'
+    );
     const hasCallsignConfusion = alerts.some(a =>
       a.type === 'callsign_confusion_reg' ||
       a.type === 'callsign_confusion_contraction' ||
       a.type === 'callsign_confusion_ua' ||
       a.type === 'callsign_confusion_military'
     );
-    const callsignClass = hasCallsignConfusion ? 'call-main callsign-confusion' : 'call-main';
+    const callsignClass = hasCallsignCollision
+      ? 'call-main callsign-confusion callsign-collision'
+      : hasCallsignConfusion ? 'call-main callsign-confusion' : 'call-main';
 
     // Check for WTC alert
     const hasWtcAlert = alerts.some(a => a.type === 'wtc_alert');
@@ -2813,19 +2888,19 @@ function openNewFlightModal(flightType = "DEP") {
             </div>
           </div>
           <div class="modal-field" data-timing-group="planned">
-            <label class="modal-label">${flightType === "OVR" ? "ECT" : "ETD"}</label>
+            <label class="modal-label">${flightType === "OVR" ? "EOFT" : "ETD"}</label>
             <input id="newDepPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
           <div class="modal-field" data-timing-group="planned">
-            <label class="modal-label">ETA</label>
+            <label class="modal-label">${flightType === "OVR" ? "ELFT" : "ETA"}</label>
             <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
           </div>
           <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">${flightType === "OVR" ? "ACT" : "ATD"}</label>
+            <label class="modal-label">${flightType === "OVR" ? "AOFT" : "ATD"}</label>
             <input id="newDepActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
           <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">ATA</label>
+            <label class="modal-label">${flightType === "OVR" ? "ALFT" : "ATA"}</label>
             <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
           </div>
         </div>
@@ -4426,10 +4501,10 @@ function openEditMovementModal(m) {
           ${renderTimesGrid({
             etdId: "editDepPlanned", etaId: "editArrPlanned",
             atdId: "editDepActual",  ataId: "editArrActual",
-            etdLabel: flightType === "OVR" ? "ECT" : "ETD",
-            etaLabel: "ETA",
-            atdLabel: flightType === "OVR" ? "ACT" : "ATD",
-            ataLabel: "ATA",
+            etdLabel: flightType === "OVR" ? "EOFT" : "ETD",
+            etaLabel: flightType === "OVR" ? "ELFT" : "ETA",
+            atdLabel: flightType === "OVR" ? "AOFT" : "ATD",
+            ataLabel: flightType === "OVR" ? "ALFT" : "ATA",
             etdVal: m.depPlanned || "", etaVal: m.arrPlanned || "",
             atdVal: m.depActual  || "", ataVal: m.arrActual  || "",
             etaDisabled: flightType === "OVR",
@@ -5127,6 +5202,12 @@ function openDuplicateMovementModal(m) {
         ${renderTimesGrid({
           etdId: "dupDepPlanned", etaId: "dupArrPlanned",
           atdId: "dupDepActual",  ataId: "dupArrActual",
+          etdLabel: flightType === "OVR" ? "EOFT" : "ETD",
+          etaLabel: flightType === "OVR" ? "ELFT" : "ETA",
+          atdLabel: flightType === "OVR" ? "AOFT" : "ATD",
+          ataLabel: flightType === "OVR" ? "ALFT" : "ATA",
+          etaDisabled: flightType === "OVR",
+          ataDisabled: flightType === "OVR",
           etdVal: newETD, etaVal: newETA
         })}
       </div>
@@ -6025,6 +6106,10 @@ function getTimelineConfig() {
 function getDefaultFlightDuration(flightType) {
   const cfg = getConfig();
   const ft = (flightType || '').toUpperCase();
+  // Global override (DEP/ARR only): if configured, use it instead of per-type defaults
+  if (cfg.flightDurationMinutes && (ft === 'DEP' || ft === 'ARR')) {
+    return cfg.flightDurationMinutes;
+  }
   switch (ft) {
     case 'LOC': return cfg.locFlightDurationMinutes || 40;
     case 'DEP': return cfg.depFlightDurationMinutes || 60;
