@@ -692,6 +692,7 @@ function initAdminPanelHandlers() {
   const configTimezoneOffset = document.getElementById("configTimezoneOffset");
   const configHideLocalIfSame = document.getElementById("configHideLocalIfSame");
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
+  const configNewFormUtcTogglePolicy = document.getElementById("configNewFormUtcTogglePolicy");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
   // Auto-activation settings per flight type
   const configAutoActivateDepEnabled = document.getElementById("configAutoActivateDepEnabled");
@@ -734,7 +735,8 @@ function initAdminPanelHandlers() {
     'configAutoActivateLocMinutes', 'configAutoActivateOvrMinutes',
     'configWtcSystem', 'configWtcThreshold',
     'configTimelineStartHour', 'configTimelineEndHour',
-    'configDepToArrOffset', 'configArrToDepOffset'
+    'configDepToArrOffset', 'configArrToDepOffset',
+    'configNewFormUtcTogglePolicy'
   ];
 
   // Helper to populate WTC threshold options based on system
@@ -802,6 +804,7 @@ function initAdminPanelHandlers() {
   if (configTimezoneOffset) configTimezoneOffset.value = currentConfig.timezoneOffsetHours;
   if (configHideLocalIfSame) configHideLocalIfSame.checked = currentConfig.hideLocalTimeInBannerIfSame || false;
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
+  if (configNewFormUtcTogglePolicy) configNewFormUtcTogglePolicy.value = currentConfig.newFormUtcLocalTogglePolicy || "auto";
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
   // Auto-activation settings per flight type
   if (configAutoActivateDepEnabled) configAutoActivateDepEnabled.checked = currentConfig.autoActivateDepEnabled || false;
@@ -926,6 +929,7 @@ function initAdminPanelHandlers() {
     const ovrDuration = parseInt(configOvrDuration?.value || "5", 10);
     const ovrAutoActivate = parseInt(configOvrAutoActivate?.value || "30", 10);
     const timezoneOffset = parseInt(configTimezoneOffset?.value || "0", 10);
+    const newFormUtcTogglePolicy = configNewFormUtcTogglePolicy?.value || "auto";
     const hideLocalIfSame = configHideLocalIfSame?.checked || false;
     const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
     const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
@@ -979,6 +983,7 @@ function initAdminPanelHandlers() {
       ovrFlightDurationMinutes: ovrDuration,
       ovrAutoActivateMinutes: ovrAutoActivate,
       timezoneOffsetHours: timezoneOffset,
+      newFormUtcLocalTogglePolicy: newFormUtcTogglePolicy,
       hideLocalTimeInBannerIfSame: hideLocalIfSame,
       alwaysHideLocalTimeInBanner: alwaysHideLocal,
       enableAlertTooltips: enableAlertTooltips,

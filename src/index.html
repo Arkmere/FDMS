@@ -1028,6 +1028,22 @@
                       Show alert details when hovering over highlighted movement strips. All alerts are always visible in the expanded Details view.
                     </div>
                   </div>
+
+                  <div style="margin-bottom: 8px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                      UTC/Local Toggle in New Strip Forms
+                    </label>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                      <select id="configNewFormUtcTogglePolicy" style="padding: 6px; border: 1px solid #ccc; border-radius: 3px;">
+                        <option value="auto">Auto (show when offset &ne; UTC)</option>
+                        <option value="show">Always show</option>
+                        <option value="hide">Do not show</option>
+                      </select>
+                    </div>
+                    <div style="font-size: 11px; color: #666;">
+                      Controls visibility of the UTC/Local toggle in New DEP/ARR/OVR/LOC forms. <em>Auto</em> hides it when the configured offset is 0 (UTC). Does not affect Edit or Duplicate modals.
+                    </div>
+                  </div>
                 </div>
               </div>
 
