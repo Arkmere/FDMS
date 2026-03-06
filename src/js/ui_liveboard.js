@@ -3058,7 +3058,7 @@ function openNewFlightModal(flightType = "DEP") {
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
-    regInput.addEventListener("input", () => {
+    const applyNewRegAutofill = () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
         // Auto-fill aircraft type from VKB
@@ -3095,7 +3095,10 @@ function openNewFlightModal(flightType = "DEP") {
           typeInput.value = inferredType;
         }
       }
-    });
+    };
+    regInput.addEventListener("input", applyNewRegAutofill);
+    regInput.addEventListener("change", applyNewRegAutofill);
+    regInput.addEventListener("blur", applyNewRegAutofill);
   }
 
   // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
@@ -3954,7 +3957,7 @@ function openNewLocFlightModal() {
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
-    regInput.addEventListener("input", () => {
+    const applyLocRegAutofill = () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
         const vkbType = regData['TYPE'];
@@ -4006,7 +4009,10 @@ function openNewLocFlightModal() {
           maybeAutofillLocWtc();
         }
       }
-    });
+    };
+    regInput.addEventListener("input", applyLocRegAutofill);
+    regInput.addEventListener("change", applyLocRegAutofill);
+    regInput.addEventListener("blur", applyLocRegAutofill);
   }
 
   // When callsign code or flight number changes, lookup unit code and auto-fill registration if fixed callsign
@@ -4499,10 +4505,10 @@ function openEditMovementModal(m) {
             <label class="modal-label">Date of Flight (DOF)</label>
             <input id="editDOF" type="date" class="modal-input" value="${m.dof || getTodayDateString()}" />
           </div>
-          <div class="modal-field">
+          ${shouldShowNewFormTimeModeToggle() ? `<div class="modal-field">
             <label class="modal-label">Times shown in:</label>
             <button type="button" id="editTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
-          </div>
+          </div>` : ''}
           ${renderTimesGrid({
             etdId: "editDepPlanned", etaId: "editArrPlanned",
             atdId: "editDepActual",  ataId: "editArrActual",
@@ -4515,6 +4521,11 @@ function openEditMovementModal(m) {
             etaDisabled: flightType === "OVR",
             ataDisabled: flightType === "OVR"
           })}
+          <div class="modal-field">
+            <label class="modal-label">Duration</label>
+            <input id="editDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" value="${m.durationMinutes || ''}" />
+            <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
+          </div>
         </div>
       </section>
 
@@ -4650,7 +4661,7 @@ function openEditMovementModal(m) {
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
-    regInput.addEventListener("input", () => {
+    const applyRegAutofill = () => {
       const regData = lookupRegistration(regInput.value);
       if (regData) {
         // Auto-fill aircraft type from VKB
@@ -4685,7 +4696,10 @@ function openEditMovementModal(m) {
           typeInput.value = inferredType;
         }
       }
-    });
+    };
+    regInput.addEventListener("input", applyRegAutofill);
+    regInput.addEventListener("change", applyRegAutofill);
+    regInput.addEventListener("blur", applyRegAutofill);
   }
 
   // When callsign code or flight number changes, check for UAM pattern, lookup unit code, and auto-fill registration if fixed callsign
@@ -4806,9 +4820,11 @@ function openEditMovementModal(m) {
     });
   }
 
-  // Bind UTC/Local time mode toggle (persistent, single toggle)
-  bindTimeModeToggle("editTimeModeToggle",
-    ["editDepPlanned", "editArrPlanned", "editDepActual", "editArrActual"]);
+  // Bind UTC/Local time mode toggle (only when visible per policy)
+  if (shouldShowNewFormTimeModeToggle()) {
+    bindTimeModeToggle("editTimeModeToggle",
+      ["editDepPlanned", "editArrPlanned", "editDepActual", "editArrActual"]);
+  }
 
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
@@ -4935,6 +4951,7 @@ function openEditMovementModal(m) {
     }
 
     // Update movement
+    const editDurationRaw = parseInt(document.getElementById("editDuration")?.value || "", 10);
     const updates = {
       status: newStatus,
       callsignCode: callsign,
@@ -4954,6 +4971,7 @@ function openEditMovementModal(m) {
       arrPlanned: arrPlanned,
       arrActual: arrActual,
       dof: dof,
+      durationMinutes: Number.isFinite(editDurationRaw) && editDurationRaw > 0 ? editDurationRaw : null,
       tngCount: parseInt(tng, 10),
       pob: parseInt(pob, 10),
       osCount: editOsCountValue,
@@ -5070,6 +5088,7 @@ function openEditMovementModal(m) {
     const editRouteValue = document.getElementById("editAtcRoute")?.value || "";
     const editClearanceValue = document.getElementById("editAtcClearance")?.value || "";
 
+    const saveCpDurationRaw = parseInt(document.getElementById("editDuration")?.value || "", 10);
     const updates = {
       status: "COMPLETED",
       callsignCode: callsign,
@@ -5090,6 +5109,7 @@ function openEditMovementModal(m) {
       arrPlanned: arrPlanned,
       arrActual: arrActual,
       dof: dof,
+      durationMinutes: Number.isFinite(saveCpDurationRaw) && saveCpDurationRaw > 0 ? saveCpDurationRaw : null,
       tngCount: parseInt(tng, 10),
       pob: parseInt(pob, 10),
       osCount: editOsCountValue,
