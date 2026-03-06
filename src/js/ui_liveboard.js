@@ -2685,6 +2685,21 @@ function enrichMovementData(movement) {
   return movement;
 }
 
+/**
+ * Returns true if the UTC/Local time-mode toggle should be shown in new-strip forms.
+ * Controlled by Admin tri-state policy config.newFormUtcLocalTogglePolicy:
+ *   "show"  — always visible
+ *   "hide"  — never visible
+ *   "auto"  — visible only when timezoneOffsetHours !== 0 (i.e. local ≠ UTC)
+ */
+function shouldShowNewFormTimeModeToggle() {
+  const cfg = getConfig();
+  const policy = cfg.newFormUtcLocalTogglePolicy || "auto";
+  if (policy === "show") return true;
+  if (policy === "hide") return false;
+  return (cfg.timezoneOffsetHours || 0) !== 0;
+}
+
 function openNewFlightModal(flightType = "DEP") {
   openModal(`
     <div class="modal-header">
@@ -2787,10 +2802,10 @@ function openNewFlightModal(flightType = "DEP") {
           </div>
           <div class="modal-field">
             <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
-              <div>
+              ${shouldShowNewFormTimeModeToggle() ? `<div>
                 <label class="modal-label">Times shown in:</label>
                 <button type="button" id="newFlightTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
-              </div>
+              </div>` : ''}
               <div>
                 <label class="modal-label">Mode:</label>
                 <button type="button" id="newFlightTimingToggle" class="btn btn-ghost" data-timing-mode="planned" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">Planned</button>
@@ -3333,8 +3348,22 @@ function openNewFlightModal(flightType = "DEP") {
     const routeValue = document.getElementById("atcRoute")?.value || "";
     const clearanceValue = document.getElementById("atcClearance")?.value || "";
 
+    // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
+    if (_timingMode === "active") {
+      const _now = new Date();
+      const _nowUtc = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
+      if (selectedFlightType === "ARR") {
+        if (!arrActual) arrActual = _nowUtc;
+      } else {
+        // DEP and OVR: depActual is the primary actual time (ACT for OVR)
+        if (!depActual) depActual = _nowUtc;
+      }
+    }
+
     // Create movement - determine initial status based on whether time is past
-    const initialStatus = determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
+    const initialStatus = _timingMode === "active"
+      ? "ACTIVE"
+      : determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
     let movement = {
       status: initialStatus,
       callsignCode: callsign,
@@ -3642,10 +3671,10 @@ function openNewLocFlightModal() {
           </div>
           <div class="modal-field">
             <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
-              <div>
+              ${shouldShowNewFormTimeModeToggle() ? `<div>
                 <label class="modal-label">Times shown in:</label>
                 <button type="button" id="newLocTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
-              </div>
+              </div>` : ''}
               <div>
                 <label class="modal-label">Mode:</label>
                 <button type="button" id="newLocTimingToggle" class="btn btn-ghost" data-timing-mode="planned" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">Planned</button>
@@ -4068,7 +4097,25 @@ function openNewLocFlightModal() {
     const routeValue = document.getElementById("newLocRoute")?.value || "";
     const clearanceValue = document.getElementById("newLocClearance")?.value || "";
 
-    const initialStatus = determineInitialStatus("LOC", dof, depPlanned, arrPlanned);
+    // Active mode: force ACTIVE status and infer missing actual time(s) from system clock
+    if (_locTimingMode === "active") {
+      const _now = new Date();
+      const _nowUtc = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
+      if (!depActual) depActual = _nowUtc;
+      if (!arrActual) {
+        // Infer ATA = ATD + configured LOC flight duration (UTC arithmetic, wraps at midnight)
+        const _locDur = getConfig().locFlightDurationMinutes || 40;
+        const [_h, _m] = depActual.split(':').map(Number);
+        const _totMins = _h * 60 + _m + _locDur;
+        const _arrH = Math.floor(((_totMins % 1440) + 1440) % 1440 / 60);
+        const _arrM = ((_totMins % 1440) + 1440) % 1440 % 60;
+        arrActual = `${String(_arrH).padStart(2, '0')}:${String(_arrM).padStart(2, '0')}`;
+      }
+    }
+
+    const initialStatus = _locTimingMode === "active"
+      ? "ACTIVE"
+      : determineInitialStatus("LOC", dof, depPlanned, arrPlanned);
     let movement = {
       status: initialStatus,
       callsignCode: callsign,
