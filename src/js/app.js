@@ -684,6 +684,7 @@ function initAdminPanelHandlers() {
   // ── Configuration inputs ───────────────────────────────────────
   const configDepOffset = document.getElementById("configDepOffset");
   const configArrOffset = document.getElementById("configArrOffset");
+  const configFlightDuration = document.getElementById("configFlightDuration");
   const configLocOffset = document.getElementById("configLocOffset");
   const configLocDuration = document.getElementById("configLocDuration");
   const configOvrOffset = document.getElementById("configOvrOffset");
@@ -728,7 +729,7 @@ function initAdminPanelHandlers() {
     'configTimelineEnabled'
   ];
   const VALUE_IDS = [
-    'configDepOffset', 'configArrOffset', 'configLocOffset', 'configLocDuration',
+    'configDepOffset', 'configArrOffset', 'configFlightDuration', 'configLocOffset', 'configLocDuration',
     'configOvrOffset', 'configOvrDuration', 'configOvrAutoActivate',
     'configTimezoneOffset',
     'configAutoActivateDepMinutes', 'configAutoActivateArrMinutes',
@@ -796,6 +797,7 @@ function initAdminPanelHandlers() {
   const currentConfig = getConfig();
   if (configDepOffset) configDepOffset.value = currentConfig.depOffsetMinutes;
   if (configArrOffset) configArrOffset.value = currentConfig.arrOffsetMinutes;
+  if (configFlightDuration) configFlightDuration.value = currentConfig.flightDurationMinutes ?? '';
   if (configLocOffset) configLocOffset.value = currentConfig.locOffsetMinutes;
   if (configLocDuration) configLocDuration.value = currentConfig.locFlightDurationMinutes || 40;
   if (configOvrOffset) configOvrOffset.value = currentConfig.ovrOffsetMinutes;
@@ -923,6 +925,8 @@ function initAdminPanelHandlers() {
   function saveAdminConfig() {
     const depOffset = parseInt(configDepOffset?.value || "10", 10);
     const arrOffset = parseInt(configArrOffset?.value || "90", 10);
+    const flightDurationRaw = configFlightDuration?.value?.trim();
+    const flightDuration = flightDurationRaw ? parseInt(flightDurationRaw, 10) : null;
     const locOffset = parseInt(configLocOffset?.value || "10", 10);
     const locDuration = parseInt(configLocDuration?.value || "40", 10);
     const ovrOffset = parseInt(configOvrOffset?.value || "0", 10);
@@ -960,6 +964,7 @@ function initAdminPanelHandlers() {
     // Validate all offsets
     if (isNaN(depOffset) || depOffset < 0 || depOffset > 180 ||
         isNaN(arrOffset) || arrOffset < 0 || arrOffset > 180 ||
+        (flightDuration !== null && (isNaN(flightDuration) || flightDuration < 1 || flightDuration > 720)) ||
         isNaN(locOffset) || locOffset < 0 || locOffset > 180 ||
         isNaN(locDuration) || locDuration < 5 || locDuration > 180 ||
         isNaN(ovrOffset) || ovrOffset < 0 || ovrOffset > 180 ||
@@ -977,6 +982,7 @@ function initAdminPanelHandlers() {
     updateConfig({
       depOffsetMinutes: depOffset,
       arrOffsetMinutes: arrOffset,
+      flightDurationMinutes: flightDuration,
       locOffsetMinutes: locOffset,
       locFlightDurationMinutes: locDuration,
       ovrOffsetMinutes: ovrOffset,

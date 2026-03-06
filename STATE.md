@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-06 (Europe/London) — Sprint: Active-Save implies ACTIVE + New-form UTC/Local toggle policy
+Last updated: 2026-03-06 (Europe/London) — Sprint: OVR timing labels / Flight Duration override / Abbrev two-level alerting
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -1334,6 +1334,74 @@ All input IDs unchanged.
 - [ ] Restore invalid JSON: confirm button disabled; red error banner shown
 - [ ] Restore unrecognized structure (e.g. `{}`): confirm button disabled; "Unrecognized file structure" red banner shown
 - [ ] Zero-movement backup: amber "contains 0 movements" warning; confirm still enabled
+
+---
+
+### 4.18 Sprint: OVR timing labels / Flight Duration override / Abbrev two-level alerting
+
+**Base:** `main` (post Active-Save + UTC toggle)
+**Branch:** `claude/timings-ovr-labels-offsets-duration-abbrev-alert`
+
+#### A — OVR timing label rename (`src/js/ui_liveboard.js`)
+
+- **New Flight modal** (OVR only): `ECT` → `EOFT`, `ACT` → `AOFT`, `ETA` (disabled) → `ELFT`, `ATA` (disabled) → `ALFT`.
+- **Edit modal** (`openEditMovementModal`): `etdLabel`/`atdLabel`/`etaLabel`/`ataLabel` now conditional on `flightType === "OVR"` with same mapping.
+- **Duplicate modal** (`openDuplicateMovementModal`): `renderTimesGrid` call updated with OVR-conditional labels and `etaDisabled`/`ataDisabled` flags.
+- No field mapping or storage changes. Label-text only.
+- No other flight types (DEP/ARR/LOC) affected.
+
+#### B — Flight Duration admin field + active-strip actual-time guard (`src/js/datamodel.js`, `src/index.html`, `src/js/app.js`, `src/js/ui_liveboard.js`)
+
+- **`defaultConfig`**: added `flightDurationMinutes: null` (optional global DEP/ARR timeline projection override).
+- **Admin → Flight Offsets**: new `configFlightDuration` number input (blank = use per-type defaults; set = override DEP+ARR timeline projection).
+- **`app.js`**: element binding + `VALUE_IDS` tracking + load/save wired; blank input saves `null`, set saves integer.
+- **`getDefaultFlightDuration()`**: if `cfg.flightDurationMinutes` is set, returns it for DEP and ARR; LOC and OVR unaffected.
+- **Strip display (ACTIVE guard)**: for `ACTIVE` strips, `depDisplay`/`arrDisplay` now only show confirmed actual times (`getATD`/`getATA`/`getACT`). If no actual is recorded, displays `"-"` rather than the planned/offset-derived value. PLANNED strips retain the existing `ATD || ETD` / `ATA || ETA` fallback.
+
+#### C — Abbrev two-level alerting (`src/js/ui_liveboard.js`, `src/css/vectair.css`)
+
+**New types:**
+- `callsign_collision_reg` (`severity: 'critical'`): ≥2 ACTIVE movements sharing registration abbreviation key — "Abbreviated callsign collision".
+- `callsign_collision_ua` (`severity: 'critical'`): same for UAS abbreviation pattern.
+
+**Existing types updated:**
+- `callsign_confusion_reg` (`severity: 'warning'`): emitted only when RED condition is NOT met and ≥2 movements with overlapping predicted ACTIVE windows share an abbreviation key — "Potential abbreviated callsign overlap".
+- `callsign_confusion_ua`: same logic for UAS.
+- `callsign_confusion_contraction`: unchanged; single-strip VKB guardrail.
+
+**Window computation** (`getMovementWindow` helper in `generateMovementAlerts`):
+- `startPotential`: `depActual` → `depPlanned` → null.
+- `endPotential`: `arrActual` → `arrPlanned` → `start + getDefaultFlightDuration(ft)`.
+- Overnight wrap handled.
+
+**Strip callsign class**: three-way — `callsign-collision` (RED, new) → `callsign-confusion` (YELLOW, existing) → none.
+
+**CSS**: `callsign-confusion` underline colour changed from red to amber (`#f57c00`) to distinguish from the new red collision indicator; new `.callsign-collision` rule (thicker red underline + subtle red background).
+
+**History filter**: `callsign_collision_reg` and `callsign_collision_ua` included in `isCallsignAlert` guard.
+
+**Single-strip safety**: RED requires `m.status === 'ACTIVE' && activeConflicts.length > 0`; a single strip can never trigger RED.
+
+#### Invariants maintained
+- Canonical time storage untouched (`depPlanned`/`depActual`/`arrPlanned`/`arrActual` as UTC HH:MM).
+- No actual fields computed into from estimates.
+- Counter/totals, booking sync, WTC, modal lifecycle, inline-edit, formation logic: untouched.
+
+#### Manual smoke checklist
+- [ ] OVR New modal → Planned section: labels show `EOFT` (dep) and `ELFT` (arr, disabled)
+- [ ] OVR New modal → Active section: labels show `AOFT` (dep) and `ALFT` (arr, disabled)
+- [ ] OVR Edit modal: same four labels as above; DEP/ARR/LOC unaffected (still ETD/ETA/ATD/ATA)
+- [ ] OVR Duplicate modal: same four labels; arrival fields disabled
+- [ ] Admin → Flight Offsets → "Flight Duration" field present; blank by default
+- [ ] Flight Duration blank: timeline bar width uses per-type default (60 min DEP/ARR)
+- [ ] Flight Duration set to 90: DEP and ARR timeline bars extend to start+90 min; LOC/OVR unaffected
+- [ ] ACTIVE strip with no ATD/ATA recorded: time column shows `- / -` (not planned time)
+- [ ] PLANNED strip: time column still shows planned times as before
+- [ ] Single ACTIVE OVR strip: no collision alert
+- [ ] Two strips with same reg abbrev, both ACTIVE → red `callsign-collision` highlight, "Abbreviated callsign collision" in Details
+- [ ] Two strips with same reg abbrev, one ACTIVE + one PLANNED with overlapping windows → yellow `callsign-confusion` highlight, "Potential abbreviated callsign overlap" in Details
+- [ ] When PLANNED becomes ACTIVE (collision condition): alert upgrades from yellow to red
+- [ ] When one of two conflicting ACTIVE strips is completed: red alert clears
 
 ---
 
