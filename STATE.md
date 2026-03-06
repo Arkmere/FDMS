@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-04 (Europe/London) — Sprint: New Movement Forms Planned/Active Toggle
+Last updated: 2026-03-06 (Europe/London) — Sprint: Active-Save implies ACTIVE + New-form UTC/Local toggle policy
 
 This file is the shared source of truth for the Manager–Worker workflow:
 - **Manager (PM)**: User (coordination, priorities, releases)
@@ -86,6 +86,76 @@ A lightweight, **standalone desktop application** ("FDMS Lite") for local ATC/op
 ---
 
 ## 2) Implementation Status
+
+### 2.0 Sprint — Active-Save implies ACTIVE + New-form UTC/Local toggle policy (2026-03-06)
+
+**Branch:** `claude/active-save-implies-active-and-newform-utc-toggle-policy`
+
+**Summary (A): Active mode + Save → ACTIVE + infer now**
+
+When the Planned/Active toggle is in **Active** mode and the user presses **Save** in a New strip form:
+- The resulting movement is immediately **ACTIVE** (previously it could be PLANNED if times were in the future).
+- If the associated actual time field is blank at save time, it is populated from the system UTC clock:
+  - DEP: `depActual = nowUtc` (ATD)
+  - ARR: `arrActual = nowUtc` (ATA)
+  - OVR: `depActual = nowUtc` (ACT — same field the app uses for OVR crossing time)
+  - LOC: `depActual = nowUtc`; `arrActual = depActual + locFlightDurationMinutes` (wraps at midnight)
+- If the user has already entered an actual time it is kept as-is; status is still forced ACTIVE.
+- Planned mode behaviour and Save & Complete behaviour are unchanged.
+
+**Changes delivered (A):**
+- `src/js/ui_liveboard.js` — `js-save-flight` handler: active-mode block infers `depActual`/`arrActual` using `new Date().getUTCHours/Minutes()` then forces `status: "ACTIVE"` bypassing `determineInitialStatus()`.
+- `src/js/ui_liveboard.js` — `js-save-loc` handler: same pattern; LOC additionally infers `arrActual = depActual + cfg.locFlightDurationMinutes` if blank.
+
+**Summary (B): Admin tri-state UTC/Local toggle policy for New-strip forms**
+
+New Admin setting under **Timezone & Display**:
+- **Label:** "UTC/Local Toggle in New Strip Forms"
+- **Options:** Auto (default) · Always show · Do not show
+- **Auto rule:** show the toggle only when `timezoneOffsetHours !== 0` (i.e. local ≠ UTC).
+- Applies to New DEP/ARR/OVR and New LOC forms only. Edit/Duplicate modals are unaffected.
+- Participates in the existing Admin dirty-state Save/Discard workflow.
+- Default: `"auto"` for new users/config resets.
+
+**Changes delivered (B):**
+- `src/js/datamodel.js` — added `newFormUtcLocalTogglePolicy: "auto"` to `defaultConfig`.
+- `src/index.html` — new `<select id="configNewFormUtcTogglePolicy">` in the Timezone & Display admin panel.
+- `src/js/app.js` — element reference, `VALUE_IDS` dirty-tracking entry, config load, `saveAdminConfig` read + `updateConfig` field.
+- `src/js/ui_liveboard.js` — `shouldShowNewFormTimeModeToggle()` helper; UTC/Local toggle button in both new modals conditionally rendered based on policy + current offset.
+
+**Files changed:**
+- `src/js/ui_liveboard.js`
+- `src/js/datamodel.js`
+- `src/js/app.js`
+- `src/index.html`
+
+**Manual verification checklist (Stuart):**
+
+*Part A — Active-Save now inference:*
+- [ ] New DEP → Active mode → Save (ATD blank) → strip appears ACTIVE, `depActual` = UTC "now". Check Edit modal to confirm stored UTC.
+- [ ] New ARR → Active mode → Save (ATA blank) → strip ACTIVE, `arrActual` = UTC now.
+- [ ] New OVR → Active mode → Save (ACT blank) → strip ACTIVE, `depActual` = UTC now (ACT field).
+- [ ] New LOC → Active mode → Save (ATD/ATA blank) → strip ACTIVE, `depActual` = now, `arrActual` = now + LOC duration (default 40 min or configured value).
+- [ ] New LOC → Active mode → enter ATD only → Save → strip ACTIVE, `depActual` kept, `arrActual` inferred.
+- [ ] Any type → Active mode → enter actual time before Save → strip ACTIVE, entered time preserved.
+- [ ] Any type → Active mode → Local mode enabled → Save → reopen in Edit/UTC mode → stored values are correct UTC strings.
+- [ ] Planned mode → Save → no change in existing behaviour (status determined by time comparison, no actual-time injection).
+- [ ] Save & Complete behaviour unchanged (still creates COMPLETED strip).
+- [ ] Edit/Duplicate modals unaffected.
+
+*Part B — UTC/Local toggle policy:*
+- [ ] Admin → Timezone & Display → new "UTC/Local Toggle in New Strip Forms" select visible with Auto/Always show/Do not show.
+- [ ] Select is dirty-tracked (change triggers Save/Discard buttons).
+- [ ] Setting persists across page reload.
+- [ ] offset = 0 + policy = Auto → UTC/Local toggle NOT shown in New DEP/ARR/OVR/LOC forms.
+- [ ] offset = 0 + policy = Show → toggle IS shown.
+- [ ] offset = 0 + policy = Hide → toggle NOT shown.
+- [ ] offset = 1 (UTC+1) + policy = Auto → toggle IS shown.
+- [ ] offset = 1 + policy = Show → toggle IS shown.
+- [ ] offset = 1 + policy = Hide → toggle NOT shown.
+- [ ] When toggle is shown, UTC/Local conversion still works correctly.
+- [ ] Edit and Duplicate modals still always show the UTC/Local toggle (unaffected by this policy).
+- [ ] No console errors.
 
 ### 2.0 Sprint — New Movement Forms Planned/Active Toggle (2026-03-04)
 
