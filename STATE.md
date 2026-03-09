@@ -1523,3 +1523,45 @@ If a Claude summary conflicts with repository contents, the repo (zip/diff) wins
 - [ ] Type registration that isn't in VKB → `inferTypeFromReg` fallback still applies
 
 ---
+
+### 4.21 Sprint: Normalize Times grid layout + tab order across all modals/types (DEP/ARR/LOC/OVR)
+
+**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit c1f7486)
+**Branch:** `claude/normalize-times-grid-all-modals-all-types`
+
+#### Changes
+
+**`renderTimesGrid()` refactored** — now outputs 6 `modal-field` cells for a `modal-section-grid-3` wrapper:
+- Row 1: ETD/EOFT | Duration | ETA/ELFT
+- Row 2: ATD/AOFT | spacer   | ATA/ALFT
+- Adds `durationId` (required) and `durationVal` (optional) parameters.
+
+**All modals normalized to the locked layout:**
+
+Row 0: `modal-section-grid` (2-col) — DOF left | UTC/Local toggle right (policy-gated)
+Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA / ATD|spacer|ATA
+
+- **New DEP/ARR/OVR** and **New LOC**: planned/actual toggle fields use explicit `grid-column:1/3;grid-row:1` so Duration (col2/row1) stays stable when groups are toggled.
+- **Edit modal**: Duration cell moves into `renderTimesGrid()`; standalone Duration div removed.
+- **Duplicate modal**: DOF/toggle pair moved into 2-col row; toggle policy-gated; `dupDuration` field added via `renderTimesGrid()`; saved as `durationMinutes` in save handler; `bindTimeModeToggle` guarded.
+
+#### Invariants maintained
+- Canonical UTC HH:MM time storage untouched.
+- `durationMinutes` is never written to actual time fields.
+- Planned/actual toggle JS handlers and `data-timing-group` logic unchanged.
+- Active-strip actual guard, alert system, counters, booking sync, WTC: all untouched.
+
+#### Manual smoke checklist
+- [ ] New DEP: Times layout DOF/toggle row + ETD|Duration|ETA row
+- [ ] New DEP Actual mode: ATD|Duration|ATA; Duration stays in middle
+- [ ] New ARR: same layout as DEP
+- [ ] New OVR: EOFT|Duration|ELFT / AOFT|spacer|ALFT; ELFT/ALFT disabled
+- [ ] New LOC: ETD|Duration|ETA / ATD|spacer|ATA
+- [ ] Edit DEP: ETD|Duration|ETA / ATD|spacer|ATA; Duration pre-filled if set
+- [ ] Edit OVR: EOFT|Duration|ELFT / AOFT|spacer|ALFT; ELFT/ALFT disabled
+- [ ] Duplicate: DOF+toggle row, ETD|Duration|ETA / ATD|spacer|ATA; toggle hidden when policy=hide
+- [ ] Tab order (Edit DEP): DOF → ETD → Duration → ETA → ATD → ATA
+- [ ] Tab order (New DEP planned): DOF → ETD → Duration → ETA
+- [ ] No console errors on any modal open
+
+---

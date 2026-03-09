@@ -919,9 +919,10 @@ function addMinutesToTime(time, minutesToAdd) {
  *   etaDisabled, ataDisabled — boolean; disables the input (OVR arrival fields)
  * @returns {string} HTML string
  */
-function renderTimesGrid({ etdId, etaId, atdId, ataId,
+function renderTimesGrid({ etdId, etaId, atdId, ataId, durationId,
     etdLabel = "ETD", etaLabel = "ETA", atdLabel = "ATD", ataLabel = "ATA",
     etdVal = "", etaVal = "", atdVal = "", ataVal = "",
+    durationVal = "",
     etaDisabled = false, ataDisabled = false }) {
 
   const mode = (getConfig().timeInputMode || "UTC").toUpperCase();
@@ -933,11 +934,20 @@ function renderTimesGrid({ etdId, etaId, atdId, ataId,
 
   const etaDis = etaDisabled ? " disabled" : "";
   const ataDis = ataDisabled ? " disabled" : "";
+  const durVal = (durationVal != null && durationVal !== "") ? escapeHtml(String(durationVal)) : "";
 
+  // 6 cells for a modal-section-grid-3 wrapper (3 cols):
+  // Row 1: ETD | Duration | ETA
+  // Row 2: ATD | spacer   | ATA
   return `
     <div class="modal-field">
       <label class="modal-label">${escapeHtml(etdLabel)}</label>
       <input id="${etdId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(etdVal))}" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Duration</label>
+      <input id="${durationId}" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" value="${durVal}" />
+      <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
     </div>
     <div class="modal-field">
       <label class="modal-label">${escapeHtml(etaLabel)}</label>
@@ -947,6 +957,7 @@ function renderTimesGrid({ etdId, etaId, atdId, ataId,
       <label class="modal-label">${escapeHtml(atdLabel)}</label>
       <input id="${atdId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(atdVal))}" />
     </div>
+    <div class="modal-field"></div>
     <div class="modal-field">
       <label class="modal-label">${escapeHtml(ataLabel)}</label>
       <input id="${ataId}" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="${escapeHtml(toDisplay(ataVal))}"${ataDis} />
@@ -2862,6 +2873,7 @@ function openNewFlightModal(flightType = "DEP") {
       <!-- Times Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Times</h3>
+        <!-- Row 0: DOF + mode controls -->
         <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Date of Flight</label>
@@ -2879,26 +2891,30 @@ function openNewFlightModal(flightType = "DEP") {
               </div>
             </div>
           </div>
-          <div class="modal-field" data-timing-group="planned">
+        </div>
+        <!-- Rows 1–2: ETD|Duration|ETA / ATD|spacer|ATA
+             Explicit grid-column/row keeps Duration stable when planned/actual toggle fires. -->
+        <div class="modal-section-grid-3 modal-subgrid-gap">
+          <div class="modal-field" data-timing-group="planned" style="grid-column:1;grid-row:1">
             <label class="modal-label">${flightType === "OVR" ? "EOFT" : "ETD"}</label>
             <input id="newDepPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
-          <div class="modal-field" data-timing-group="planned">
-            <label class="modal-label">${flightType === "OVR" ? "ELFT" : "ETA"}</label>
-            <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
-          </div>
-          <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">${flightType === "OVR" ? "AOFT" : "ATD"}</label>
-            <input id="newDepActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
-          </div>
-          <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">${flightType === "OVR" ? "ALFT" : "ATA"}</label>
-            <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
-          </div>
-          <div class="modal-field">
+          <div class="modal-field" style="grid-column:2;grid-row:1">
             <label class="modal-label">Duration</label>
             <input id="newDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" />
             <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
+          </div>
+          <div class="modal-field" data-timing-group="planned" style="grid-column:3;grid-row:1">
+            <label class="modal-label">${flightType === "OVR" ? "ELFT" : "ETA"}</label>
+            <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:1;grid-row:1">
+            <label class="modal-label">${flightType === "OVR" ? "AOFT" : "ATD"}</label>
+            <input id="newDepActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:3;grid-row:1">
+            <label class="modal-label">${flightType === "OVR" ? "ALFT" : "ATA"}</label>
+            <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
           </div>
         </div>
       </section>
@@ -3741,6 +3757,7 @@ function openNewLocFlightModal() {
       <!-- TIMES Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Times</h3>
+        <!-- Row 0: DOF + mode controls -->
         <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Date of Flight</label>
@@ -3758,26 +3775,30 @@ function openNewLocFlightModal() {
               </div>
             </div>
           </div>
-          <div class="modal-field" data-timing-group="planned">
+        </div>
+        <!-- Rows 1–2: ETD|Duration|ETA / ATD|spacer|ATA
+             Explicit grid-column/row keeps Duration stable when planned/actual toggle fires. -->
+        <div class="modal-section-grid-3 modal-subgrid-gap">
+          <div class="modal-field" data-timing-group="planned" style="grid-column:1;grid-row:1">
             <label class="modal-label">ETD</label>
             <input id="newLocStart" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
-          <div class="modal-field" data-timing-group="planned">
-            <label class="modal-label">ETA</label>
-            <input id="newLocEnd" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
-          </div>
-          <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">ATD</label>
-            <input id="newLocStartActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
-          </div>
-          <div class="modal-field" data-timing-group="actual" style="display: none;">
-            <label class="modal-label">ATA</label>
-            <input id="newLocEndActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
-          </div>
-          <div class="modal-field">
+          <div class="modal-field" style="grid-column:2;grid-row:1">
             <label class="modal-label">Duration</label>
             <input id="newLocDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" />
             <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
+          </div>
+          <div class="modal-field" data-timing-group="planned" style="grid-column:3;grid-row:1">
+            <label class="modal-label">ETA</label>
+            <input id="newLocEnd" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:1;grid-row:1">
+            <label class="modal-label">ATD</label>
+            <input id="newLocStartActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
+          </div>
+          <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:3;grid-row:1">
+            <label class="modal-label">ATA</label>
+            <input id="newLocEndActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
         </div>
       </section>
@@ -4500,6 +4521,7 @@ function openEditMovementModal(m) {
       <!-- Times Section -->
       <section class="modal-section">
         <h3 class="modal-section-title">Times</h3>
+        <!-- Row 0: DOF + UTC toggle (policy-gated) -->
         <div class="modal-section-grid">
           <div class="modal-field">
             <label class="modal-label">Date of Flight (DOF)</label>
@@ -4509,23 +4531,23 @@ function openEditMovementModal(m) {
             <label class="modal-label">Times shown in:</label>
             <button type="button" id="editTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
           </div>` : ''}
+        </div>
+        <!-- Rows 1–2: ETD|Duration|ETA / ATD|spacer|ATA -->
+        <div class="modal-section-grid-3 modal-subgrid-gap">
           ${renderTimesGrid({
             etdId: "editDepPlanned", etaId: "editArrPlanned",
             atdId: "editDepActual",  ataId: "editArrActual",
+            durationId: "editDuration",
             etdLabel: flightType === "OVR" ? "EOFT" : "ETD",
             etaLabel: flightType === "OVR" ? "ELFT" : "ETA",
             atdLabel: flightType === "OVR" ? "AOFT" : "ATD",
             ataLabel: flightType === "OVR" ? "ALFT" : "ATA",
             etdVal: m.depPlanned || "", etaVal: m.arrPlanned || "",
             atdVal: m.depActual  || "", ataVal: m.arrActual  || "",
+            durationVal: m.durationMinutes || "",
             etaDisabled: flightType === "OVR",
             ataDisabled: flightType === "OVR"
           })}
-          <div class="modal-field">
-            <label class="modal-label">Duration</label>
-            <input id="editDuration" class="modal-input" type="number" min="1" max="720" placeholder="default" style="width: 80px;" value="${m.durationMinutes || ''}" />
-            <span style="font-size: 11px; color: #888; display: block; margin-top: 2px;">min (timeline only)</span>
-          </div>
         </div>
       </section>
 
@@ -5214,26 +5236,31 @@ function openDuplicateMovementModal(m) {
         <label class="modal-label">Arrival AD</label>
         <input id="dupArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" />
       </div>
-      <div class="modal-field">
-        <label class="modal-label">Date of Flight (DOF)</label>
-        <input id="dupDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
-      </div>
+      <!-- Times: Row 0 DOF + UTC toggle (policy-gated) -->
       <div class="modal-section-grid" style="margin-top: 8px;">
         <div class="modal-field">
+          <label class="modal-label">Date of Flight (DOF)</label>
+          <input id="dupDOF" type="date" class="modal-input" value="${getTodayDateString()}" />
+        </div>
+        ${shouldShowNewFormTimeModeToggle() ? `<div class="modal-field">
           <label class="modal-label">Times shown in:</label>
           <button type="button" id="dupTimeModeToggle" class="btn btn-ghost" style="padding: 2px 10px; font-size: 12px; margin-top: 2px;">UTC</button>
-        </div>
-        <div class="modal-field"></div>
+        </div>` : ''}
+      </div>
+      <!-- Times: Rows 1–2: ETD|Duration|ETA / ATD|spacer|ATA -->
+      <div class="modal-section-grid-3 modal-subgrid-gap">
         ${renderTimesGrid({
           etdId: "dupDepPlanned", etaId: "dupArrPlanned",
           atdId: "dupDepActual",  ataId: "dupArrActual",
+          durationId: "dupDuration",
           etdLabel: flightType === "OVR" ? "EOFT" : "ETD",
           etaLabel: flightType === "OVR" ? "ELFT" : "ETA",
           atdLabel: flightType === "OVR" ? "AOFT" : "ATD",
           ataLabel: flightType === "OVR" ? "ALFT" : "ATA",
           etaDisabled: flightType === "OVR",
           ataDisabled: flightType === "OVR",
-          etdVal: newETD, etaVal: newETA
+          etdVal: newETD, etaVal: newETA,
+          durationVal: m.durationMinutes || ""
         })}
       </div>
       <div class="modal-field">
@@ -5267,9 +5294,11 @@ function openDuplicateMovementModal(m) {
     });
   }
 
-  // Bind UTC/Local time mode toggle (persistent, single toggle)
-  bindTimeModeToggle("dupTimeModeToggle",
-    ["dupDepPlanned", "dupArrPlanned", "dupDepActual", "dupArrActual"]);
+  // Bind UTC/Local time mode toggle (only when visible per policy)
+  if (shouldShowNewFormTimeModeToggle()) {
+    bindTimeModeToggle("dupTimeModeToggle",
+      ["dupDepPlanned", "dupArrPlanned", "dupDepActual", "dupArrActual"]);
+  }
 
   // Bind save handler with validation
   document.querySelector(".js-save-dup")?.addEventListener("click", () => {
@@ -5369,6 +5398,7 @@ function openDuplicateMovementModal(m) {
 
     // Create movement - determine initial status based on whether time is past
     const initialStatus = determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
+    const dupDurationRaw = parseInt(document.getElementById("dupDuration")?.value || "", 10);
     let movement = {
       status: initialStatus,
       callsignCode: callsign,
@@ -5388,6 +5418,7 @@ function openDuplicateMovementModal(m) {
       arrPlanned: arrPlanned,
       arrActual: arrActual,
       dof: dof,
+      durationMinutes: Number.isFinite(dupDurationRaw) && dupDurationRaw > 0 ? dupDurationRaw : null,
       rules: document.getElementById("dupRules")?.value || m.rules || "VFR",
       flightType: selectedFlightType,
       isLocal: (document.getElementById("dupFlightType")?.value || flightType) === "LOC",
