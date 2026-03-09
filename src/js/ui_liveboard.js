@@ -1751,17 +1751,20 @@ function generateMovementAlerts(m) {
     }
     if (startMin === null || !Number.isFinite(startMin)) return null;
 
-    const movDur = (mov.durationMinutes > 0) ? mov.durationMinutes : getDefaultFlightDuration(movFt);
+    // Duration override: if set, always use start + durationMinutes (ignores stored end times).
+    // If not set, use stored end times then fall back to admin per-type default.
     let endMin = null;
-    if (movFt === 'ARR' || movFt === 'LOC') {
+    if (mov.durationMinutes > 0) {
+      endMin = startMin + mov.durationMinutes;
+    } else if (movFt === 'ARR' || movFt === 'LOC') {
       if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
       else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + movDur;
+      else endMin = startMin + getDefaultFlightDuration(movFt);
     } else {
-      // DEP / OVR: raw arrActual/arrPlanned as end, else projection
+      // DEP / OVR
       if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
       else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + movDur;
+      else endMin = startMin + getDefaultFlightDuration(movFt);
     }
     if (!Number.isFinite(endMin)) return null;
     // Handle overnight wrap
@@ -6262,20 +6265,19 @@ function renderTimelineTracks() {
     if (!startTimeStr) return;
 
     let startMinutes = timeToMinutes(startTimeStr);
-    let endMinutes = timeToMinutes(endTimeStr);
+    if (!Number.isFinite(startMinutes)) return;
 
-    if (!Number.isFinite(startMinutes)) {
-      return;
-    }
-
-    if (!Number.isFinite(startMinutes)) {
-      return;
-    }
-
-    // Fall back to per-strip duration or admin default when no end time is stored
-    if (!Number.isFinite(endMinutes)) {
-      const ft = (m.flightType || '').toUpperCase();
-      endMinutes = startMinutes + ((m.durationMinutes > 0) ? m.durationMinutes : getDefaultFlightDuration(ft));
+    // Duration override: if set, always use start + durationMinutes (ignores stored end times).
+    // If not set, use stored end time then fall back to admin per-type default.
+    let endMinutes;
+    if (m.durationMinutes > 0) {
+      endMinutes = startMinutes + m.durationMinutes;
+    } else {
+      endMinutes = timeToMinutes(endTimeStr);
+      if (!Number.isFinite(endMinutes)) {
+        const ft = (m.flightType || '').toUpperCase();
+        endMinutes = startMinutes + getDefaultFlightDuration(ft);
+      }
     }
 
     // Handle overnight flights (end time < start time)
