@@ -1565,3 +1565,35 @@ Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA
 - [ ] No console errors on any modal open
 
 ---
+
+### 4.22 Sprint: Duration as true override for projection (not fallback)
+
+**Branch:** `claude/duration-override-projection-not-fallback`
+
+#### Problem
+`movement.durationMinutes` was only used when no ETA/ATA or arrPlanned/arrActual existed. When end-time fields were populated, they took precedence and Duration was silently ignored.
+
+#### Fix — two targeted changes in `ui_liveboard.js`
+
+**`getMovementWindow()` (~line 1754)** — overlap/alert window computation:
+- Old: `movDur` computed from `durationMinutes || default`; used only in `else` branch when no arrActual/arrPlanned.
+- New: if `mov.durationMinutes > 0`, set `endMin = startMin + mov.durationMinutes` immediately (before arrActual/arrPlanned check). Fall through to stored end times and then admin default only when `durationMinutes` is absent.
+
+**`renderTimelineTracks()` (~line 6268)** — timeline bar length:
+- Old: `endMinutes = timeToMinutes(endTimeStr)`; `durationMinutes` only applied if `endMinutes` was NaN.
+- New: if `m.durationMinutes > 0`, set `endMinutes = startMinutes + m.durationMinutes` before consulting `getMovementEndTime()`. Fallback chain (stored end time → admin default) runs only when `durationMinutes` is absent.
+- Also removed duplicate `!Number.isFinite(startMinutes)` guard.
+
+#### Invariants maintained
+- Canonical UTC HH:MM time storage untouched; Duration never writes ETA/ATA.
+- `getMovementStartTime()`, `getMovementEndTime()`, counter/totals, activation rules, booking sync, WTC: all untouched.
+
+#### Manual smoke checklist
+- [ ] New LOC, ETD=12:31, ETA=13:11, Duration=90 → Times column shows 12:31/13:11; timeline bar spans 12:31–14:01
+- [ ] Clear Duration on above strip → timeline reverts to ETA-based length (12:31–13:11)
+- [ ] New DEP with ETA set and Duration=60 → timeline bar is exactly 60 min from ETD regardless of ETA value
+- [ ] Strip with no ETA and no Duration → timeline uses admin per-type default length
+- [ ] Overlap alert window respects Duration override (two LOC strips overlap iff Duration-extended windows intersect)
+- [ ] No console errors
+
+---
