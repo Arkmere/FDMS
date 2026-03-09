@@ -1479,3 +1479,47 @@ At end of work session, Claude must:
 If a Claude summary conflicts with repository contents, the repo (zip/diff) wins; `STATE.md` must be corrected accordingly.
 
 ---
+
+### 4.20 Sprint: Edit modal Duration field, UTC/Local toggle policy for Edit, registration autofill fix
+
+**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit d3ca0b9)
+**Branch:** `claude/edit-duration-toggle-policy-and-reg-autofill`
+
+#### 1) Duration (min) field in Edit modal
+
+- **`ui_liveboard.js`** `openEditMovementModal()` — Times section: added `<input id="editDuration">` (type=number, min=1, max=720, placeholder="default") after `renderTimesGrid()`, populated with `m.durationMinutes || ''`. Labelled "Duration / min (timeline only)".
+- **Save handler** (`js-save-edit`): reads `editDuration`, stores `durationMinutes` (null if blank or ≤0) in `updates` object passed to `updateMovement()`.
+- **"Save & Complete" handler** (`js-save-complete-edit`): same read/store pattern as Save handler.
+- `getMovementWindow()` and `renderTimelineTracks()` already respected `mov.durationMinutes` from sprint 2; no changes needed there.
+
+#### 2) UTC/Local toggle policy applied to Edit modal
+
+- **`ui_liveboard.js`** `openEditMovementModal()` — Times section: the always-visible "Times shown in:" toggle `<div>` is now guarded by `shouldShowNewFormTimeModeToggle()`, matching the New modal pattern.
+- **`bindTimeModeToggle()` call** for `editTimeModeToggle` is also guarded — only called when the toggle is rendered (prevents `getElementById` returning null on hidden elements).
+
+#### 3) Registration autofill fix — `change` + `blur` events, named handlers
+
+- **New DEP/ARR/OVR modal** (`openNewFlightModal`): autofill callback extracted to named function `applyNewRegAutofill`; `"change"` and `"blur"` listeners added alongside existing `"input"`.
+- **New LOC modal** (`openNewLocModal`): autofill callback extracted to `applyLocRegAutofill`; `"change"` and `"blur"` listeners added.
+- **Edit modal** (`openEditMovementModal`): autofill callback extracted to `applyRegAutofill`; `"change"` and `"blur"` listeners added.
+- Dataset readiness is handled inside `lookupRegistration()` via the `!vkbData.loaded` guard — no additional changes required.
+- No stale-async risk: all autofill paths are synchronous VKB lookups, not async.
+
+#### Invariants maintained
+- Canonical UTC HH:MM time storage untouched.
+- `durationMinutes` never written to actual time fields (depActual/arrActual).
+- Active-strip actual guard unchanged.
+- Counter/totals, booking sync, WTC, modal lifecycle, formations: untouched.
+- New/Duplicate modal Duration fields and their save handlers unchanged.
+
+#### Manual smoke checklist
+- [ ] Edit DEP/ARR/LOC/OVR strip → Times section: "Duration" field visible, pre-filled if `durationMinutes` set
+- [ ] Edit strip, set Duration=45, Save → timeline bar now extends 45 min from start time
+- [ ] Edit strip, clear Duration, Save → timeline uses admin per-type default again
+- [ ] Admin config `newFormUtcLocalTogglePolicy=hide` → "Times shown in:" toggle absent from Edit modal
+- [ ] Admin config `newFormUtcLocalTogglePolicy=show` → toggle visible in Edit modal
+- [ ] Type registration into Edit modal (partial or full), press Tab → aircraft type auto-fills
+- [ ] Type registration into Edit modal from dropdown selection (change event) → aircraft type auto-fills
+- [ ] Type registration that isn't in VKB → `inferTypeFromReg` fallback still applies
+
+---
