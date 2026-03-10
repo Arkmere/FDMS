@@ -294,6 +294,43 @@ These are not confirmed resolved unless explicitly audited against a fresh zip.
 - Reconciliation summary could be logged or displayed to user (currently silent)
 - Strip→booking sync could validate more fields (pob, remarks, etc.)
 
+### 2.3 Parked / Backlog (explicitly deferred items)
+
+These items are agreed concepts but are **not in current sprint scope**. They must not drift into active work unless explicitly promoted into a sprint ticket.
+
+#### A) Booking & comms
+
+1) Booking confirmation email + pilot briefing pack
+- Booking page should generate and send a confirmation email to the booker, including:
+  - cost breakdown
+  - confirmed itinerary
+  - pilot briefing pack (operating info + ATC/station notes)
+- Include a specific note: if arriving from / departing to outside the contiguous UK, a GAR is required and it is not managed by ATC (pilot/operator responsibility).
+
+#### B) Movement creation UX
+
+2) Duplicate → “Create from…” concept
+- Replace “Duplicate” with “Create from…”
+- Allow choosing target movement type: DEP / ARR / LOC / OVR
+- Creates a new strip of the selected type prefilled from the source strip (safe defaults; no stale timings).
+
+3) Cancelled sorties log + optional cancellation reason
+- When a strip is cancelled, automatically snapshot the strip (callsign/pilot, reg, type, dep/arr, times, EGOW fields, etc.) into a cancellation log.
+- Cancel confirmation dialog includes optional reason capture (taxonomy TBD: weather, serviceability, crew availability, etc.).
+- Cancellation records are an audit/report dataset. Movement stats must remain governed by existing CANCELLED exclusions (no contamination of runway totals).
+
+#### C) Formation flights backlog
+
+4) Formation flights implementation backlog
+- FORMATIONS.md is canonical.
+- Creation/editing/inheritance and per-element accounting items not yet implemented must remain tracked here until scheduled.
+
+#### D) Timezone ergonomics
+
+5) DST-aware “Auto” timezone offset (Europe/London)
+- Future enhancement: allow auto-switch between UTC and BST based on Europe/London (Woodvale default).
+- Currently deferred in favour of manual offset + existing toggle show/hide policy.
+
 ---
 
 ## 3) Technical Debt & Risks
