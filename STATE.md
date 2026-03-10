@@ -1597,3 +1597,28 @@ Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA
 - [ ] No console errors
 
 ---
+
+### 4.23 Sprint: Fix Duration override for projection (timeline bar + overlap window + tooltip)
+
+**Branch:** `claude/fix-duration-override-for-projection`
+
+#### Changes — `ui_liveboard.js`
+
+`durationMinutes > 0` is now checked first in both `getMovementWindow()` and `renderTimelineTracks()`:
+- `endMin / endMinutes = start + durationMinutes` before any arrActual/arrPlanned or `getMovementEndTime()` lookup.
+- Stored end-time fields and admin per-type default only consulted when `durationMinutes` is absent.
+
+**Tooltip fix (`renderTimelineTracks()`):** `bar.title` now uses `minutesToTime(endMinutes)` instead of raw `endTimeStr`; previously the tooltip showed stored ETA/ATA even when Duration was overriding the bar length.
+
+#### Invariants maintained
+- Canonical UTC HH:MM storage untouched; Duration never writes ETA/ATA.
+- Counter/totals, activation rules, booking sync, WTC, modal layouts: unchanged.
+
+#### Manual smoke checklist
+- [ ] New LOC, ETD=12:31, ETA=13:11, Duration=45 → Times column 12:31/13:11; timeline bar ends at 13:16
+- [ ] Hover tooltip shows "12:31 - 13:16" (not 13:11)
+- [ ] Edit strip, clear Duration → bar and tooltip revert to ETA-based end (13:11)
+- [ ] OVR strip with EOFT set and Duration=30 → bar is 30 min from EOFT
+- [ ] No console errors
+
+---

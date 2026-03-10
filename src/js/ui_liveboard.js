@@ -6329,7 +6329,7 @@ function renderTimelineTracks() {
     bar.className = `timeline-movement-bar ${ftClass} ${movementStatusClass}`;
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
-    bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${endTimeStr || '?'}\n${m.flightType || ''} (${m.status})`;
+    bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${minutesToTime(endMinutes)}\n${m.flightType || ''} (${m.status})`;
     // No text content - bars are thin visual indicators only
     bar.dataset.movementId = m.id;
 
