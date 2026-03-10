@@ -899,6 +899,81 @@ function addMinutesToTime(time, minutesToAdd) {
   return minutesToTime(mins + minutesToAdd);
 }
 
+/**
+ * Bind bidirectional sync between the planned-start, planned-end, and duration
+ * fields in a Times section.
+ *
+ * Rules (last-touched wins):
+ *   Duration edited  → end = start + durationMinutes  (writes into endEl)
+ *   End-time edited  → duration = end − start minutes (writes into durEl)
+ *   Start edited     → recomputes whichever side was last touched
+ *   Either field cleared → stops overriding the other; no-op on start change
+ *   endEl disabled   → only Duration→end direction is bound (e.g. OVR ELFT)
+ *
+ * Works in any display mode (UTC or local) because it operates on whatever
+ * values the inputs currently show — conversion to/from UTC happens in save.
+ */
+function bindPlannedTimesSync(startId, endId, durationId) {
+  const startEl = document.getElementById(startId);
+  const endEl   = document.getElementById(endId);
+  const durEl   = document.getElementById(durationId);
+  if (!startEl || !durEl) return;
+
+  // 'duration' | 'end' | null — which field the user last explicitly edited
+  let _lastTouched = null;
+
+  const applyDurationToEnd = () => {
+    if (!endEl) return;
+    const startMin = timeToMinutes(startEl.value);
+    const dur = parseInt(durEl.value, 10);
+    if (!Number.isFinite(startMin) || !(dur > 0)) return;
+    endEl.value = minutesToTime(startMin + dur);
+  };
+
+  const applyEndToDuration = () => {
+    if (!endEl) return;
+    const startMin = timeToMinutes(startEl.value);
+    const endMin   = timeToMinutes(endEl.value);
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return;
+    let diff = endMin - startMin;
+    if (diff <= 0) diff += 1440; // overnight wrap
+    if (diff > 0 && diff <= 1440) durEl.value = String(diff);
+  };
+
+  // Duration changed → update end-time
+  durEl.addEventListener('input', () => {
+    const dur = parseInt(durEl.value, 10);
+    if (!durEl.value.trim() || !(dur > 0)) {
+      _lastTouched = null; // cleared — stop overriding end until re-entered
+      return;
+    }
+    _lastTouched = 'duration';
+    applyDurationToEnd();
+  });
+
+  // End-time changed → update duration (skip for disabled fields, e.g. OVR ELFT)
+  if (endEl && !endEl.disabled) {
+    const onEndEdit = () => {
+      if (!endEl.value.trim()) {
+        if (_lastTouched === 'end') _lastTouched = null;
+        return;
+      }
+      _lastTouched = 'end';
+      applyEndToDuration();
+    };
+    endEl.addEventListener('input', onEndEdit);
+    endEl.addEventListener('blur',  onEndEdit);
+  }
+
+  // Start changed → recompute the last-touched counterpart
+  const onStartChange = () => {
+    if (_lastTouched === 'duration') applyDurationToEnd();
+    else if (_lastTouched === 'end') applyEndToDuration();
+  };
+  startEl.addEventListener('input', onStartChange);
+  startEl.addEventListener('blur',  onStartChange);
+}
+
 /* -----------------------------------------------------------------------
    Times grid helpers — shared across all create/edit/duplicate modals
 ----------------------------------------------------------------------- */
@@ -3279,6 +3354,9 @@ function openNewFlightModal(flightType = "DEP") {
   // Bind Planned/Active timing mode toggle (gates field visibility and Save & Complete)
   bindNewFormTimingToggle("newFlightTimingToggle", ".js-save-complete-flight");
 
+  // Bind bidirectional Duration ↔ planned-end sync
+  bindPlannedTimesSync("newDepPlanned", "newArrPlanned", "newDuration");
+
   // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
     // Get form values
@@ -4101,6 +4179,9 @@ function openNewLocFlightModal() {
   // Bind Planned/Active timing mode toggle (gates field visibility and Save & Complete)
   bindNewFormTimingToggle("newLocTimingToggle", ".js-save-complete-loc");
 
+  // Bind bidirectional Duration ↔ planned-end sync
+  bindPlannedTimesSync("newLocStart", "newLocEnd", "newLocDuration");
+
   // Bind save handler
   document.querySelector(".js-save-loc")?.addEventListener("click", () => {
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
@@ -4851,6 +4932,9 @@ function openEditMovementModal(m) {
       ["editDepPlanned", "editArrPlanned", "editDepActual", "editArrActual"]);
   }
 
+  // Bind bidirectional Duration ↔ planned-end sync
+  bindPlannedTimesSync("editDepPlanned", "editArrPlanned", "editDuration");
+
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
     // Get form values
@@ -5302,6 +5386,9 @@ function openDuplicateMovementModal(m) {
     bindTimeModeToggle("dupTimeModeToggle",
       ["dupDepPlanned", "dupArrPlanned", "dupDepActual", "dupArrActual"]);
   }
+
+  // Bind bidirectional Duration ↔ planned-end sync
+  bindPlannedTimesSync("dupDepPlanned", "dupArrPlanned", "dupDuration");
 
   // Bind save handler with validation
   document.querySelector(".js-save-dup")?.addEventListener("click", () => {
