@@ -144,6 +144,96 @@ function getToastIcon(type) {
 }
 
 /**
+ * Show a persistent integrity banner below the nav-bar when reconcileLinks()
+ * found issues (cleared/repaired/conflict counts > 0).
+ * Dismissed per-session only (returns on reload).
+ * @param {{ clearedMovementBookingId: number, clearedBookingLinkedStripId: number,
+ *           repairedBookingLinkedStripId: number, conflicts: number,
+ *           conflictList: Array }} summary
+ */
+function showReconcileBanner(summary) {
+  if (!summary) return;
+  const { clearedMovementBookingId, clearedBookingLinkedStripId,
+          repairedBookingLinkedStripId, conflicts, conflictList = [] } = summary;
+  const total = clearedMovementBookingId + clearedBookingLinkedStripId +
+                repairedBookingLinkedStripId + conflicts;
+  if (total === 0) return;
+
+  const hasConflicts = conflicts > 0;
+  const bannerType = hasConflicts ? 'warning' : 'info';
+
+  // Build conflict rows (max 10 shown)
+  const MAX_SHOWN = 10;
+  const shownConflicts = conflictList.slice(0, MAX_SHOWN);
+  const hiddenCount = conflictList.length - shownConflicts.length;
+
+  const conflictRows = shownConflicts.map(c => {
+    const csText = c.callsigns.map(cs => escapeHtml(cs)).join(', ');
+    return `<li>Booking <strong>${escapeHtml(String(c.bookingId))}</strong> — strips: ${csText}</li>`;
+  }).join('');
+  const moreRow = hiddenCount > 0
+    ? `<li class="reconcile-more">…and ${hiddenCount} more conflict${hiddenCount !== 1 ? 's' : ''}</li>`
+    : '';
+
+  const detailsHtml = `
+    <div class="reconcile-details" id="reconcileDetails" hidden>
+      <ul class="reconcile-counts">
+        ${clearedMovementBookingId > 0 ? `<li>Cleared strip→booking pointer (missing booking): <strong>${clearedMovementBookingId}</strong></li>` : ''}
+        ${clearedBookingLinkedStripId > 0 ? `<li>Cleared booking→strip pointer (missing or mismatched strip): <strong>${clearedBookingLinkedStripId}</strong></li>` : ''}
+        ${repairedBookingLinkedStripId > 0 ? `<li>Repaired booking→strip pointer: <strong>${repairedBookingLinkedStripId}</strong></li>` : ''}
+        ${conflicts > 0 ? `<li>Unresolved conflicts (multiple strips → same booking): <strong>${conflicts}</strong></li>` : ''}
+      </ul>
+      ${conflicts > 0 ? `<ul class="reconcile-conflict-list">${conflictRows}${moreRow}</ul>` : ''}
+    </div>`;
+
+  const banner = document.createElement('div');
+  banner.id = 'reconcileBanner';
+  banner.className = `reconcile-banner reconcile-banner-${bannerType}`;
+  banner.setAttribute('role', 'alert');
+  banner.innerHTML = `
+    <div class="reconcile-banner-main">
+      <span class="reconcile-banner-icon">${hasConflicts ? '⚠' : 'ℹ'}</span>
+      <span class="reconcile-banner-text">
+        <strong>Integrity:</strong> booking/strip reconciliation found ${total} issue${total !== 1 ? 's' : ''}.
+      </span>
+      <button class="reconcile-toggle-btn" aria-expanded="false" aria-controls="reconcileDetails">Details</button>
+      <button class="reconcile-dismiss-btn" aria-label="Dismiss">×</button>
+    </div>
+    ${detailsHtml}
+  `;
+
+  // Insert between nav-bar and main.page-body
+  const nav = document.querySelector('nav.nav-bar') || document.querySelector('.nav-bar');
+  const main = document.querySelector('main.page-body') || document.querySelector('.page-body');
+  if (main && main.parentNode) {
+    main.parentNode.insertBefore(banner, main);
+  } else if (document.body) {
+    document.body.appendChild(banner);
+  }
+
+  // Details toggle
+  const toggleBtn = banner.querySelector('.reconcile-toggle-btn');
+  const detailsEl = banner.querySelector('.reconcile-details');
+  toggleBtn.addEventListener('click', () => {
+    const expanded = detailsEl.hasAttribute('hidden') ? false : true;
+    if (expanded) {
+      detailsEl.setAttribute('hidden', '');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      toggleBtn.textContent = 'Details';
+    } else {
+      detailsEl.removeAttribute('hidden');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      toggleBtn.textContent = 'Hide';
+    }
+  });
+
+  // Dismiss (session-only)
+  banner.querySelector('.reconcile-dismiss-btn').addEventListener('click', () => {
+    banner.remove();
+  });
+}
+
+/**
  * Escape HTML to prevent XSS
  * @param {string} str - String to escape
  * @returns {string} Escaped string
@@ -1217,7 +1307,7 @@ async function bootstrap() {
     initBookingProfilesAdmin();
 
     // Reconcile any dangling booking↔strip links from previous sessions (before first render)
-    reconcileLinks();
+    const reconcileSummary = reconcileLinks();
 
     // Initial renders
     renderLiveBoard();
@@ -1225,6 +1315,9 @@ async function bootstrap() {
     renderHistoryBoard();
     renderReports();
     renderCalendar();
+
+    // Show integrity banner if reconciliation found any issues
+    showReconcileBanner(reconcileSummary);
 
     // Record init complete
     diagnostics.initTime = new Date().toISOString();

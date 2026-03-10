@@ -2850,3 +2850,108 @@ tr.strip.ft-ovr > td {
   background: #ef9a9a;
   cursor: not-allowed;
 }
+
+/* ── Reconcile integrity banner ──────────────────────────────────── */
+.reconcile-banner {
+  display: block;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  border-bottom: 1px solid transparent;
+  animation: reconcile-fadein 0.3s ease;
+}
+
+@keyframes reconcile-fadein {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reconcile-banner-info {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #0d47a1;
+}
+
+.reconcile-banner-warning {
+  background: #fff8e1;
+  border-color: #ffca28;
+  color: #7b5800;
+}
+
+.reconcile-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  flex-wrap: wrap;
+}
+
+.reconcile-banner-icon {
+  flex-shrink: 0;
+  font-size: 15px;
+}
+
+.reconcile-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reconcile-toggle-btn,
+.reconcile-dismiss-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 8px;
+  line-height: 1.5;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.reconcile-toggle-btn:hover,
+.reconcile-dismiss-btn:hover {
+  opacity: 1;
+}
+
+.reconcile-dismiss-btn {
+  font-size: 16px;
+  padding: 0 6px;
+  line-height: 1.4;
+}
+
+.reconcile-details {
+  border-top: 1px solid rgba(0,0,0,0.08);
+  padding: 8px 14px 10px 38px;
+}
+
+.reconcile-counts {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: disc;
+  padding-left: 18px;
+}
+
+.reconcile-counts li {
+  margin-bottom: 2px;
+}
+
+.reconcile-conflict-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: circle;
+}
+
+.reconcile-conflict-list li {
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: inherit;
+  opacity: 0.9;
+}
+
+.reconcile-more {
+  font-style: italic;
+  opacity: 0.7;
+}

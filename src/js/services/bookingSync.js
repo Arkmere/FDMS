@@ -112,6 +112,7 @@ export function reconcileLinks() {
   let clearedBookingLinkedStripId = 0;
   let repairedBookingLinkedStripId = 0;
   let conflicts = 0;
+  const conflictList = [];
 
   // Pass 1: Clear movement.bookingId if booking missing
   movements.forEach(m => {
@@ -144,6 +145,11 @@ export function reconcileLinks() {
       } else if (claimingMovements.length > 1) {
         // Conflict: multiple strips claim same booking, cannot determine truth
         conflicts++;
+        conflictList.push({
+          bookingId: b.id,
+          claimingMovementIds: claimingMovements.map(m => m.id),
+          callsigns: claimingMovements.map(m => m.callsignCode || String(m.id))
+        });
       }
     } else {
       // Booking has linkedStripId
@@ -167,7 +173,8 @@ export function reconcileLinks() {
     clearedMovementBookingId,
     clearedBookingLinkedStripId,
     repairedBookingLinkedStripId,
-    conflicts
+    conflicts,
+    conflictList
   };
 }
 
