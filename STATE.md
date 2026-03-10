@@ -1663,6 +1663,7 @@ Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA
 ### 4.24 Sprint: Bidirectional Duration ↔ planned-end sync in all modals
 
 **Branch:** `claude/sync-duration-and-planned-end-time`
+Verified on Windows (Chrome, 2026-03-10).
 
 #### New helper: `bindPlannedTimesSync(startId, endId, durationId)`
 
