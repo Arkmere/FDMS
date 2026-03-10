@@ -1,1706 +1,610 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-06 (Europe/London) — Sprint: Per-type DEP/ARR durations, per-strip Duration field, contraction advisory removed
+Last updated: 2026-03-10 (Europe/London) — Latest completed sprint: Sprint 8 — Booking/Strip reconciliation summary surfaced to operator
 
 This file is the shared source of truth for the Manager–Worker workflow:
-- **Manager (PM)**: User (coordination, priorities, releases)
-- **Solutions Architect & QA Lead**: ChatGPT (task tickets, audits, risk management)
-- **Production Engineer**: Claude Code (implements tickets, updates this ledger)
+
+* **Product Owner / SME:** Stuart
+* **Solutions Architect & QA Lead:** ChatGPT
+* **Production Engineer:** Claude Code
+
+This ledger exists to prevent drift, preserve project continuity across chats/sessions, and provide an audit-ready summary of what FDMS Lite is, how it behaves, what has been completed, and what remains intentionally deferred.
 
 ---
 
-#### Delivery model and runtime model (NO DRIFT)
+## 0) Delivery model / runtime model (NO DRIFT)
+
+### 0.1 Product definition
+
 **FDMS Lite is NOT a static web app and NOT a website.**
-**FDMS Lite is a standalone desktop application** (Windows + Linux) that uses **web technologies internally** (HTML/CSS/JS UI) for its interface.
+**FDMS Lite is a standalone desktop application** for Windows and Linux that uses **HTML/CSS/JS internally** as its UI technology.
 
-During development and QA, we run FDMS Lite via a **local server harness** that serves `src/` (e.g. `python -m http.server`). This is a **development/runtime convenience only** and must not be interpreted as "FDMS is a web product" or "FDMS is intended to be hosted".
+During development and QA, the UI is served locally from `src/` via a small local server harness (for example `python -m http.server 8000`). That local server is a **development/runtime convenience only** and must **not** be described as product hosting.
 
-**OS targets:** Development is performed on **Windows**. Operational installation/use is on **Linux**. **Both OS are required** and must remain supported.
+### 0.2 OS support
+
+* **Development OS:** Windows
+* **Operational target:** Linux
+* **Constraint:** both must remain supported
+
+### 0.3 Release-v1 workflow
+
+The current branch/PR/local-run workflow is approved for Release v1:
+
+* code changes via git branches + PRs
+* local execution via `run.ps1` / `run.bat` / `run.sh` or equivalent local harness
+* manual verification on Stuart’s Windows environment is the primary acceptance path
+* Playwright and other harnesses are **developer QA tooling**, not end-user runtime requirements
+
+### 0.4 Explicitly out of scope unless separately scheduled
+
+The following are **not** part of Release v1 unless explicitly promoted into a dedicated workstream:
+
+* packaging / installers
+* desktop wrapper work
+* auto-update mechanisms
+* hosted/web deployment path
+
+Any future update mechanism should be based on versioned release artifacts, not “pull latest main and restart”.
+
+### 0.5 Drift guardrails
+
+Do not:
+
+* describe FDMS Lite as a website or web app
+* treat the local server harness as hosting
+* introduce packaging/updater scope into normal feature sprints
+* reinterpret desktop-local behaviour as browser-product behaviour
 
 ---
 
-#### Development workflow approved for Release v1
-The current workflow (git branches/PRs + local repo checkout + local server harness) is **approved and sufficient to reach Release v1**.
-
-- Day-to-day development occurs in the repo via branches and PRs.
-- Local execution uses `run.ps1` / `run.bat` / `run.sh` to serve `src/` and open the UI locally.
-- Regression scripts (e.g., Playwright) are **developer QA tooling** only and are **not required for end users**.
-
----
-
-#### Packaging / installers / auto-update (explicitly out of scope for Release v1)
-**Packaging (installers), desktop wrapping, and auto-update mechanisms are out of scope for Release v1 unless explicitly reprioritised.**
-
-Any future update mechanism must be based on **versioned release artifacts** (e.g., GitHub Releases), **not** "pull latest `main` and restart". Do not introduce packaging or auto-update work into v1 sprints unless the project owner explicitly opens that workstream.
-
----
-
-#### Drift guardrails (do not reinterpret)
-- Do **not** describe FDMS Lite as a "static web app", "web app", or "website".
-- Do **not** propose "hosting" FDMS as the default delivery path.
-- The local server (`python -m http.server`) is a **development harness** to run the desktop UI locally; it is not product hosting.
-- Do **not** add packaging/installer/updater scope unless explicitly requested and scheduled as its own epic.
-
----
-
-#### Why run.* scripts fetch/reset
-The `run.*` scripts perform a fetch/reset to a specified branch to ensure the local working copy matches the expected code for testing. This is a **developer convenience** and **not** the intended end-user update mechanism.
-
----
-
-## 1) System Architecture
+## 1) Product goal and system architecture
 
 ### 1.1 Product goal
-A lightweight, **standalone desktop application** ("FDMS Lite") for local ATC/ops workflow, using web UI technologies (HTML/CSS/JS) for its interface:
-- Live "strip" board (movements)
-- Booking workflow that can create planned strips and stay synchronized
-- Calendar for bookings and general events
-- Admin tooling (profiles, etc.)
-- Fully offline / local deployment, using local persistence (localStorage)
 
-### 1.2 Tech stack
-- **Standalone desktop application** using web UI technologies (HTML/CSS/JS); run locally via a **local server harness** serving `src/` (not a hosted web product)
-- **Module style**: ES modules (`src/js/...`)
-- **Persistence**: `localStorage`
-- **Data model**: movements ("strips") stored in `src/js/datamodel.js`
-- **UI modules**:
-  - `src/js/ui_liveboard.js` (Live Board + timeline + history)
-  - `src/js/ui_booking.js` (Bookings + calendar + profiles + admin)
-- **Services / stores**:
-  - `src/js/services/bookingSync.js` (cross-domain consistency + reconciliation)
-  - `src/js/stores/bookingsStore.js` (UI-agnostic booking persistence)
+FDMS Lite is a lightweight standalone ATC/ops support tool for local flight-data workflow. Core functions:
 
-### 1.3 Core domain objects (current)
-- **Movement (strip)**: persisted via `datamodel.js`
-  - Key fields include: `id`, `status` (PLANNED/ACTIVE/COMPLETED/CANCELLED), `dof`, `flightType` (ARR/DEP/LOC), `arrPlanned`, `depPlanned`, `bookingId` (optional link)
-- **Booking**: persisted via `bookingsStore.js`
-  - Key fields include: `id`, `status`, `linkedStripId` (optional), contact/aircraft fields, `schedule.*`
-- **Calendar Event**: general calendar entries (separate from bookings)
-- **Booking Profile**: reusable template for autofill
+* Live Board for movement strips
+* booking workflow that can create and stay linked to strips
+* calendar for bookings and general events
+* admin/config tooling
+* local persistence via browser storage in the desktop-local runtime
 
-### 1.4 Cross-domain invariants (must always hold)
-- If `movement.bookingId = X`, booking `X` must exist or be cleared.
-- If `booking.linkedStripId = Y`, movement `Y` must exist or be cleared.
-- Prefer deterministic conflict resolution (conservative: clear stale pointers, avoid deleting records).
+### 1.2 Runtime/storage model
 
----
+* Single-client local state model
+* Persistence via localStorage
+* No backend in current v1 scope
+* No multi-user concurrency model
 
-## 2) Implementation Status
+### 1.3 Core UI/data modules
 
-### 2.0 Sprint — Active-Save implies ACTIVE + New-form UTC/Local toggle policy (2026-03-06)
+The codebase is organized around these major responsibilities:
 
-**Branch:** `claude/active-save-implies-active-and-newform-utc-toggle-policy`
+* **`src/js/app.js`** — bootstrap, first render, top-level coordination, admin handlers, reconciliation banner mount
+* **`src/js/ui_liveboard.js`** — Live Board rendering, movement creation/editing, inline edit flows, timing UI, modal flows, formation UI
+* **`src/js/ui_booking.js`** — booking UI and booking-side edit/create flows
+* **`src/js/datamodel.js`** — movement storage, normalization, counters, helpers, persistence
+* **`src/js/stores/bookingsStore.js`** — booking persistence, normalization, migrations
+* **`src/js/services/bookingSync.js`** — booking ↔ strip synchronization and reconciliation logic
+* **`src/css/vectair.css`** — main UI styling
+* **`src/index.html`** — application shell and tab structure
 
-**Summary (A): Active mode + Save → ACTIVE + infer now**
+### 1.4 Current important architectural characteristics
 
-When the Planned/Active toggle is in **Active** mode and the user presses **Save** in a New strip form:
-- The resulting movement is immediately **ACTIVE** (previously it could be PLANNED if times were in the future).
-- If the associated actual time field is blank at save time, it is populated from the system UTC clock:
-  - DEP: `depActual = nowUtc` (ATD)
-  - ARR: `arrActual = nowUtc` (ATA)
-  - OVR: `depActual = nowUtc` (ACT — same field the app uses for OVR crossing time)
-  - LOC: `depActual = nowUtc`; `arrActual = depActual + locFlightDurationMinutes` (wraps at midnight)
-- If the user has already entered an actual time it is kept as-is; status is still forced ACTIVE.
-- Planned mode behaviour and Save & Complete behaviour are unchanged.
-
-**Changes delivered (A):**
-- `src/js/ui_liveboard.js` — `js-save-flight` handler: active-mode block infers `depActual`/`arrActual` using `new Date().getUTCHours/Minutes()` then forces `status: "ACTIVE"` bypassing `determineInitialStatus()`.
-- `src/js/ui_liveboard.js` — `js-save-loc` handler: same pattern; LOC additionally infers `arrActual = depActual + cfg.locFlightDurationMinutes` if blank.
-
-**Summary (B): Admin tri-state UTC/Local toggle policy for New-strip forms**
-
-New Admin setting under **Timezone & Display**:
-- **Label:** "UTC/Local Toggle in New Strip Forms"
-- **Options:** Auto (default) · Always show · Do not show
-- **Auto rule:** show the toggle only when `timezoneOffsetHours !== 0` (i.e. local ≠ UTC).
-- Applies to New DEP/ARR/OVR and New LOC forms only. Edit/Duplicate modals are unaffected.
-- Participates in the existing Admin dirty-state Save/Discard workflow.
-- Default: `"auto"` for new users/config resets.
-
-**Changes delivered (B):**
-- `src/js/datamodel.js` — added `newFormUtcLocalTogglePolicy: "auto"` to `defaultConfig`.
-- `src/index.html` — new `<select id="configNewFormUtcTogglePolicy">` in the Timezone & Display admin panel.
-- `src/js/app.js` — element reference, `VALUE_IDS` dirty-tracking entry, config load, `saveAdminConfig` read + `updateConfig` field.
-- `src/js/ui_liveboard.js` — `shouldShowNewFormTimeModeToggle()` helper; UTC/Local toggle button in both new modals conditionally rendered based on policy + current offset.
-
-**Files changed:**
-- `src/js/ui_liveboard.js`
-- `src/js/datamodel.js`
-- `src/js/app.js`
-- `src/index.html`
-
-**Manual verification checklist (Stuart):**
-
-*Part A — Active-Save now inference:*
-- [ ] New DEP → Active mode → Save (ATD blank) → strip appears ACTIVE, `depActual` = UTC "now". Check Edit modal to confirm stored UTC.
-- [ ] New ARR → Active mode → Save (ATA blank) → strip ACTIVE, `arrActual` = UTC now.
-- [ ] New OVR → Active mode → Save (ACT blank) → strip ACTIVE, `depActual` = UTC now (ACT field).
-- [ ] New LOC → Active mode → Save (ATD/ATA blank) → strip ACTIVE, `depActual` = now, `arrActual` = now + LOC duration (default 40 min or configured value).
-- [ ] New LOC → Active mode → enter ATD only → Save → strip ACTIVE, `depActual` kept, `arrActual` inferred.
-- [ ] Any type → Active mode → enter actual time before Save → strip ACTIVE, entered time preserved.
-- [ ] Any type → Active mode → Local mode enabled → Save → reopen in Edit/UTC mode → stored values are correct UTC strings.
-- [ ] Planned mode → Save → no change in existing behaviour (status determined by time comparison, no actual-time injection).
-- [ ] Save & Complete behaviour unchanged (still creates COMPLETED strip).
-- [ ] Edit/Duplicate modals unaffected.
-
-*Part B — UTC/Local toggle policy:*
-- [ ] Admin → Timezone & Display → new "UTC/Local Toggle in New Strip Forms" select visible with Auto/Always show/Do not show.
-- [ ] Select is dirty-tracked (change triggers Save/Discard buttons).
-- [ ] Setting persists across page reload.
-- [ ] offset = 0 + policy = Auto → UTC/Local toggle NOT shown in New DEP/ARR/OVR/LOC forms.
-- [ ] offset = 0 + policy = Show → toggle IS shown.
-- [ ] offset = 0 + policy = Hide → toggle NOT shown.
-- [ ] offset = 1 (UTC+1) + policy = Auto → toggle IS shown.
-- [ ] offset = 1 + policy = Show → toggle IS shown.
-- [ ] offset = 1 + policy = Hide → toggle NOT shown.
-- [ ] When toggle is shown, UTC/Local conversion still works correctly.
-- [ ] Edit and Duplicate modals still always show the UTC/Local toggle (unaffected by this policy).
-- [ ] No console errors.
-
-### 2.0 Sprint — New Movement Forms Planned/Active Toggle (2026-03-04)
-
-**Summary**: Added a Planned/Active toggle to the Timings section of all New movement creation forms (DEP/ARR/OVR via `openNewFlightModal()` and LOC via `openNewLocFlightModal()`). Planned mode shows only estimated time fields (ETD/ETA or ECT for OVR); Active mode shows only actual time fields (ATD/ATA or ACT for OVR). Save & Complete button is hidden in Planned mode and only visible in Active mode.
-
-**Changes delivered**:
-- Added `bindNewFormTimingToggle()` helper in `ui_liveboard.js`: toggles `[data-timing-group="planned"]` / `[data-timing-group="actual"]` field visibility and gates the Save & Complete button.
-- `openNewFlightModal()` (DEP/ARR/OVR): replaced `renderTimesGrid()` call with inline field HTML using `data-timing-group` attributes; added `id="newFlightTimingToggle"` Planned/Active button alongside the UTC/Local toggle; added `bindNewFormTimingToggle()` call; updated save handler to be timing-mode aware (validates/converts only visible fields; zeroes out hidden group before writing to movement).
-- `openNewLocFlightModal()` (LOC): same pattern with `id="newLocTimingToggle"`, `newLocStart`/`newLocEnd` (planned) and `newLocStartActual`/`newLocEndActual` (actual).
-- Save & Complete buttons on both modals default to `display: none` in HTML (reinforced by `bindNewFormTimingToggle` on init).
-- Stored schema unchanged: `depPlanned`, `depActual`, `arrPlanned`, `arrActual` remain canonical UTC HH:MM strings.
-- `renderTimesGrid()` and `bindTimeModeToggle()` are unchanged; Edit/Duplicate modals are unaffected.
-
-**Files changed**:
-- `src/js/ui_liveboard.js` — added `bindNewFormTimingToggle()`; updated `openNewFlightModal()` and `openNewLocFlightModal()` markup, bindings, and save handlers.
-
-**Smoke checklist** (manual — to be verified by Stuart):
-- [ ] DEP: Open New form → default is Planned; only ETD/ETA shown; Save&Complete hidden.
-- [ ] DEP: Toggle to Active → only ATD/ATA shown; Save&Complete appears.
-- [ ] ARR: same as DEP.
-- [ ] OVR: Open New form → Planned shows ECT only (ETA disabled/hidden); toggle to Active shows ACT only (ATA disabled/hidden).
-- [ ] LOC: Open New form → Planned shows ETD/ETA; Active shows ATD/ATA; Save&Complete gated correctly.
-- [ ] Enter times in Local mode (any type); Save; reopen in Edit modal → stored values are correct UTC strings.
-- [ ] UTC/Local toggle still works in both Planned and Active modes (converts all 4 inputs regardless of visibility).
-- [ ] Save in Planned mode: movement has depPlanned/arrPlanned set; depActual/arrActual empty.
-- [ ] Save in Active mode (regular Save): movement has depActual/arrActual set; depPlanned/arrPlanned empty.
-- [ ] Save & Complete (Active mode only): movement created with COMPLETED status; actual times populated.
-- [ ] Edit/Duplicate modals: no change — all 4 fields still shown, no Planned/Active toggle present.
-- [ ] No console errors throughout.
-
-### 2.0 Sprint — Unified Times Form (2026-02-25)
-
-**Summary**: All create/edit/duplicate modals now share a common 2×2 Times grid
-(ETD | ETA / ATD | ATA) with a single persistent UTC/Local mode toggle.
-
-**Changes delivered**:
-- Unified Times form across all create/edit/duplicate modals (New DEP/ARR/OVR, New LOC, Edit, Duplicate)
-- Persistent UTC/Local input mode toggle (`config.timeInputMode`); persists via existing localStorage config mechanism
-- Removed per-field local time checkboxes (showLocalTimeEditDep, showLocalTimeEditDepActual, showLocalTimeEditArr, showLocalTimeEditArrActual, showLocalTimeToggle, showLocalTimeDep, showLocalTimeArr, showLocalTimeLocToggle, showLocalTimeDupDep, showLocalTimeDupArr)
-- Added `convertLocalToUTC()` to datamodel.js (inverse of existing `convertUTCToLocal()`)
-- Added `renderTimesGrid()` helper in ui_liveboard.js
-- Added `bindTimeModeToggle()` helper in ui_liveboard.js
-- Added actual-time fields to modals that previously only had planned fields:
-  - New DEP/ARR/OVR: `newDepActual`, `newArrActual`
-  - New LOC: `newLocStartActual`, `newLocEndActual`
-  - Duplicate: `dupDepActual`, `dupArrActual`
-- OVR: ETA/ATA fields present in grid but disabled; labels ECT/ACT applied
-- Save handlers convert Local→UTC before writing to movement fields
-- `docs/TIMING.md` added (canonical timing semantics reference)
-
-**Files changed**:
-- `src/js/datamodel.js` — added `timeInputMode: "UTC"` to defaultConfig; added `convertLocalToUTC()`
-- `src/js/ui_liveboard.js` — added `renderTimesGrid()`, `bindTimeModeToggle()`; updated all 4 modals; updated all save handlers
-- `docs/TIMING.md` — new documentation file
-
-**Manual verification checklist**:
-- [ ] Open New DEP modal — Times grid shows 4 fields (ETD, ETA, ATD, ATA), toggle button reads "UTC"
-- [ ] Open New ARR modal — same 4-field grid
-- [ ] Open New LOC modal — same 4-field grid
-- [ ] Open New OVR modal — ETD label = "ECT", ATD label = "ACT", ETA and ATA fields disabled
-- [ ] Open Edit modal — same 4-field grid, no per-field checkboxes
-- [ ] Open Duplicate modal — same 4-field grid
-- [ ] Toggle UTC→Local in any modal — all non-empty input values convert; button shows "Local"
-- [ ] Toggle Local→UTC — values convert back to UTC
-- [ ] Close modal, reopen — toggle state persists (same mode remembered from config)
-- [ ] Enter times in Local mode, save, reopen in UTC mode — stored times are correct UTC strings
-- [ ] OVR: enter ECT in Local mode, save; stored depPlanned is UTC
-
-### 2.1 Completed (believed stable)
-**Bidirectional Calendar ↔ Booking ↔ Strip sync**
-- Booking create/update propagates to linked strip(s)
-- Strip edit/cancel/complete propagates back to booking fields/status
-- Booking cancel/delete supports "cancel linked strip" vs "keep strip" paths
-
-**Booking Profiles (Admin)**
-- Create/edit/delete/search profiles
-- Booking autofill from profile (then VKB fallback)
-
-**Calendar**
-- Month / Week / Year views
-- Click-to-edit/delete general calendar events
-
-**Live Board housekeeping**
-- EGOW "today" counters (BM/BC/VM/VC) are mutually exclusive
-- FIS labels Manual / Strip / Total; Strip FIS is today-only
-- Timeline is today-only
-- Time-based stale highlights + periodic refresh + auto-activation
-- "Past planned time" strips start ACTIVE
-- History "Edit > Details" works (no openEditModal error)
-- Dropdown menus use portal-based approach to avoid clipping
-
-**Module architecture improvement**
-- Removed circular import between `ui_booking.js` and `ui_liveboard.js`
-- Introduced:
-  - `src/js/services/bookingSync.js`
-  - `src/js/stores/bookingsStore.js`
-
-**Booking schedule canonical planned-time**
-- Added:
-  - `booking.schedule.plannedTimeLocalHHMM`
-  - `booking.schedule.plannedTimeKind` (ARR/DEP/LOC)
-- Kept:
-  - `booking.schedule.arrivalTimeLocalHHMM` for backwards compatibility
-- Migration introduced to populate canonical planned time for legacy bookings
-- DEP strip updates no longer overwrite `arrivalTimeLocalHHMM`
-- Store normalization ensures canonical fields always populated on create/update
-- UI form handlers write canonical fields explicitly
-
-**Bidirectional reconciliation + integrity enforcement**
-- `bookingSync.reconcileLinks()` fully bidirectional:
-  - Clears `movement.bookingId` if booking missing
-  - Clears `booking.linkedStripId` if movement missing
-  - Repairs `booking.linkedStripId` if single strip claims it (deterministic)
-  - Detects conflicts (multiple strips claiming same booking)
-- Returns detailed summary: `{ clearedMovementBookingId, clearedBookingLinkedStripId, repairedBookingLinkedStripId, conflicts }`
-- Runs before first render (app.js bootstrap)
-
-**No-op patch optimization**
-- `updateBookingById()` skips save/dispatch if patch makes no actual changes
-- Reduces write churn and event storms
-
-**Non-seeding + persistence**
-- Demo seeding should not re-appear
-- Persistence across reload is expected for movements/bookings/calendar/profiles
-
-### 2.2 Backlog (known or suspected gaps)
-These are not confirmed resolved unless explicitly audited against a fresh zip.
-
-**Event / refresh storm safety**
-- ✅ RESOLVED (Sprint 3): Stress-tested under all edge flows (rapid edits, multi-strip, status transitions, booking sync, delete/cancel). No loops or redundant re-renders detected.
-- Reentrancy guards in place; no-op optimization added
-- Diagnostics instrumentation available via `__FDMS_DIAGNOSTICS__` flag for future regression testing
-
-**UI/UX quality improvements** (non-critical)
-- Booking edit form could display flight type explicitly (currently inferred as ARR)
-- Reconciliation summary could be logged or displayed to user (currently silent)
-- Strip→booking sync could validate more fields (pob, remarks, etc.)
-
-### 2.3 Parked / Backlog (explicitly deferred items)
-
-These items are agreed concepts but are **not in current sprint scope**. They must not drift into active work unless explicitly promoted into a sprint ticket.
-
-#### A) Booking & comms
-
-1) Booking confirmation email + pilot briefing pack
-- Booking page should generate and send a confirmation email to the booker, including:
-  - cost breakdown
-  - confirmed itinerary
-  - pilot briefing pack (operating info + ATC/station notes)
-- Include a specific note: if arriving from / departing to outside the contiguous UK, a GAR is required and it is not managed by ATC (pilot/operator responsibility).
-
-#### B) Movement creation UX
-
-2) Duplicate → “Create from…” concept
-- Replace “Duplicate” with “Create from…”
-- Allow choosing target movement type: DEP / ARR / LOC / OVR
-- Creates a new strip of the selected type prefilled from the source strip (safe defaults; no stale timings).
-
-3) Cancelled sorties log + optional cancellation reason
-- When a strip is cancelled, automatically snapshot the strip (callsign/pilot, reg, type, dep/arr, times, EGOW fields, etc.) into a cancellation log.
-- Cancel confirmation dialog includes optional reason capture (taxonomy TBD: weather, serviceability, crew availability, etc.).
-- Cancellation records are an audit/report dataset. Movement stats must remain governed by existing CANCELLED exclusions (no contamination of runway totals).
-
-#### C) Formation flights backlog
-
-4) Formation flights implementation backlog
-- FORMATIONS.md is canonical.
-- Creation/editing/inheritance and per-element accounting items not yet implemented must remain tracked here until scheduled.
-
-#### D) Timezone ergonomics
-
-5) DST-aware “Auto” timezone offset (Europe/London)
-- Future enhancement: allow auto-switch between UTC and BST based on Europe/London (Woodvale default).
-- Currently deferred in favour of manual offset + existing toggle show/hide policy.
+* booking/strip sync is event-driven but guarded against redundant loops
+* reconciliation runs before first render to repair/clear stale bidirectional links deterministically
+* canonical movement time fields are UTC `HH:MM` strings
+* display can project those times into local time using configured offset
+* modal lifecycle has explicit hardening rules to avoid stale key handlers and double-save behaviour
 
 ---
 
-## 3) Technical Debt & Risks
+## 2) Operational invariants and non-negotiable behaviour
 
-### 3.1 Data integrity / drift
-- ✅ RESOLVED: Bidirectional reconciliation now enforced
-- ✅ RESOLVED: Canonical planned time always populated (migration + normalization + UI)
-- Remaining risk: Multi-user concurrent edits not supported (localStorage is single-client)
+### 2.1 Movement and counter semantics
 
-### 3.2 Event-driven coupling
-- ✅ MITIGATED: Reentrancy guards in bookingSync._dispatchBookingPatch
-- ✅ MITIGATED: No-op optimization prevents unnecessary save/dispatch cycles
-- ✅ VERIFIED (Sprint 3): Stress audit confirmed no event storms under rapid edits, status transitions, booking sync, and delete/cancel flows. Render counts scale 1:1 with user actions.
+Runway/daily movement totals use movement-equivalent maths:
 
-### 3.3 Schema evolution
-- Any schema additions must remain backwards compatible and migrate once, deterministically.
-- Migration pattern established: bookingsStore.ensureInitialised() runs once on load
+* DEP = 1
+* ARR = 1
+* LOC = 2
+* OVR = 0
+* T&G = +2 movements
+* O/S = +1 movement
+* OVR is counted separately and does **not** contribute to runway daily totals
+
+### 2.2 Canonical movement time fields
+
+Stored canonical time fields are:
+
+* `depPlanned`
+* `depActual`
+* `arrPlanned`
+* `arrActual`
+
+These are stored as UTC `HH:MM` strings.
+UI display may show them in UTC or Local depending on current display mode and configured offset.
+
+### 2.3 Booking/strip link invariants
+
+Booking/strip linkage is bidirectional when valid:
+
+* a movement may carry `bookingId`
+* a booking may carry `linkedStripId`
+
+`bookingSync.reconcileLinks()` is responsible for deterministic repair/clear behaviour on load:
+
+* clear `movement.bookingId` if referenced booking is missing
+* clear `booking.linkedStripId` if referenced movement is missing
+* repair `booking.linkedStripId` if exactly one strip validly claims the booking
+* detect conflicts if multiple strips claim the same booking
+
+### 2.4 Reconciliation reporting invariant
+
+As of Sprint 8, reconciliation is no longer silent.
+
+`reconcileLinks()` remains policy-compatible but now returns reporting detail sufficient for UI surfacing, including a backward-compatible `conflictList` field used by the integrity banner.
+
+**Important:** this was a **reporting/output enrichment only**.
+Reconciliation policy, conflict detection rules, and resolution behaviour were **not changed**.
+
+### 2.5 Modal lifecycle rules
+
+Engineering rule set:
+
+1. All modal close paths must call `closeActiveModal()`
+2. All modal open paths must call `closeActiveModal()` before opening a new modal
+3. Inline-edit Enter/Escape key handlers must stop propagation appropriately
+4. No direct ad-hoc modal teardown bypassing the lifecycle helper
+
+### 2.6 Scope boundaries preserved so far
+
+The following behaviours must not be changed casually because multiple sprints now depend on them:
+
+* OVR remains excluded from daily movement totals
+* LOC semantics remain distinct even where UI parity has been improved
+* formation WTC semantics are already defined and implemented
+* timing/duration logic is now integrated across create/edit/duplicate flows
+* booking reconciliation policy is stable and should not be changed without a dedicated sprint
 
 ---
 
-## 4) Current Sprint (Immediate Objective)
+## 3) Stable implemented behaviour (current baseline)
 
-**Sprint goal:** ✅ COMPLETE - Integrity and schedule-consistency gaps closed and verified.
+The following capabilities are considered implemented and broadly stable unless a new sprint explicitly changes them.
 
-### 4.1 Completed objective (Sprint 1)
-✅ Performed targeted audit/fix:
-1) `bookingSync.reconcileLinks()` is fully bidirectional and deterministic.
-2) Booking create/edit flows always set `schedule.plannedTimeLocalHHMM` + `schedule.plannedTimeKind`.
-3) No-op patches skip write/dispatch (quality improvement implemented).
+### 3.1 Live Board and strip lifecycle
 
-Exit criteria met:
-- ✅ PASS/FAIL checklist with file+function evidence (see commit c0002b2)
-- ✅ Orphan pointers repaired on load both directions
-- ✅ New/edited bookings always have canonical planned time populated
-- ✅ No import cycles; no console errors; persistence works
+* Live Board rendering stable
+* History and daily counters stable under current rules
+* inline editing fixed for canonical time fields and required-field safety
+* hard delete exists and is distinct from cancel
+* cancel/delete semantics documented and preserved
+* status transitions and counter effects audited
 
-### 4.3 Hotfix (Admin panel init failure)
+### 3.2 Booking ↔ strip sync
 
-Hotfix closed (no further action); verified as part of Sprint 2/3 stability pass.
+* booking create/update can create or update linked strips
+* strip edit/cancel/complete propagates back to linked bookings where appropriate
+* canonical booking planned-time fields exist and are normalized
+* no-op booking patch optimization reduces redundant writes and dispatch storms
+* bidirectional link reconciliation now runs at bootstrap and is surfaced to the operator when issues are found
 
+### 3.3 Calendar
 
-### 4.2 Sprint 2: Live Board integrity + stats correctness
+* month / week / year views implemented
+* general calendar event create/edit/delete supported
 
-**Sprint goal:** Fix release-blocking inline edit data-loss bug, add hard-delete for strips, and correct traffic counter logic.
+### 3.4 Admin
 
-**Verification status:** ✅ VERIFIED in browser (2026-02-09, Chromium 141.0.7390.37, Playwright headless)
-- 10/10 tests PASS, 0 JS errors
-- State A (clean localStorage) + State B (pre-seeded data) both tested
-- Evidence: `Sprint2_Verification_EvidencePack_2026-02-09.md` + `evidence/*.png` (28 screenshots)
-- Test harness: `sprint2_verify.mjs`
+* two-pane admin IA implemented
+* dirty-state save/discard workflow implemented where appropriate
+* booking profiles section exists and saves immediately
+* restore/export/reset flows clarified and hardened
+* backup metadata envelope and restore preflight format detection implemented
 
-#### Task A — Fix inline edit data-loss bug (release blocker) ✅
+### 3.5 Formations
 
-**Root cause:** Multiple defects in `startInlineEdit()` and time field bindings in `renderLiveBoard()`:
+* formation create/edit/remove is implemented
+* Live Board formation badge and expanded details implemented
+* per-element editing supported
+* inheritance/duplicate semantics implemented within current scope
+* WTC current/max semantics implemented
 
-1. **Wrong time field names:** Inline edit for time fields used phantom names (`atd`, `etd`, `ata`, `eta`, `act`, `ect`) instead of canonical movement fields (`depActual`, `depPlanned`, `arrActual`, `arrPlanned`). Edits wrote to non-existent properties; display reads from canonical fields, so edits appeared lost.
-2. **Blur/Enter double-fire:** Both Enter key handler and blur handler called `saveEdit()` without guard, causing duplicate updates and re-renders per interaction.
-3. **No required field validation:** Blanking required fields (e.g. `callsignCode`) set them to `null` without error, destroying data.
-4. **Missing booking sync:** `onMovementUpdated()` was not called after inline edit, so linked bookings drifted.
-5. **Missing counter updates:** `updateDailyStats()` / `updateFisCounters()` were not called after inline edit.
+### 3.6 LOC / modal parity / WTC
 
-**Fix (files changed):**
-- `src/js/ui_liveboard.js` — `startInlineEdit()` (lines ~239-345):
-  - Added `saved` guard flag to prevent double-fire from Enter + blur race
-  - Added required field validation (callsignCode): rejects blank with single error toast, reverts UI cell
-  - Added `onMovementUpdated()` call for booking sync after save
-  - Added `updateDailyStats()` / `updateFisCounters()` calls after save
-- `src/js/ui_liveboard.js` — inline edit bindings (lines ~1635-1647):
-  - Fixed time field names: `m.depActual ? "depActual" : "depPlanned"` (was `m.atd ? "atd" : "etd"`)
-  - Same fix for arrival times and OVR crossing times
+* LOC create flow uses the standard modal structure rather than a bespoke outlier form
+* LOC flight type and EGOW departure/arrival locks preserved
+* LOC WTC selection/autofill exists within current rules
 
-**QA test log:**
-- Callsign edit: double-click → edit → Enter → single update, no toast storm, value persists after reload
-- Registration edit: works, no other fields affected
-- Type edit: works, no other fields affected
-- Dep/Arr aerodrome edit: works, value persists
-- Time edit (dep/arr): writes to correct canonical field, persists after reload
-- Blank callsign: rejected with single "Callsign Code cannot be blank" toast, previous value retained
-- Escape: reverts without saving
-- No console errors
+### 3.7 Timezone / timings / duration
 
-#### Task B — Add "Delete strip" (hard delete) ✅
+* UTC/local display mode supported
+* modal timing grids normalized across movement types
+* per-type DEP/ARR durations available in Admin
+* per-strip Duration field implemented
+* duration is a true override for projection and is bidirectionally synced with planned end where applicable
+* OVR label corrections landed
+* abbreviation warning severity now uses two levels
 
-**Feature:** Added permanent Delete action to strip Edit dropdown in both Live Board and History, distinct from Cancel (soft delete).
+### 3.8 Integrity surfacing
 
-**Files changed:**
-- `src/js/datamodel.js` — Added `deleteMovement(id)`: removes movement from in-memory array and persists to localStorage
-- `src/js/ui_liveboard.js`:
-  - Added `performDeleteStrip(movement)` function: confirmation prompt, booking link cleanup, delete, UI refresh
-  - Added Delete button HTML + event binding in Live Board edit dropdown
-  - Added Delete button HTML + event binding in History edit dropdown
-  - Imported `deleteMovement` from datamodel, `getBookingById`/`updateBookingById` from bookingsStore
-
-**Behaviour:**
-- Confirmation: `"Delete strip <callsign> (#<id>)? This cannot be undone."`
-- On confirm: clears `booking.linkedStripId` if linked, then removes movement from storage
-- UI refreshes immediately; reload confirms permanent deletion
-- Cancel action still works unchanged (marks as CANCELLED, preserves record)
-
-**QA test log:**
-- Delete unlinked strip: disappears from UI, gone after reload, no console errors
-- Delete linked strip: booking's linkedStripId cleared, booking views unaffected
-- Cancel button: still works as before (soft delete → History)
-
-#### Task C — Fix Live Board traffic counter logic ✅
-
-**Root cause:** `calculateDailyStats()` in `src/js/app.js` counted ALL movements for today including PLANNED and CANCELLED in the total. This violated requirements that:
-- PLANNED should not affect counters (not yet real traffic)
-- CANCELLED should not count in main movement totals
-- Each movement counted exactly once
-
-**Fix (files changed):**
-- `src/js/app.js` — `calculateDailyStats()`:
-  - Filters to only `ACTIVE` + `COMPLETED` status (excludes PLANNED and CANCELLED)
-  - Deduplicates by movement ID (defensive)
-  - Total computed from filtered+deduped set, not `todaysMovements.length`
-
-**QA test log:**
-- 1 PLANNED today: counter = 0 (correct, not counted)
-- 1 ACTIVE today: counter = 1
-- Mark ACTIVE → COMPLETED: counter still = 1 (same movement, not double-counted)
-- Cancel a movement: counter decreases (CANCELLED excluded)
-- View non-today history: today's counters unchanged
-
-### 4.3 Known risks discovered during Sprint 2
-
-- **Phantom time fields:** Movements edited via inline edit before this fix may have orphan `etd`/`atd`/`eta`/`ata`/`ect`/`act` properties. These are harmless (never read by display logic) but could be cleaned up in a future migration if desired.
-- **Inline edit does not trigger all modal-level enrichments** (e.g. WTC lookup on type change, voice callsign update on callsign change). This is by design for minimal-risk patch semantics; full enrichment requires the Edit Details modal.
-
-### 4.4 Sprint 3: Event storm safety audit + documentation hardening
-
-**Sprint goal:** Prove no event-driven loops, redundant dispatch storms, or runaway re-renders exist under realistic stress. Document strip lifecycle semantics and counter rules.
-
-**Merged to main:** 2026-02-10 (Europe/London)
-- Merge method: merge commit (--no-ff)
-- Commits: `c1bfee8`, `0c9e752`, `dd67acf`
-
-#### Option A — Event / Refresh Storm Safety Audit ✅
-
-**Approach:** Playwright-based stress test harness with test-only diagnostics instrumentation (`window.__FDMS_DIAGNOSTICS__` flag).
-
-**Instrumentation added (files changed):**
-- `src/js/ui_liveboard.js` — Counter increment in `renderLiveBoard()`, `renderHistoryBoard()`, `fdms:data-changed` listener
-- `src/js/app.js` — Counter increment in `updateDailyStats()`, `updateFisCounters()`
-- `src/js/services/bookingSync.js` — Counter increment in `_dispatchBookingPatch()` on dispatch
-
-All counters gated behind `window.__FDMS_DIAGNOSTICS__ === true`. Zero overhead in normal operation.
-
-**Test scenarios (all PASS):**
-
-| Test ID | Scenario | Result | Key Metrics |
-|---------|----------|--------|-------------|
-| S1 | Rapid inline edits on one strip (N=25) | **PASS** | 25 renders for 25 edits (1:1 ratio) |
-| S2 | Rapid edits across 10 strips (N=50) | **PASS** | 50 renders for 50 edits (1:1 ratio) |
-| S3 | Status transitions + counter verification | **PASS** | Counters 0→3→3→2 (correct at each stage) |
-| S4 | Booking-linked flow stress (N=15) | **PASS** | 15 sync dispatches, 15 received, link integrity maintained |
-| S5 | Delete/cancel under load (10 strips) | **PASS** | 7 remaining, 4 counted (correct) |
-| PERSIST | Post-stress persistence + consistency | **PASS** | Data survives reload, no duplicate IDs |
-| QUIESCE | Counters quiesce after actions stop | **PASS** | 0 render growth in 3s idle window |
-
-**Verdict:** No event storms, no infinite loops, no runaway re-renders. Render counts scale linearly with user actions (1:1 for inline edits, 1:1 for status transitions). Booking-linked edits show 2:1 render ratio (expected: edit render + fdms:data-changed render).
-
-**Evidence:**
-- Test harness: `sprint3_stress_verify.mjs`
-- Evidence pack: `Sprint3_OptionA_StressAudit_EvidencePack_2026-02-09.md`
-- Screenshots: `evidence_s3/*.png`
-
-#### Option C — Documentation Hardening ✅
-
-**Deliverable:** `docs/STRIP_LIFECYCLE_AND_COUNTERS.md`
-
-Covers:
-- Strip status definitions (PLANNED, ACTIVE, COMPLETED, CANCELLED, deleted)
-- Status transition diagram with trigger descriptions
-- Cancel vs Delete semantics
-- Canonical time fields (`depPlanned`, `depActual`, `arrPlanned`, `arrActual`) with getter helper mapping
-- Display logic per flight type
-- Historical note on phantom time fields
-- Counter rules: daily movement totals (EGOW), FIS counters, per-strip counters
-- Counter update triggers and safety net (45s periodic tick)
-- Booking link invariants (bidirectional pointers, sync pathways, reentrancy guard, reconciliation)
-- Inline edit vs modal edit comparison
-- Storage format reference
-- Diagnostics mode reference
-
-### 4.5 Sprint 4: Formations v1 end-to-end
-
-**Sprint goal:** Implement user-facing create/edit/remove of `movement.formation` on a strip, Live Board badge `F×n`, expanded panel with inline element edits, WTC semantics, formation inheritance in duplicate flows, and a full Playwright regression suite.
-
-**Merged:** 2026-02-10 (Europe/London) on branch `claude/fdms-formations-documentation-v5on5`
-
-#### Deliverables
-
-**Data model (`src/js/datamodel.js`):**
-- `WTC_RANK` constant and `maxWtcString()` helper for WTC comparison
-- `computeFormationWTC(elements)` — returns `{ wtcCurrent, wtcMax }` where current = max WTC across PLANNED+ACTIVE elements, max = max across all elements
-- `normalizeFormation(formation)` — backward-compat repair called on every load; ensures `elements` is an array, fills missing fields, recomputes WTC; result saved back to localStorage
-- `updateFormationElement(id, elementIndex, patch)` — patches a single element (status, depActual, arrActual), recomputes WTC, persists
-- `ensureInitialised()` updated: runs `normalizeFormation` on any movement with a `formation` field; calls `saveToStorage()` if any formations were normalized
-
-**UI (`src/js/ui_liveboard.js`):**
-- Helper functions: `buildFormationElementRows`, `readFormationFromModal`, `wireFormationCountInput`
-- `renderFormationDetails(m)` — expanded row subsection showing label, current/max WTC, per-element table with inline status select, dep/arr inputs, and Save button per row
-- `renderLiveBoard()` — callsign cell now includes `<span class="badge badge-formation">F×n</span>` for strips with formations
-- New Flight modal: collapsible Formation section (count input + dynamic element rows)
-- Edit Details modal: collapsible Formation section (pre-populated from `m.formation`, with "Remove Formation" button)
-- `js-save-flight`, `js-save-edit`, `js-save-complete-edit` handlers: read formation from modal and persist
-- Duplicate modal: formation copy with elements reset to `status: "PLANNED"`, `depActual: ""`, `arrActual: ""`
-- Event delegation for `.fmn-el-save` buttons: reads row values, calls `updateFormationElement`, re-renders, shows toast
-
-**CSS (`src/css/vectair.css`):**
-- `.fmn-el-input`, `.fmn-el-dep`, `.fmn-el-arr`, `.fmn-el-select` — inline element edit controls
-
-**Documentation:**
-- `docs/FORMATIONS.md` — 13-section canonical reference for the formation system
-
-**Playwright regression (`sprint4_formation_verify.mjs`):**
-
-| Test | Scenario | Result |
-|------|----------|--------|
-| F1 | No formation → badge absent | **PASS** |
-| F2 | Create 2-element via UI → badge `F×2` persists after reload | **PASS** |
-| F3 | Seeded 3-element → badge `F×3` on Live Board | **PASS** |
-| F4 | Expanded panel: formation table + 3 Save buttons present | **PASS** |
-| F5 | Element inline save: status=ACTIVE, depActual=13:20 persists | **PASS** |
-| F6 | WTC recompute: EH10(M) completed → wtcCurrent=L, wtcMax=M | **PASS** |
-| F7 | Edit modal pre-populates formation count=3 | **PASS** |
-| F8 | Remove formation via edit modal → formation=null, badge gone | **PASS** |
-| F9 | Duplicate inherits formation, elements reset to PLANNED/no actuals | **PASS** |
-| F10 | Malformed formation `{ label: null }` normalized on load (no crash) | **PASS** |
-
-**Result: 10/10 PASS, 0 JS errors**
-
-**Evidence pack:**
-- Screenshots: `evidence_s4/S4_*.png` (14 screenshots)
-- Results JSON: `evidence_s4/sprint4_formation_results.json`
-- Test harness: `sprint4_formation_verify.mjs`
-- Linux kernel 4.4 workaround: `--single-process --no-zygote` Chromium flags
-- CDN stub: `page.route('**/xlsx.full.min.js', ...)` to prevent network failures
-
-#### Known issues discovered during Sprint 4
-
-- **Linux kernel 4.4 Playwright click interception:** `click({ force: true })` on buttons inside `expand-section` still hits the covering element (coordinate-based). Fixed by using `dispatchEvent('click')` which directly fires the event on the target element.
-- **normalizeFormation not persisted:** Initial implementation ran normalization in memory but skipped `saveToStorage()`. Fixed: `needsSave` flag triggers save when any formation is normalized.
-
-### 4.6 Sprint 5: Formations v1.1 — element depAd/arrAd, editable callsign, validation, cascade, inheritance
-
-**Sprint goal:** Extend formation elements with per-element Dep AD / Arr AD fields, editable callsigns, input validation (WTC + ICAO 4-char), formation element count guard (min 2, max 12), master status cascade (COMPLETED/CANCELLED), and produce-arrival inheritance. Write a 12-test Playwright regression suite.
-
-**Merged:** 2026-02-11 (Europe/London) on branch `claude/fdms-formations-documentation-v5on5`
-
-#### Deliverables
-
-**Data model (`src/js/datamodel.js`):**
-- `isValidWtcChar(wtc)` — true iff WTC ∈ {L, S, M, H, J}
-- `isValidIcaoAd(ad)` — true iff ad is `""` or matches `/^[A-Z0-9]{4}$/`
-- `isValidElementStatus(status)` — true iff status ∈ {PLANNED, ACTIVE, COMPLETED, CANCELLED}
-- `normalizeFormation` updated: fills `element.depAd` and `element.arrAd` with `""` for legacy elements
-- `cascadeFormationStatus(id, newStatus)` — exported; COMPLETED cascades PLANNED/ACTIVE→COMPLETED; CANCELLED cascades all→CANCELLED; recomputes WTC and persists
-
-**UI (`src/js/ui_liveboard.js`):**
-- `buildFormationElementRows` — new columns: Callsign (editable), Dep AD, Arr AD; clamped to [2, 12]; callsign defaults to `${base} ${n}` but is editable
-- `readFormationFromModal` — reads callsign/depAd/arrAd; validates WTC and ICAO; returns `null` if formation section never opened (no rows rendered); returns `{ _error, message }` on validation failure; returns `null` if count < 2
-- `wireFormationCountInput` — clamps to [2, 12]
-- Callsign input listener in New Flight modal: only rebuilds rows if rows already exist (prevents phantom formation on normal saves)
-- New Flight + Edit Details modal: `min=2 max=12` on count input
-- `renderFormationDetails` — 10-column table: Status, Dep, Arr, Dep AD, Arr AD, Callsign, Reg, Type, WTC, Save; wrapped in scrollable `.formation-table-wrap`; empty depAd/arrAd shows master fallback in `.fmn-fallback` muted span
-- `.fmn-el-save` delegation: reads depAd/arrAd per row, validates ICAO, patches element
-- `transitionToCompleted` and `transitionToCancelled`: call `cascadeFormationStatus` after `updateMovement`
-- `js-save-complete-edit` handler: calls `cascadeFormationStatus` after `updateMovement`
-- `openReciprocalStripModal` (produce arrival/departure): copies formation with elements reset: `status="PLANNED"`, `depActual=""`, `arrActual=""`; recomputes WTC
-
-**CSS (`src/css/vectair.css`):**
-- `.formation-table-wrap` — `overflow-x: auto` for horizontal scroll on narrow screens
-- `.fmn-el-ad` — 52px wide, `text-transform: uppercase`
-- `.fmn-fallback` — 10px muted grey for inherited AD display
-- `.fmn-ad-cell` — `min-width: 72px`
-
-**Documentation:**
-- `docs/FORMATIONS.md` — "Formations v1.1 — Clarifications and Extensions" section prepended; covers element schema v1.1, depAd/arrAd empty-value semantics, validation rules, element count rules, WTC semantics, cascade rules, produce inheritance, and out-of-scope items
-
-**Playwright regression (`sprint5_formation_v11_verify.mjs`):**
-
-| Test | Scenario | Result |
-|------|----------|--------|
-| G1 | depAd/arrAd/callsign inputs present in New Flight modal (count=2) | **PASS** |
-| G2 | depAd/arrAd persist via New Flight modal save | **PASS** |
-| G3 | depAd/arrAd editable in expanded panel; persists after `.fmn-el-save` | **PASS** |
-| G4 | Empty depAd shows master fallback in `.fmn-fallback` | **PASS** |
-| G5 | Invalid 3-char depAd rejected; element unchanged | **PASS** |
-| G6 | Invalid WTC in New Flight modal blocks save; no movement created | **PASS** |
-| G7 | Overridden element callsign persists after save | **PASS** |
-| G8 | Formation count=1 → `movement.formation = null` | **PASS** |
-| G9 | Master COMPLETE cascade → all PLANNED/ACTIVE elements become COMPLETED, wtcCurrent="" | **PASS** |
-| G10 | Master CANCEL cascade → all elements become CANCELLED | **PASS** |
-| G11 | Produce-arrival inherits formation + resets elements (status=PLANNED, actuals cleared, depAd copied) | **PASS** |
-| G12 | Edit modal count input: `min=2 max=12` HTML attributes correct | **PASS** |
-
-**Result: 12/12 PASS, 0 JS errors**
-
-**Evidence pack:**
-- Screenshots: `evidence_s5/S5_*.png` (12 screenshots)
-- Results JSON: `evidence_s5/sprint5_formation_v11_results.json`
-- Test harness: `sprint5_formation_v11_verify.mjs`
-
-#### Bugs fixed during Sprint 5
-
-- **Callsign input listener phantom formation:** When count input defaulted to 2 and user typed in `#newCallsignCode`, the callsign `input` listener triggered `buildFormationElementRows`, rendering element rows silently. Subsequent `readFormationFromModal` found those rows and created a formation even though the user never opened the formation section. Fixed: listener only rebuilds if `[data-el-callsign="0"]` already exists in container.
-- **G10 dialog race:** Test registered `page.once('dialog', ...)` *after* clicking `.js-cancel`, so the `confirm()` dialog fired before the handler was attached (auto-dismissed as cancelled). Fixed: register handler *before* clicking.
-
-#### Known limitations (v1.1 out-of-scope, deferred to v1.2+)
-
-- Micro-strip fields (departure sheet per element) not implemented
-- No server-side or multi-client sync (localStorage remains single-client)
-- Formation cannot be added to a strip that is already COMPLETED or CANCELLED
-
-### 4.7 Sprint 6: Formations v1.1 Parity — LOC (Local) strip creation
-
-**Sprint goal:** Complete formation parity across all creation paths. The Local flight modal (`openNewLocalModal`) previously had `formation: null` hardcoded and lacked an authoring UI for formations. This sprint adds the collapsible Formation section to the LOC modal, wires all handlers (count input, callsign listener guard, expander toggle), and updates both save handlers (Save and Save & Complete) to read and persist formation data with cascade.
-
-**Branch:** `claude/fdms-formations-documentation-v5on5`
-
-#### Deliverables
-
-**UI (`src/js/ui_liveboard.js`):**
-- `openNewLocalModal` — collapsible Formation section added (HTML): `newLocFormationSection`, `newLocFormationCount`, `newLocFormationElementsContainer`; mirrors the DEP/ARR modal section
-- LOC modal JS wiring: `wireFormationCountInput` for `newLocFormationCount`; callsign input listener with phantom-formation guard; `document.querySelectorAll('.modal-expander')` event binding (was missing from LOC modal — caused panel to stay hidden when clicked)
-- `.js-save-loc` handler: reads `locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer")`; validation errors block save; `movement.formation = locFormation || null`
-- `.js-save-complete-loc` handler: same formation read + validation; `formation: locCpFormation || null` in movement object; after `createMovement`, calls `cascadeFormationStatus(createdLoc.id, "COMPLETED")` if formation present
-
-**Playwright regression (`sprint6_loc_formation_verify.mjs`):**
-
-| Test | Scenario | Result |
-|------|----------|--------|
-| H1 | Formation created on LOC strip via New Local modal → badge F×2 appears | **PASS** |
-| H2 | depAd/arrAd per element persist on LOC strip | **PASS** |
-| H3 | Invalid WTC in LOC modal blocks save; no movement created | **PASS** |
-| H4 | Invalid 3-char ICAO code in LOC modal blocks save | **PASS** |
-| H5 | Formation section never opened → formation=null, no badge (phantom-formation guard) | **PASS** |
-| H6 | Save-and-Complete LOC with formation → all elements cascade to COMPLETED | **PASS** |
-
-**Result: 6/6 PASS, 0 JS errors**
-
-Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS (no regressions)
-
-**Evidence pack:**
-- Screenshots: `evidence_s6/S6_*.png` (6 screenshots)
-- Results JSON: `evidence_s6/sprint6_loc_formation_results.json`
-- Test harness: `sprint6_loc_formation_verify.mjs`
-
-#### Bug fixed during Sprint 6
-
-- **LOC modal expanders not wired:** The `openNewLocalModal` function did not include the `document.querySelectorAll('.modal-expander').forEach(...)` event binding that wires the collapsible section toggle. The Formation expander button had no click handler, so `panel.hidden` was never toggled and the Formation section remained permanently hidden. Fixed: added the same expander wiring block used in the DEP/ARR and Edit modals.
-
-#### Dev tooling improvement (cross-platform Playwright imports)
-
-- `package.json` added at repo root with `playwright@1.56.1` as a `devDependency` and `npm run test:s4/s5/s6` scripts.
-- All three sprint verify scripts updated: replaced absolute-path imports (`/opt/node22/lib/node_modules/playwright/index.mjs`) with portable `import { chromium } from 'playwright'`.
-- `package-lock.json` committed so `npm ci` is reproducible on Windows + Linux.
-- `DEV-SETUP.md` updated with a "Regression Tests (developer QA tooling)" section documenting `npm ci`, `npx playwright install chromium`, and `npm run test:s*` commands.
-- No changes under `src/`. No drift in delivery-model statements.
-
-### 4.8 Sprint 7: LOC Standard Modal Parity
-
-**Sprint goal:** Replace the bespoke LOC create/edit modal (`openNewLocalModal`) with the standard movement modal structure used by DEP/ARR/OVR. LOC now uses the same sectioned layout (IDENTITY, PLAN, TIMES, OPERATIONAL) and accordions (Remarks & Warnings, ATC Details, Formation), with LOC-specific locks applied to prevent user modification of Flight Type, Departure AD, and Arrival AD.
-
-**Branch:** `claude/fdms-lite-ux-change-iepHR`
-
-#### What changed
-
-**`src/js/ui_liveboard.js`:**
-- **`openNewLocalModal`** (bespoke form, removed from user flow): Replaced by `openNewLocFlightModal()`. The old bespoke function is no longer wired to any button and is now dead code. It has been removed from the codebase.
-- **`openNewLocFlightModal()`** (new function): Renders the standard movement modal structure with:
-  - Sections: IDENTITY, PLAN, TIMES, OPERATIONAL (matching `openNewFlightModal`)
-  - Accordions: Remarks & Warnings, ATC Details, Formation
-  - Two-column `modal-section-grid` layout
-  - LOC locks: Flight Type = `<input value="LOC" disabled />` (not a select); Departure AD = `<input value="EGOW" disabled />`; Arrival AD = `<input value="EGOW" disabled />`
-  - Backward-compatible element IDs (`newLocCallsignCode`, `newLocStart`, `newLocEnd`, `newLocFormationCount`, `newLocFormationSection`, `newLocFormationElementsContainer`, `.js-save-loc`, `.js-save-complete-loc`) to preserve Sprint 6 test compatibility
-  - Added new fields not in bespoke form: Warnings textarea, ATC Details (Squawk, Route, Clearance), O/S count, FIS count, Priority checkbox/dropdown, Flight Rules dropdown
-  - EGOW Code field present with datalist (same options as standard modal); validation only blocks save if a value is provided but is invalid (not enforced as mandatory, to preserve Sprint 6 backward compat)
-  - Save handlers write depAd/arrAd = "EGOW" (hardcoded, user cannot override), flightType = "LOC", isLocal = true
-  - Timing semantics unchanged: no ETD→ETA auto-fill in new modal (same as previous LOC behavior)
-- **Button wire-up** (line ~4697): `safeOn(btnNewLoc, "click", openNewLocFlightModal)` (was `openNewLocalModal`)
-- **`openEditMovementModal`**: Added `disabled` attribute to `editFlightType` select, `editDepAd` input, and `editArrAd` input when `flightType === "LOC"`, so editing an existing LOC movement also shows locked fields
-
-**`package.json`:**
-- Added `"test:s7": "node sprint7_loc_standard_modal_verify.mjs"` script
-
-**`sprint7_loc_standard_modal_verify.mjs`** (new):
-- 8-test Playwright regression suite (see table below)
-
-**`evidence_s7/`** (new):
-- 9 screenshots: `S7_1` through `S7_9`
-- `sprint7_loc_standard_modal_results.json` with pass/fail summary + run metadata
-
-#### Where
-
-| Change | File | Key function / line |
-|--------|------|---------------------|
-| New LOC standard modal | `src/js/ui_liveboard.js` | `openNewLocFlightModal()` (new function replacing `openNewLocalModal`) |
-| Button re-wire | `src/js/ui_liveboard.js` | `safeOn(btnNewLoc, "click", openNewLocFlightModal)` |
-| Edit modal LOC locks | `src/js/ui_liveboard.js` | `openEditMovementModal()` — `disabled` on `editFlightType`, `editDepAd`, `editArrAd` for LOC |
-| npm script | `package.json` | `"test:s7"` |
-| Test harness | `sprint7_loc_standard_modal_verify.mjs` | — |
-
-#### Why
-
-LOC parity requirement: the bespoke LOC form had a single-column stacked layout lacking the standard sections, accordions, and two-column grid. Users saw a different UI for LOC vs DEP/ARR/OVR. This sprint routes LOC through a functionally equivalent form of the standard modal template, ensuring structural parity while preserving LOC-specific constraints (EGOW AD lock, LOC flight type lock) and all existing formation/timing semantics.
-
-#### Playwright regression results
-
-| Test | Scenario | Result |
-|------|----------|--------|
-| I1 | Standard modal structure: IDENTITY, PLAN, TIMES, OPERATIONAL headings present | **PASS** |
-| I2 | Standard modal accordions: Remarks & Warnings, ATC Details, Formation | **PASS** |
-| I3 | Flight Type shows LOC and is disabled/read-only | **PASS** |
-| I4 | Departure AD shows EGOW and is disabled/read-only | **PASS** |
-| I5 | Arrival AD shows EGOW and is disabled/read-only | **PASS** |
-| I6 | LOC timing: entering ETD does not auto-fill ETA (unchanged behavior) | **PASS** |
-| I7 | Save LOC; reload; depPlanned/arrPlanned/depAd/arrAd/flightType persisted correctly | **PASS** |
-| I8 | Edit LOC: flight type locked to LOC, dep/arr AD locked to EGOW in edit modal | **PASS** |
-
-**Result: 8/8 PASS, 0 JS errors**
-
-Regressions: Sprint 4 10/10 PASS, Sprint 5 12/12 PASS, Sprint 6 6/6 PASS (no regressions)
-
-#### Verification evidence (commands run)
-
-```
-npm run test:s7   → 8/8 PASS
-npm run test:s4   → 10/10 PASS
-npm run test:s5   → 12/12 PASS
-npm run test:s6   → 6/6 PASS
-```
-
-All four suites passing on Linux kernel 4.4, Node v22, Playwright 1.56.1, Chromium headless.
-
-**Evidence pack:**
-- Screenshots: `evidence_s7/S7_*.png` (9 screenshots)
-- Results JSON: `evidence_s7/sprint7_loc_standard_modal_results.json`
-- Test harness: `sprint7_loc_standard_modal_verify.mjs`
-
-#### Deliverables checklist
-
-- [x] LOC modal is the standard modal (sectioned layout), not the bespoke LOC form
-- [x] LOC flight type locked to LOC (disabled input in new + edit modal)
-- [x] LOC dep/arr AD locked to EGOW (disabled inputs in new + edit modal)
-- [x] LOC timing semantics unchanged (no ETD→ETA auto-fill; same as before)
-- [x] New Sprint 7 test: 8/8 PASS
-- [x] Sprint 4: 10/10 PASS (no regression)
-- [x] Sprint 5: 12/12 PASS (no regression)
-- [x] Sprint 6: 6/6 PASS (no regression)
-- [x] Evidence pack exists: `evidence_s7/`
-- [x] STATE.md updated with audit entry
-
-#### Notes
-
-- Element IDs in the LOC modal (`newLocCallsignCode`, `newLocStart`, `newLocEnd`, formation IDs, `.js-save-loc`, `.js-save-complete-loc`) are preserved from the old bespoke modal to maintain backward compatibility with Sprint 6 regression tests.
-- EGOW Code field is present and visible in the LOC modal (with datalist, same as standard modal). Validation blocks save only if an invalid code is entered, not if left empty — this preserves Sprint 6 test behavior where EGOW Code was not filled.
-- No changes to counters, reporting logic, formation semantics, or delivery-model documentation.
-
-### 4.9 P0 Fix: Inline Edit Time Field Toast Storm + Data Loss
-
-**Date:** 2026-02-17
-**Branch:** `claude/fix-inline-edit-data-loss-QLjBR`
-**Priority:** P0 (data integrity)
-
-#### Symptom
-
-Inline editing a time cell on a strip (double-click → type → Enter) triggered:
-- A storm of mixed toasts: "Callsign Code is required" (error) and "Movement updated successfully" (success).
-- In some cases, entries were removed from Live/Pending and History (apparent data loss).
-
-#### Root Cause (precise)
-
-**Primary — leaked `document` keyHandler from `openModal()`:**
-
-`openModal()` registers `document.addEventListener("keydown", keyHandler)` to implement:
-1. Esc-to-close modal.
-2. Enter-to-save via the primary save button.
-
-Every save handler (`.js-save-flight`, `.js-save-edit`, `.js-save-loc`, `.js-save-complete-*`, `.js-save-dup`) closed the modal by setting `modalRoot.innerHTML = ""` **directly** — bypassing the `closeModal()` closure which is the only path that called `document.removeEventListener("keydown", keyHandler)`.
-
-Over a session with multiple modal open+save cycles, one leaked `keyHandler` per cycle accumulated on `document`. Each subsequent `Enter` keypress triggered ALL accumulated handlers simultaneously:
-- Each handler called `backdrop.querySelector(".js-save-edit").click()` on its (now-detached) backdrop element.
-- The click listener on the detached element ran the full modal save handler.
-- `document.getElementById("editCallsignCode")?.value` returned `""` (modal closed, element gone).
-- Callsign validation failed → `showToast("Callsign Code is required", 'error')` — N times (one per leaked handler).
-
-**If a live modal happened to be open at the time**, the leaked handler's `document.getElementById()` calls found the live modal's fields, passed validation, and called `updateMovement(m.id, updates)` with whatever the modal currently had — potentially overwriting the movement with incomplete or incorrect data → data corruption.
-
-**Secondary — missing `stopPropagation` in inline-edit `keydown` handler:**
-
-The inline-edit input's `keydown` handler called `e.preventDefault()` but NOT `e.stopPropagation()`. Enter keypresses from inline-edit thus bubbled up to `document`, triggering all accumulated modal keyHandlers even when no modal was intended to be interacted with.
-
-**Tertiary — blur retry race after failed time validation:**
-
-When time validation failed, `saved` was reset to `false` to allow retry. The blur handler's 100ms setTimeout could re-trigger `saveEdit()` if the user clicked elsewhere before the corrected value was typed, showing the error toast a second time.
-
-#### Fix Summary
-
-**`src/js/ui_liveboard.js`:**
-
-1. Added module-level `let _modalKeyHandler = null;` to track the single active modal handler.
-
-2. Added `closeActiveModal()` function:
-   - Removes `_modalKeyHandler` from `document` before clearing `modalRoot.innerHTML`.
-   - Called by all 7 save-handler modal-close paths (previously direct `innerHTML = ""`).
-
-3. Modified `openModal()`:
-   - Removes any previously leaked `_modalKeyHandler` at modal open time (belt-and-suspenders).
-   - Assigns new `keyHandler` to `_modalKeyHandler`.
-   - `closeModal()` closure now dereferences `_modalKeyHandler` after removal.
-   - Added `backdrop.isConnected` guard in the keyHandler Enter path to prevent detached-backdrop saves.
-   - Added `activeEl.classList.contains("inline-edit-input")` guard so inline-edit Enter presses are ignored by the modal keyHandler.
-
-4. In `startInlineEdit()` → keydown listener:
-   - Added `e.stopPropagation()` for both `Enter` and `Escape` keys to prevent bubbling to document.
-
-5. In `saveEdit()`:
-   - Added `_lastSaveFailed` flag; set when time validation fails, cleared on next `input` event.
-   - Blur handler checks `!_lastSaveFailed` before auto-saving, preventing repeated error toasts on blur.
-   - Added `window.__FDMS_DIAGNOSTICS__` diagnostic logging guards.
-   - Transactional update: build patch → validate → call `updateMovement` only on success → `onMovementUpdated` only if movement was found.
-   - Guard: if `updateMovement` returns null (movement not found), restore cell silently without touching state.
-
-**`src/js/datamodel.js`:**
-
-6. Added guard in `saveToStorage()`: aborts if `movements` is not an array (prevents overwriting good data with a corrupt module state).
-
-#### Regression Harness
-
-New: `sprintP0_inline_edit_integrity_verify.mjs` (8 tests)
-
-| ID | Test | Result |
-|----|------|--------|
-| P0-T1 | No error toasts on valid inline-edit commit | **PASS** |
-| P0-T2 | Exactly one error toast on invalid time; data not mutated | **PASS** |
-| P0-T3 | Live/Pending row count stable after inline-edit | **PASS** |
-| P0-T4 | History row count stable after inline-edit | **PASS** |
-| P0-T5 | Repeated inline-edits (3×) — no error toasts, count stable | **PASS** |
-| P0-T6 | 3× modal open+save then inline-edit — no toast storm | **PASS** |
-| P0-T7 | Inline-edit while modal minimised — no modal double-save | **PASS** |
-| P0-T8 | Time field update persists across page reload | **PASS** |
-
-**Result: 8/8 PASS, 0 FAIL**
-
-#### Verification evidence (commands run)
-
-```
-# P0 regression harness (new)
-node sprintP0_inline_edit_integrity_verify.mjs  → 8/8 PASS
-
-# Existing sprint suites
-npm run test:s4   → 10/10 PASS  (no regression)
-npm run test:s5   → 12/12 PASS  (no regression)
-npm run test:s6   → 6/6 PASS   (no regression)
-npm run test:s7   → 8/8 PASS   (no regression)
-```
-
-All suites passing on Linux kernel 4.4, Node v22.22.0, Playwright 1.56.1, Chromium headless.
-
-**Evidence pack:**
-- Screenshots: `evidence_p0/P0_*.png` (8 screenshots)
-- Results JSON: `evidence_p0/sprintP0_inline_edit_integrity_results.json`
-- Test harness: `sprintP0_inline_edit_integrity_verify.mjs`
-
-#### Deliverables checklist
-
-- [x] Root cause identified and documented (precise: `openModal` + missing `closeModal` call in save handlers)
-- [x] `closeActiveModal()` created; all 7 save-handler modal-close paths updated
-- [x] `_modalKeyHandler` module-level tracking added to `openModal()`
-- [x] `e.stopPropagation()` added to inline-edit `keydown` Enter handler
-- [x] `backdrop.isConnected` guard added to modal keyHandler Enter path
-- [x] `inline-edit-input` class guard added to modal keyHandler
-- [x] `_lastSaveFailed` flag prevents blur-auto-save after failed validation
-- [x] Transactional save path in `saveEdit()`: validate → update → render (no partial mutation)
-- [x] `saveToStorage()` guard against non-array `movements`
-- [x] `window.__FDMS_DIAGNOSTICS__` logging added to `saveEdit()` and `closeActiveModal()`
-- [x] P0 regression harness: 8/8 PASS
-- [x] Sprint 4: 10/10 PASS (no regression)
-- [x] Sprint 5: 12/12 PASS (no regression)
-- [x] Sprint 6: 6/6 PASS (no regression)
-- [x] Sprint 7: 8/8 PASS (no regression)
-- [x] Evidence pack exists: `evidence_p0/`
-- [x] STATE.md updated
-
-#### NO-DRIFT confirmation
-
-- No changes to counters, reporting logic, formation semantics, or timing semantics.
-- No speculative refactors. Only the fault path (modal keyHandler leak) and guardrails (stopPropagation, blur guard, persistence guard) were changed.
-- All existing test suites pass without modification.
+* reconciliation summary is now surfaced through an operator-visible Integrity banner
+* banner appears only when clear/repair/conflict counts are non-zero
+* conflict details can be expanded in-place
+* dismiss is session-only (until reload)
 
 ---
 
-### 4.10 P0 Hardening: Modal-Clear Policy Enforcement + Invariant Check
+## 4) Known limitations / technical constraints
 
-**Date:** 2026-02-17
-**Branch:** `claude/fix-inline-edit-data-loss-QLjBR` (same branch — hardening continuation)
-**Priority:** P0 follow-up hardening
+### 4.1 Single-client storage model
 
-#### Work completed
+This remains a local single-user/single-client style application. Multi-user concurrent editing is not supported.
 
-**Task A — Zero direct `modalRoot.innerHTML` clears in codebase:**
+### 4.2 Browser-storage dependency
 
-- `closeActiveModal()` in `ui_liveboard.js` marked `export`.
-- `ui_booking.js` updated:
-  - `import { closeActiveModal } from "./ui_liveboard.js"` added.
-  - All 4 modal open paths now call `closeActiveModal()` before assigning `modalRoot.innerHTML = \`…\``.
-  - All 9 modal close paths (Cancel, Save, Delete handlers across 4 modal functions) now call `closeActiveModal()` instead of `modalRoot.innerHTML = ''`.
-- Verified with `grep`: zero live `modalRoot.innerHTML = ''` or `modalRoot.innerHTML = ""` assignments remain in `src/js/`.
+Persistence depends on local browser storage in the runtime environment. This is acceptable for current v1 scope but remains a structural limitation.
 
-**Task B — `_modalOpen` runtime invariant check (diagnostics-gated):**
+### 4.3 Schema evolution requirement
 
-Added to `ui_liveboard.js`:
-- `let _modalOpen = false;` module-level tracking variable.
-- `_checkModalInvariant(context)` function — runs only when `window.__FDMS_DIAGNOSTICS__` is truthy.
-  - Warns if `_modalOpen && !_modalKeyHandler` (open-no-handler).
-  - Warns if `!_modalOpen && _modalKeyHandler` (closed-leaked-handler).
-  - Warns if `_modalOpen` but `modalRoot` is empty (open-no-content).
-  - Records violations to `window.__fdmsDiag.modalInvariantViolations[]`.
-  - Exposes `window.__fdmsDiag.checkModalInvariants()` for manual console invocation.
-- Called from: `openModal()` (after handler registration), `closeModal()` closure, `closeActiveModal()`.
-- `_modalOpen` is set to `true` in `openModal()` and `false` in both `closeModal()` and `closeActiveModal()`.
+Any future schema change must be:
 
-**Task C — P0-T9 stress test (8-cycle modal stress):**
+* backward-compatible
+* deterministically migrated once
+* explicitly recorded in this ledger
 
-Added `P0-T9` to `sprintP0_inline_edit_integrity_verify.mjs`:
-- Seeds 1 ACTIVE movement.
-- Opens and saves the edit modal 8 times consecutively.
-- Then performs an inline-edit of the dep-time cell.
-- Asserts: 0 error toasts, live count unchanged, edited time persists after reload.
-- Harness now has 9 tests total.
+### 4.4 Test strategy constraint
 
-**Task D — Engineering rules documented:**
-
-- `DEV-SETUP.md` updated with "Engineering Rules" section covering:
-  - Rule 1: All modal close paths must call `closeActiveModal()` (never direct `innerHTML = ""`).
-  - Rule 2: All modal open paths must call `closeActiveModal()` first.
-  - Rule 3: Inline-edit key events must call `e.stopPropagation()`.
-  - Diagnostics activation instructions.
-- `STATE.md` (this section) updated.
-
-#### Engineering rules (condensed — see DEV-SETUP.md for full detail)
-
-| Rule | Requirement |
-|------|-------------|
-| 1 | All modal close paths call `closeActiveModal()` — never `modalRoot.innerHTML = ""` directly |
-| 2 | All modal open paths call `closeActiveModal()` first (before writing new content) |
-| 3 | Inline-edit `keydown` handlers call `e.stopPropagation()` on Enter and Escape |
-
-#### Deliverables checklist
-
-- [x] `closeActiveModal()` exported from `ui_liveboard.js`
-- [x] `ui_booking.js` imports `closeActiveModal`; all 13 direct clears replaced
-- [x] Zero remaining `modalRoot.innerHTML = ''` in production code (`src/js/`)
-- [x] `_modalOpen` tracking variable added to `ui_liveboard.js`
-- [x] `_checkModalInvariant()` diagnostics-gated function added and wired
-- [x] P0-T9 (8-cycle modal stress) added to `sprintP0_inline_edit_integrity_verify.mjs`
-- [x] Engineering rules added to `DEV-SETUP.md`
-- [x] `STATE.md` updated (this section)
-
-#### NO-DRIFT confirmation
-
-- No changes to counters, reporting logic, formation semantics, timing semantics, or UX behaviour.
-- The `closeActiveModal()` call on open paths is a no-op when `_modalKeyHandler` is already null (normal case); it is only protective for race conditions.
-- `_checkModalInvariant()` has zero runtime cost when `window.__FDMS_DIAGNOSTICS__` is falsy (first condition fails).
-- All existing test suites must continue to pass.
+Primary acceptance is manual verification on Stuart’s Windows environment. Automated harnesses are useful but must not become a burden that slows routine iteration unnecessarily.
 
 ---
 
-### 4.11 Feature: Inline-Edit Tab Flow + Timeline Desync Fix
+## 5) Parked / deferred backlog (explicitly not in active sprint scope)
 
-**Branch:** `claude/inline-edit-tabflow-and-timeline-QLjBR`
+These items are intentionally deferred. They must **not** be pulled into unrelated implementation work.
 
-#### A) Timeline desync fix
+### 5.1 Booking & comms
 
-**Root cause:** `getMovementStartTime(m)` returned `null` for OVR flights (used `getETD()`/`getATD()` which are DEP/LOC-only), and `getMovementEndTime(m)` returned `null` for DEP flights (used `getETA()`/`getATA()` which are ARR/LOC-only). Result: OVR bars did not appear; DEP end-times fell back to +60 min.
+1. **Booking confirmation email + pilot briefing pack**
 
-**Fix:**
-- `getMovementStartTime`: ARR → `getETA || arrActual`; OVR → `getECT || getACT`; DEP/LOC → `getETD || getATD`
-- `getMovementEndTime`: uses `m.arrPlanned || m.arrActual || getETA || getATA` (raw fields first for DEP/OVR)
-- `saveEdit()` now calls `renderTimelineTracks()` explicitly on success (in addition to the existing `renderTimeline()` at end of `renderLiveBoard()`)
+   * confirmation email to booker
+   * cost breakdown
+   * confirmed itinerary
+   * pilot briefing pack with operating/station/ATC information
+   * include note that arrivals/departures outside contiguous UK require GAR and this is not managed by ATC
 
-#### B) Tab/Shift+Tab inline-edit workflow
+### 5.2 Movement creation UX
 
-**New module-level constructs in `ui_liveboard.js`:**
-- `_INLINE_FIELD_TO_SELECTOR` — maps fieldName → CSS selector for all 15 editable fields
-- `_buildTabOrder(rowEl, movement)` — builds the ordered list of applicable tab stops for a row, respecting flight-type applicability rules and filtering to elements that exist in the DOM
-- `advanceInlineEditor(movementId, currentFieldName, direction)` — re-queries DOM after `renderLiveBoard()`, finds next/prev tab stop (with wrap), calls `startInlineEdit()`
+2. **Duplicate → “Create from…” concept**
 
-**Applicability rules:**
-- Dep AD: OVR and ARR only
-- Arr AD: OVR and DEP only
-- Dep time: DEP, LOC, OVR
-- Arr time: ARR, LOC
-- All other fields (callsign, voice, reg, type, WTC, rules, tng, os, fis, remarks): all flight types
+   * replace Duplicate with Create from…
+   * user chooses target movement type: DEP / ARR / LOC / OVR
+   * new strip prefilled from source with safe defaults and no stale timings
 
-**`saveEdit()` hardened:**
-- Returns `boolean` (true = committed, false = validation failure)
-- WTC validated via `isValidWtcChar()`; rules normalised ('I'→'IFR', 'V'→'VFR', 'S'→'SVFR')
-- Counter fields (tngCount/osCount/fisCount) validated as non-negative integers; stored as `number` not string
-- Tab handler only advances when `saveEdit()` returns `true`
+3. **Cancelled sorties log + optional cancellation reason**
 
-**New inline-editable fields (strip HTML + enableInlineEdit):**
-- `callsignVoice` (`.js-edit-voice`) — always
-- `wtc` (`.js-edit-wtc`) — always
-- `rules` (`.js-edit-rules`) — always
-- `tngCount` (`.js-edit-tng`, inputType `number`) — always
-- `osCount` (`.js-edit-os`, inputType `number`) — always
-- `fisCount` (`.js-edit-fis`, inputType `number`) — always
-- `remarks` (`.js-edit-remarks`) — always
+   * cancelled strip snapshot stored for audit/reporting
+   * optional cancellation reason taxonomy
+   * must not contaminate existing movement totals logic
 
-**Number input filter:** Digits-only `input` event listener prevents non-numeric characters in number fields.
+### 5.3 Formation backlog
 
-#### Deliverables checklist
+4. **Formation flights continuation backlog**
 
-- [x] `getMovementStartTime` fixed for OVR
-- [x] `getMovementEndTime` fixed for DEP
-- [x] `renderTimelineTracks()` called on `saveEdit()` success path
-- [x] `_INLINE_FIELD_TO_SELECTOR`, `_buildTabOrder`, `advanceInlineEditor` added
-- [x] Tab/Shift+Tab handler in `startInlineEdit` keydown — calls `saveEdit()` then `advanceInlineEditor()`
-- [x] 7 new fields: strip HTML classes + `enableInlineEdit()` registrations
-- [x] dep/arr AD `enableInlineEdit` restricted by flight type
-- [x] `saveEdit()` returns boolean; WTC/rules/counter validations added
-- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
-- [x] `STATE.md` updated
+   * FORMATIONS.md remains canonical
+   * creation/editing/inheritance and any future accounting extensions stay here until formally scheduled
 
-#### NO-DRIFT confirmation
+### 5.4 Timezone ergonomics
 
-- No changes to movement data model, formation semantics, counter button logic, or persistence model.
-- Tab keydown calls `e.preventDefault()` + `e.stopPropagation()` — Tab never bubbles to document-level modal handlers.
-- Counter button ◄/► handlers are unchanged; inline-edit of counter fields is additive.
-- All existing test suites (`test:s4` through `test:s7`) unaffected.
+5. **DST-aware Auto timezone offset (Europe/London)**
+
+   * automatic UTC/BST handling for Woodvale context
+   * currently deferred in favour of manual offset + current display toggle behaviour
 
 ---
 
-### 4.12 Sprint: Daily Totals, WTC Dropdown, Idle Timeout, Timeline Actual-First
+## 6) Risk register / technical debt
 
-**Branch:** `claude/fix-daily-totals-wtc-timeout-timeline`
+### 6.1 Data integrity / drift
 
-#### 1) Runway Daily Movement Totals
+* **Mitigated:** bidirectional reconciliation now enforced and visible
+* **Mitigated:** canonical planned-time fields normalized
+* **Remaining:** concurrency beyond single-client assumptions is unsupported
 
-- `runwayMovementContribution(m)` and `isOverflight(m)` exported from `datamodel.js`
-- Formula: `base + (2 × tngCount) + (1 × osCount)` where base: DEP=1, ARR=1, LOC=2, OVR=0
-- `calculateDailyStats()` in `app.js` now uses these helpers; OVR increments a separate `ovr` counter and skips runway totals
-- BM/BC/VM/VC/Total buckets now accumulate runway movement equivalents (not flat counts)
-- New `statOvrToday` span added to `src/index.html` stats bar; `updateDailyStats()` populates it
-- `docs/STRIP_LIFECYCLE_AND_COUNTERS.md` §3.1 updated with counting formula and OVR-separate note
+### 6.2 Event-driven coupling
 
-#### 2) Inline Edit Idle Timeout (auto-cancel, not commit)
+* **Mitigated:** reentrancy guards in booking sync
+* **Mitigated:** no-op patch optimization
+* **Verified:** prior stress audit found no runaway event storms or infinite loops under tested edge flows
 
-- `inlineEditIdleMs: 120000` added to `defaultConfig` in `datamodel.js`
-- `_activeInlineSession`, `_pendingRerenderWhileInline`, `_getInlineIdleMs()`, `_startInlineSession()`, `_endInlineSession()`, `_isInlineEditingActive()` added to `ui_liveboard.js`
-- `startInlineEdit()` wired: calls `_startInlineSession({ cancelFn: cancelEdit })` after editor opens; input/paste/keydown listeners call `_sess.resetTimer()`
-- Idle expiry calls `cancelEdit()` (restore original content) — never commits
-- `saveEdit()` calls `_endInlineSession(false)` before `return true`; `cancelEdit()` calls `_endInlineSession(false)` on explicit cancel
-- `fdms:data-changed` listener now defers to `_pendingRerenderWhileInline` when editor is open; catches up immediately after editor closes
+### 6.3 Schema growth risk
 
-#### 3) WTC Inline Edit Constrained to wtcSystem
+* managed via explicit migrations and normalization
+* future additions must preserve backward compatibility
 
-- `_WTC_OPTIONS` constant added (UK/ICAO/RECAT option arrays)
-- `startInlineEdit()` detects `fieldName === 'wtc'` and creates `<select>` populated from `getConfig().wtcSystem`
-- Seeded from cell text: `currentValue.match(/^[A-Za-z]+/)[0].toUpperCase()`
-- `isValidWtcChar()` validation block removed from `saveEdit()` (select constrains choices)
-- `el.querySelector('input')` guard expanded to `el.querySelector('input, select')`
-- `input.select()` guarded: only called when `input.tagName === 'INPUT'`
+### 6.4 Operator trust / diagnosability
 
-#### 4) Timeline Actual-First Alignment
-
-- `getMovementStartTime(m)`: ARR→`getATA||getETA`, OVR→`getACT||getECT`, DEP/LOC→`getATD||getETD` (was ETD-first)
-- `getMovementEndTime(m)`: ARR/LOC→`getATA||getETA`, DEP/OVR→`m.arrActual||m.arrPlanned`
-- Hover tooltip on timeline bars uses same start/end values (computed from `getMovementStartTime`/`getMovementEndTime`)
-
-#### Deliverables checklist
-
-- [x] `runwayMovementContribution`, `isOverflight` exported from `datamodel.js`
-- [x] `inlineEditIdleMs: 120000` in `defaultConfig`
-- [x] `calculateDailyStats()` uses runway movement equivalents; OVR separate
-- [x] `statOvrToday` element in `index.html`; `updateDailyStats()` updates it
-- [x] `_startInlineSession`/`_endInlineSession` wired into `startInlineEdit()`
-- [x] Idle timeout cancels (not commits) via `cancelEdit()`
-- [x] WTC `<select>` dropdown; `isValidWtcChar` validation removed from save path
-- [x] Timeline actual-first: `getMovementStartTime`, `getMovementEndTime` updated
-- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
-- [x] `docs/STRIP_LIFECYCLE_AND_COUNTERS.md` updated
-- [x] `STATE.md` updated
-
-#### NO-DRIFT confirmation
-
-- No changes to movement data model, formation semantics, or persistence model
-- Modal invariants preserved: no direct `modalRoot.innerHTML =` in modified code
-- Counter ◄/► buttons unchanged; inline-edit of counters is additive
-- `renderLiveBoard()` / `renderTimeline()` call chain unchanged
-- All existing test suites unaffected
+* partially improved by the Sprint 8 integrity banner
+* still room for future actionability improvements (for example direct navigation from banner entries to affected records)
 
 ---
 
-### 4.13 Sprint: New Strip WTC select + EU Registration Normaliser
+## 7) Manual verification philosophy
 
-**Branch:** `claude/fix-newstrip-wtc-and-eu-reg-normalize`
+Default acceptance model:
 
-#### Part 1 — New Strip modal WTC field (select + autofill + override)
+* Stuart performs manual smoke testing on Windows
+* Claude implements narrowly to ticket
+* ChatGPT maintains scope discipline, acceptance criteria, and ledger quality
 
-- `<input id="newWtcDisplay" disabled>` replaced with `<select id="newWtc" class="modal-input">` in the modal HTML template
-- WTC select options populated from `_WTC_OPTIONS[getConfig().wtcSystem]` at modal open time via `setWtcOptions()` — uses current config (no caching)
-- `maybeAutofillWtc()` computes WTC via `getWTC(type, ft, sys)` → `extractLeadingToken()` → checks against current option set → auto-selects matching option
-- `wtcDirty` flag: set on user `change` event; prevents auto-fill from overwriting a manual selection
-- Autofill triggered by: modal open, `newType` input event, `newFlightType` change event, VKB programmatic type fill (explicit `maybeAutofillWtc()` call in VKB listener)
-- Save handler: `wtcManual || wtcComputed` — manual select wins; computed value used when select is blank
-- Callsign-lookup registration fill normalised: `normalizeEuCivilRegistration(registration)` applied before `regInput.value` is set
-
-#### Part 2 — EU civil registration normaliser
-
-- `EURO_HYPHEN_PREFIXES` constant (longest-first) + `normalizeEuCivilRegistration(raw)` added to `ui_liveboard.js` (before Inline Edit Helpers section)
-- Applies: uppercase + strip whitespace/punctuation → test for existing hyphen → insert hyphen after first matching prefix (suffix 2–6 alphanum chars) → fallback to plain uppercase
-- Wired into **New Strip modal**: blur normalises always; debounced (250 ms) input normalises only when adding a hyphen (cursor-friendly)
-- Wired into **inline edit saveEdit()**: `if (fieldName === 'registration') newValue = normalizeEuCivilRegistration(newValue)` before counter validation block
-- Examples: GBYUF → G-BYUF, EIFAT → EI-FAT, 2CYFR → 2-CYFR, M-GLOB → M-GLOB (unchanged)
-
-#### Deliverables checklist
-
-- [x] `<select id="newWtc">` in modal HTML
-- [x] `setWtcOptions()`, `maybeAutofillWtc()`, `wtcDirty` wired in `openNewFlightModal()`
-- [x] WTC save: manual override wins (`wtcManual || wtcComputed`)
-- [x] `EURO_HYPHEN_PREFIXES` + `normalizeEuCivilRegistration()` added
-- [x] New Strip reg: blur + debounced normalisation listeners
-- [x] Callsign-lookup programmatic reg fill normalised
-- [x] `saveEdit()` normalises registration on commit
-- [x] No `modalRoot.innerHTML =` assignments introduced (confirmed by grep)
-- [x] `STATE.md` updated
-
-#### NO-DRIFT confirmation
-
-- No changes to modal lifecycle, data model, daily stats, OVR separation, idle timeout, or timeline rules
-- Modal invariants preserved; no new document-level keydown listeners
-- Military serials intentionally ignored by normaliser (prefix list is EU-civil only)
-- All existing test suites unaffected
-
-### 4.14 Sprint: New LOC Modal WTC — editable select, autofill, wtcSystem-constrained
-
-**Branch:** `claude/fix-newloc-wtc-editable-QLjBR`
-
-#### Changes made (`src/js/ui_liveboard.js` only)
-
-- **HTML template**: `<input id="newLocWtcDisplay" disabled>` replaced with `<select id="newLocWtc" class="modal-input">` in `openNewLocFlightModal()` modal template
-- **WTC select wiring block** (replaces old `locWtcDisplay` / `updateLocWtcDisplay` block):
-  - `locWtcOpts()` — returns `_WTC_OPTIONS[getConfig().wtcSystem]` (defaults to ICAO set)
-  - `setLocWtcOptions()` — populates select with blank + system options at modal open
-  - `computeLocWtcFromCurrentForm()` — calls `getWTC(type, 'LOC', sys)` → `extractLeadingToken()`
-  - `maybeAutofillLocWtc()` — skips if `locWtcDirty && select.value` (user override wins); otherwise sets select to computed value if it is in the allowed set
-  - `locWtcDirty` flag — set on user `change` event; prevents autofill overwriting a manual selection
-  - Autofill triggered by: modal open, `newLocType` input event, VKB programmatic type fill (explicit `maybeAutofillLocWtc()` calls in both VKB lookup and fallback inference paths)
-- **Both save handlers** (`.js-save-loc` and `.js-save-complete-loc`):
-  - `wtcManual = document.getElementById("newLocWtc")?.value` — manual select wins
-  - `wtcComputed` — `getWTC(...)` result with leading-token extraction (same as New Strip)
-  - `wtcAllowed` Set built from `_WTC_OPTIONS[wtcSystem]`
-  - `wtc = wtcManual || wtcComputed`
-  - Defensive guard: if `wtc` non-empty and not in `wtcAllowed` → `showToast('Invalid WTC category', 'error'); return;`
-
-#### Invariants
-
-- No `modalRoot.innerHTML =` assignments introduced (confirmed by grep — only comments at lines 67, 2367)
-- Modal lifecycle hardening unchanged; `closeActiveModal()` call path unmodified
-- No changes to counters, daily stats, formation semantics, OVR separation, inline idle timeout, or timeline logic
-
-#### Deliverables checklist
-
-- [x] `<select id="newLocWtc">` in LOC modal HTML
-- [x] `locWtcOpts()`, `setLocWtcOptions()`, `computeLocWtcFromCurrentForm()`, `maybeAutofillLocWtc()`, `locWtcDirty` wired in `openNewLocFlightModal()`
-- [x] Autofill on modal open + `newLocType` input + VKB programmatic type fill (both paths)
-- [x] Save handler: `wtcManual || wtcComputed` with defensive `wtcAllowed` guard
-- [x] Save & Complete handler: same WTC block
-- [x] No `modalRoot.innerHTML =` live assignments introduced
-- [x] `STATE.md` updated
-
-#### NO-DRIFT confirmation
-
-- No changes to modal lifecycle, data model, daily stats, OVR separation, idle timeout, or timeline rules
-- All existing sprint test suites unaffected (only `openNewLocFlightModal` WTC wiring changed)
+Use automated harnesses when they materially reduce uncertainty or protect against regressions, but avoid unnecessary heavy test churn during normal incremental feature work.
 
 ---
 
-### 4.15 Sprint: Admin IA v1 — Two-pane Admin layout with dirty-state tracking
+## 8) Sprint ledger (chronological)
 
-**Base:** `main @ ca85d2d`  **Branch:** `claude/admin-ia-v1-THSv8`
+This is the refactored historical ledger. It is intended to be readable first and exhaustive second. The exact git history and PR history remain authoritative for file-level archaeology.
 
-#### Changes
+### 8.1 Sprint 1 — Integrity and schedule-consistency foundations
 
-**`src/index.html`**
-- Replaced the single-column Admin tab body with `<div class="admin-shell">` containing:
-  - `<nav class="admin-nav" id="adminNav">` — left sidebar with 9 named section buttons
-  - `<div class="admin-content" id="adminContent">` — right scrollable content pane
-- Sticky Save bar: `#adminSaveBar` (hidden by default), `#adminSaveStatus` pill, `#adminSaveBtn`, `#adminDiscardBtn`
-- **9 sections** (each a `<div class="admin-section [hidden]" id="admin-sec-*">`):
-  1. `admin-sec-status` — System Status + Diagnostics (no Save bar)
-  2. `admin-sec-session` — Backup to JSON only (no Save bar)
-  3. `admin-sec-offsets` — Flight Offsets table + Reciprocal Strip Settings (Save bar shown)
-  4. `admin-sec-autoactivate` — Auto-Activation per flight type (Save bar shown)
-  5. `admin-sec-timezone` — Timezone offset + Banner Local Time + Alert Tooltips (Save bar shown)
-  6. `admin-sec-wtc` — Wake Turbulence system + threshold (Save bar shown)
-  7. `admin-sec-history` — History Settings + Day View / Timeline Settings (Save bar shown)
-  8. `admin-sec-profiles` — Booking Profiles (immediate save — no Save bar)
-  9. `admin-sec-danger` — Danger Zone: Restore from JSON + Reset to Demo Data (no Save bar)
-- **All input IDs unchanged** — no regression to existing JS consumers
-- Removed `#btnSaveConfig` (replaced by sticky Save bar)
-- Moved "Restore from JSON" button + `#importFileInput` from Session section to Danger Zone
-- Added `#btnResetToDemo` button in Danger Zone
+**Outcome:** complete
 
-**`src/css/vectair.css`**
-- Added Admin layout styles: `.admin-shell`, `.admin-nav`, `.admin-nav-btn`, `.admin-nav-btn--danger`, `.admin-content`
-- Added `.admin-section` / `.admin-section.hidden` visibility rules
-- Added `.admin-save-bar`, `.admin-save-status--dirty`, `.admin-save-status--clean`
-- Added `.admin-danger-zone` (red-accented panel)
-- Added `.btn-danger` (red button variant)
+Delivered:
 
-**`src/js/app.js`**
-- Added `resetMovementsToDemo` to datamodel.js imports
-- Added `adminConfirm(message, onConfirm)` — lightweight inline confirmation dialog
-- Replaced `initAdminPanelHandlers()` body with:
-  - **Section navigation**: sidebar `.admin-nav-btn` clicks → toggle section visibility + Save bar visibility
-  - **Export handler**: unchanged — `#btnExportSession` → export JSON
-  - **Restore handler** (Danger Zone): `#btnImportSession` → `adminConfirm()` → `fileInput.click()` → import
-  - **Reset handler** (Danger Zone): `#btnResetToDemo` → `adminConfirm()` → `resetMovementsToDemo()` → re-render
-  - **Config load**: identical to previous — all config values loaded into inputs on init
-  - **Dirty-state tracking**: `takeSnapshot()` / `applySnapshot()` / `isDirty()` / `checkDirty()` functions; `change`/`input` event listeners on all tracked inputs; Save bar buttons enabled/disabled accordingly
-  - **`saveAdminConfig()`**: extracted from old `btnSaveConfig` handler; re-takes snapshot after save → resets dirty state
-  - **Discard**: `applySnapshot(_configSnapshot)` restores inputs to last-saved values
+* `bookingSync.reconcileLinks()` made bidirectional and deterministic
+* booking create/edit flows always populate canonical `schedule.plannedTimeLocalHHMM` and `schedule.plannedTimeKind`
+* no-op booking patch behaviour added to reduce redundant write/dispatch churn
 
-#### Invariants maintained
-- No config key IDs renamed
-- No changes to Live Board, timeline, booking sync, WTC logic, inline edit, or modal lifecycle
-- Booking Profiles (`#admin-sec-profiles`) behaviour unchanged — direct save via `initBookingProfilesAdmin()`
-- `initAdminPanel()` stub in `ui_liveboard.js` untouched
+Significance:
 
-#### Manual verification checklist
-- [ ] Admin tab shows 2-pane layout: sidebar on left, content on right
-- [ ] Clicking each of 9 sidebar buttons shows the correct section
-- [ ] Save bar is visible only on sections 3–7 (Offsets, Auto-Activation, Timezone, WTC, History)
-- [ ] Save bar starts with "All changes saved" and disabled buttons
-- [ ] Changing any config input shows "Unsaved changes" and enables Save/Discard
-- [ ] Save button persists config and resets Save bar to clean state
-- [ ] Discard button restores inputs to last-saved state
-- [ ] "Backup to JSON" in Session section works as before
-- [ ] "Restore from JSON" in Danger Zone shows confirmation dialog before proceeding
-- [ ] "Reset to Demo Data" in Danger Zone shows confirmation dialog before proceeding
-- [ ] Booking Profiles section unaffected
+* established the modern booking/strip integrity model
+* removed a major source of silent state drift
 
----
+### 8.2 Hotfix / follow-on stabilization — Admin panel init failure
 
-### 4.16 Sprint: Admin IA v1.1 — Microcopy, units, restore preflight
+**Outcome:** closed
 
-**Base:** `claude/admin-ia-v1-THSv7`  **Branch:** `claude/admin-ia-v1_1-THSv7`
+Delivered:
 
-#### Ticket A — Section microcopy + explicit units (`src/index.html`)
+* admin initialization failure corrected
+* later considered covered by wider stability verification
 
-- **Section 1 (System Status)**: page-subtitle updated → "Status and high-level diagnostics for this local FDMS instance."
-- **Section 2 (Session)**: description updated → "Backup local FDMS data … Restore is in Danger Zone section."
-- **Section 3 (Flight Offsets)**: added two description lines: what it affects + UTC storage note + "Changes require Save"; every minute-valued input (7 in table + 2 reciprocal strip) now shows an adjacent `min` label.
-- **Section 4 (Auto-Activation)**: description updated → "Controls automatic PLANNED → ACTIVE transitions … Changes require Save." (row labels already carried "min before …")
-- **Section 5 (Timezone & Display)**: added description → "Affects local time display … UTC internally. Changes require Save."
-- **Section 6 (Wake Turbulence)**: added description → "Sets WTC model and alert threshold … does not affect stored WTC values. Changes require Save."
-- **Section 7 (History)**: updated description → "Controls which alert categories appear … Changes require Save."
-- **Section 7 (Timeline)**: updated description → "Configures time range and visibility … Start/end in UTC. Changes require Save."
-- **Section 8 (Booking Profiles)**: added green note → "Changes here save immediately — not part of Save / Discard workflow."
-- **Section 9 (Danger Zone)**: updated overall description + reset description to state configuration is NOT overwritten; restore description notes a summary will be shown.
+### 8.3 Sprint 2 — Live Board integrity + stats correctness
 
-All input IDs unchanged.
+**Outcome:** complete and previously verified
 
-#### Ticket B — Restore preflight summary (`src/js/app.js`)
+Delivered:
 
-- **`adminConfirm()`** extended: new optional params `detailsHtml` (string, pre-sanitised) and `confirmEnabled` (boolean, default true). Main message set via `.textContent` (XSS-safe). Details HTML injected into separate div. Confirm button disabled via HTML attribute when `confirmEnabled=false`.
-- **Restore flow refactored**: button click → file picker opened directly (no pre-confirm). File selection → `FileReader.onload` → client-side JSON parse → build summary HTML (filename, movements count, booking profiles count, bookings count, config presence) → `adminConfirm(message, onConfirm, summaryHtml, true)`.
-- **Invalid JSON path**: parse error → summary shows error text with red styling → `adminConfirm(…, summaryHtml, false)` → Confirm button disabled.
-- Restore implementation (`importSessionJSON` call + re-render) unchanged.
+* fixed inline-edit data loss caused by wrong/non-canonical time field usage
+* fixed blur/Enter double-save race behaviour
+* added required-field validation in inline edit
+* ensured inline edit triggers booking sync and counter refreshes where required
+* added hard delete for strips, distinct from cancel
+* corrected traffic counter logic and verified status/counter semantics
 
-#### Ticket C — Reset-to-Demo copy clarity (`src/js/app.js`)
+Significance:
 
-- Reset confirmation text updated from vague "All your data will be permanently lost" to: "This will replace all current movement strips with the built-in demo seed data. Configuration settings (offsets, timezone, etc.) are not affected. This cannot be undone." — matches actual `resetMovementsToDemo()` behaviour.
+* removed a release-blocking data integrity fault
+* stabilized core strip editing behaviour
 
-#### Invariants maintained
-- No config keys, IDs, or persistence mechanics changed
-- No Live Board / timeline / booking sync / modal lifecycle changes
-- `importSessionJSON` and `resetMovementsToDemo` implementations untouched
+### 8.4 Sprint 3 — Event storm safety audit + documentation hardening
 
-#### Manual verification checklist
-- [ ] Every Admin section has a visible description line
-- [ ] Offset table inputs show "min" suffix; auto-activate rows already had "min before …"
-- [ ] Timeline labels read "Start Hour (UTC)" / "End Hour (UTC)"
-- [ ] Booking Profiles shows green "saves immediately" note
-- [ ] Changing an offset → dirty state triggers → Save works (no regression)
-- [ ] Restore from JSON: click button → file picker opens → select valid file → confirm dialog shows filename + counts → cancel → no change
-- [ ] Restore from JSON: confirm → import proceeds → success toast
-- [ ] Restore from JSON: select invalid/non-JSON file → dialog shows error, Confirm disabled
-- [ ] Reset to Demo: confirmation explicitly names what is/is not overwritten; cancel works
+**Outcome:** complete and previously verified
 
----
+Delivered:
 
-### 4.17 Sprint: Admin IA v1.2 — Backup envelope, timestamped filenames, restore format detection
+* diagnostics-gated instrumentation for render/dispatch counting
+* stress audit across rapid edits, status transitions, booking-linked flows, and delete/cancel flows
+* documentation hardening for strip lifecycle and counter semantics
 
-**Base:** `claude/admin-ia-v1_1-THSv7`  **Branch:** `claude/admin-ia-v1_2-THSv7`
+Significance:
 
-#### Ticket A — Backup metadata envelope + timestamped filename (`src/js/app.js`, `src/index.html`)
+* established confidence that event-driven flows were not causing runaway renders or loops
 
-- **Export handler** wraps `exportSessionJSON()` output in a metadata envelope before download:
-  ```json
-  { "fdmsBackup": { "schemaVersion": 1, "createdAtUtc": "...", "createdBy": {...}, "counts": {...} }, "payload": <rawData> }
-  ```
-  - `counts` mirrors `rawData.movements.length`, `rawData.bookings.length`, `rawData.bookingProfiles.length` (0 if absent).
-  - `createdBy`: `{ app: "Vectair FDMS Lite", gitCommit: "unknown", host: "local" }`.
-- **Timestamped filename**: `fdms_backup_YYYYMMDD_HHMMZ.json` (UTC, zero-padded).
-- **Session section copy** (`src/index.html`): updated to note backups include metadata (timestamp, counts); restore note points to Danger Zone.
+### 8.5 Sprint 4 — Formations v1 end-to-end
 
-#### Ticket B — Restore preflight: format detection + metadata display (`src/js/app.js`)
+**Outcome:** complete
 
-- **Three-way format detection** in `fileInput.change` handler:
-  - `envelope`: `parsed.fdmsBackup && parsed.payload` → `dataForImport = parsed.payload`; `meta = parsed.fdmsBackup`.
-  - `v1`: bare array → `dataForImport = parsed`; no meta.
-  - `v2`: `{ version: number, movements: array }` → `dataForImport = parsed`; no meta.
-  - `unrecognized`: confirm blocked; error banner shown.
-- **Preflight summary** shows: filename, createdAt UTC (formatted), schema version label, movements/bookings/profiles counts, config presence.
-- **Non-blocking warning banners** (amber) for: legacy format (v0), future schema version (>1), zero-movement backup.
-- **Blocked confirm** (red banner) for: invalid JSON, unrecognized structure.
-- **Toast** on success: `Restore applied from "${file.name}" — ${result.count} movements loaded`.
-- `importSessionJSON` and all re-render calls unchanged.
+Delivered:
 
-#### Invariants maintained
-- No config keys, IDs, or persistence mechanics changed
-- No Live Board / timeline / booking sync / modal lifecycle changes
-- `importSessionJSON` implementation untouched; legacy payloads passed directly
+* user-facing creation/edit/removal of `movement.formation`
+* Live Board formation badge `F×n`
+* expanded formation details panel with per-element editing
+* WTC current/max semantics implemented
+* duplicate flows inherit formation with safe reset of element operational state
+* regression coverage added during implementation
 
-#### Manual verification checklist
-- [ ] Export: click Backup → file named `fdms_backup_YYYYMMDD_HHMMZ.json` downloads
-- [ ] Export: open file — top-level keys are `fdmsBackup` and `payload`; `fdmsBackup.counts` matches movement/booking counts
-- [ ] Restore new envelope: select backup file → preflight shows filename, createdAt, schema "v1 (current)", counts, config → confirm → data loads
-- [ ] Restore legacy v2: select old `{ version, movements }` file → preflight shows amber "Legacy backup format" warning; no createdAt or schema shown → confirm → data loads
-- [ ] Restore legacy v1: select bare-array file → same amber warning → confirm → data loads
-- [ ] Restore invalid JSON: confirm button disabled; red error banner shown
-- [ ] Restore unrecognized structure (e.g. `{}`): confirm button disabled; "Unrecognized file structure" red banner shown
-- [ ] Zero-movement backup: amber "contains 0 movements" warning; confirm still enabled
+Significance:
 
----
+* formation support became a real end-to-end feature rather than a data stub
 
-### 4.18 Sprint: OVR timing labels / Flight Duration override / Abbrev two-level alerting
+### 8.6 Sprint 5 — Formations v1.1
 
-**Base:** `main` (post Active-Save + UTC toggle)
-**Branch:** `claude/timings-ovr-labels-offsets-duration-abbrev-alert`
+**Outcome:** complete
 
-#### A — OVR timing label rename (`src/js/ui_liveboard.js`)
+Delivered:
 
-- **New Flight modal** (OVR only): `ECT` → `EOFT`, `ACT` → `AOFT`, `ETA` (disabled) → `ELFT`, `ATA` (disabled) → `ALFT`.
-- **Edit modal** (`openEditMovementModal`): `etdLabel`/`atdLabel`/`etaLabel`/`ataLabel` now conditional on `flightType === "OVR"` with same mapping.
-- **Duplicate modal** (`openDuplicateMovementModal`): `renderTimesGrid` call updated with OVR-conditional labels and `etaDisabled`/`ataDisabled` flags.
-- No field mapping or storage changes. Label-text only.
-- No other flight types (DEP/ARR/LOC) affected.
+* per-element depAd / arrAd
+* editable element callsigns
+* formation validation hardening
+* count guardrails
+* master-status cascade semantics
+* inheritance improvements
 
-#### B — Flight Duration admin field + active-strip actual-time guard (`src/js/datamodel.js`, `src/index.html`, `src/js/app.js`, `src/js/ui_liveboard.js`)
+Significance:
 
-- **`defaultConfig`**: added `flightDurationMinutes: null` (optional global DEP/ARR timeline projection override).
-- **Admin → Flight Offsets**: new `configFlightDuration` number input (blank = use per-type defaults; set = override DEP+ARR timeline projection).
-- **`app.js`**: element binding + `VALUE_IDS` tracking + load/save wired; blank input saves `null`, set saves integer.
-- **`getDefaultFlightDuration()`**: if `cfg.flightDurationMinutes` is set, returns it for DEP and ARR; LOC and OVR unaffected.
-- **Strip display (ACTIVE guard)**: for `ACTIVE` strips, `depDisplay`/`arrDisplay` now only show confirmed actual times (`getATD`/`getATA`/`getACT`). If no actual is recorded, displays `"-"` rather than the planned/offset-derived value. PLANNED strips retain the existing `ATD || ETD` / `ATA || ETA` fallback.
+* matured formation handling from baseline feature into a more operationally usable subsystem
 
-#### C — Abbrev two-level alerting (`src/js/ui_liveboard.js`, `src/css/vectair.css`)
+### 8.7 P0 / modal-inline-edit integrity hardening
 
-**New types:**
-- `callsign_collision_reg` (`severity: 'critical'`): ≥2 ACTIVE movements sharing registration abbreviation key — "Abbreviated callsign collision".
-- `callsign_collision_ua` (`severity: 'critical'`): same for UAS abbreviation pattern.
+**Outcome:** complete
 
-**Existing types updated:**
-- `callsign_confusion_reg` (`severity: 'warning'`): emitted only when RED condition is NOT met and ≥2 movements with overlapping predicted ACTIVE windows share an abbreviation key — "Potential abbreviated callsign overlap".
-- `callsign_confusion_ua`: same logic for UAS.
-- `callsign_confusion_contraction`: unchanged; single-strip VKB guardrail.
+Delivered:
 
-**Window computation** (`getMovementWindow` helper in `generateMovementAlerts`):
-- `startPotential`: `depActual` → `depPlanned` → null.
-- `endPotential`: `arrActual` → `arrPlanned` → `start + getDefaultFlightDuration(ft)`.
-- Overnight wrap handled.
+* `closeActiveModal()` introduced as required lifecycle primitive
+* modal open/close paths normalized to use lifecycle helpers
+* `_modalOpen` / diagnostics invariant checks added
+* inline-edit propagation/save interactions hardened
+* save path made more transactional
+* local storage guard added against corrupt/non-array movement state
 
-**Strip callsign class**: three-way — `callsign-collision` (RED, new) → `callsign-confusion` (YELLOW, existing) → none.
+Significance:
 
-**CSS**: `callsign-confusion` underline colour changed from red to amber (`#f57c00`) to distinguish from the new red collision indicator; new `.callsign-collision` rule (thicker red underline + subtle red background).
+* closed a class of modal/inline-edit interaction regressions
+* established engineering rules used by later sprints
 
-**History filter**: `callsign_collision_reg` and `callsign_collision_ua` included in `isCallsignAlert` guard.
+### 8.8 Sprint 6 — LOC WTC and LOC workflow hardening
 
-**Single-strip safety**: RED requires `m.status === 'ACTIVE' && activeConflicts.length > 0`; a single strip can never trigger RED.
+**Outcome:** complete
 
-#### Invariants maintained
-- Canonical time storage untouched (`depPlanned`/`depActual`/`arrPlanned`/`arrActual` as UTC HH:MM).
-- No actual fields computed into from estimates.
-- Counter/totals, booking sync, WTC, modal lifecycle, inline-edit, formation logic: untouched.
+Delivered:
 
-#### Manual smoke checklist
-- [ ] OVR New modal → Planned section: labels show `EOFT` (dep) and `ELFT` (arr, disabled)
-- [ ] OVR New modal → Active section: labels show `AOFT` (dep) and `ALFT` (arr, disabled)
-- [ ] OVR Edit modal: same four labels as above; DEP/ARR/LOC unaffected (still ETD/ETA/ATD/ATA)
-- [ ] OVR Duplicate modal: same four labels; arrival fields disabled
-- [ ] Admin → Flight Offsets → "Flight Duration" field present; blank by default
-- [ ] Flight Duration blank: timeline bar width uses per-type default (60 min DEP/ARR)
-- [ ] Flight Duration set to 90: DEP and ARR timeline bars extend to start+90 min; LOC/OVR unaffected
-- [ ] ACTIVE strip with no ATD/ATA recorded: time column shows `- / -` (not planned time)
-- [ ] PLANNED strip: time column still shows planned times as before
-- [ ] Single ACTIVE OVR strip: no collision alert
-- [ ] Two strips with same reg abbrev, both ACTIVE → red `callsign-collision` highlight, "Abbreviated callsign collision" in Details
-- [ ] Two strips with same reg abbrev, one ACTIVE + one PLANNED with overlapping windows → yellow `callsign-confusion` highlight, "Potential abbreviated callsign overlap" in Details
-- [ ] When PLANNED becomes ACTIVE (collision condition): alert upgrades from yellow to red
-- [ ] When one of two conflicting ACTIVE strips is completed: red alert clears
+* LOC WTC selector and autofill wiring
+* LOC-specific save-path WTC validation
+* no drift to modal lifecycle or unrelated counters/totals logic
 
----
+Significance:
 
-### 4.19 Sprint: Per-type DEP/ARR durations, per-strip Duration field, contraction advisory removed
+* improved LOC operational completeness while preserving LOC-specific constraints
 
-**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit 23dce3f)
-**Branch:** `claude/durations-per-type-and-per-strip-no-global-advisory`
+### 8.9 Sprint 7 — LOC standard modal parity
 
-#### 1) Global "Flight Duration" override removed; per-type DEP/ARR Duration added
+**Outcome:** complete
 
-- **`datamodel.js`**: removed `flightDurationMinutes: null` from `defaultConfig`. `depFlightDurationMinutes` (60) and `arrFlightDurationMinutes` (60) retained.
-- **`index.html`** (Admin → Flight Offsets): removed "Flight Duration" global row (`configFlightDuration`); added "DEP Duration" (`configDepDuration`) and "ARR Duration" (`configArrDuration`) rows, matching the existing LOC/OVR duration row pattern.
-- **`app.js`**: variable bindings, `VALUE_IDS` dirty-state tracking, load, validation, and `updateConfig` updated — `depFlightDurationMinutes` / `arrFlightDurationMinutes` are now admin-settable.
-- **`ui_liveboard.js`** `getDefaultFlightDuration()`: global override block removed; function now reads `cfg.depFlightDurationMinutes` / `cfg.arrFlightDurationMinutes` directly (these already existed; now properly saved from admin).
+Delivered:
 
-#### 2) OVR Activate removed from Flight Offsets
+* replaced bespoke LOC create modal with standard movement modal structure
+* preserved LOC locks for flight type and EGOW departure/arrival
+* aligned layout and user flow with DEP/ARR/OVR modal structure
+* retained current LOC timing semantics where intentionally distinct
 
-- **`index.html`**: "OVR Activate" row removed from Flight Offsets table. Auto-Activation page remains the sole control for OVR activation lead time.
-- **`app.js`**: `configOvrAutoActivate` variable, `VALUE_IDS` entry, load line, validation clause, and `ovrAutoActivateMinutes` save entry removed from Flight Offsets admin handler. `ovrAutoActivateMinutes` remains in `defaultConfig` as a legacy key; Auto-Activation section (`configAutoActivateOvrMinutes`) is unaffected.
+Significance:
 
-#### 3) Per-strip Duration field in New modals
+* removed a UI outlier and improved consistency without flattening LOC-specific rules
 
-- **New DEP/ARR/OVR modal**: `<input id="newDuration">` added to Times section (below the last time field). `placeholder="default"`, labelled "min (timeline only)".
-- **New LOC modal**: `<input id="newLocDuration">` added to Times section identically.
-- **Save handlers** (both `js-save-flight` and `js-save-complete-flight` for DEP/ARR/OVR; `js-save-loc` for LOC): read the input and store `movement.durationMinutes` (null if blank or ≤0).
-- **`getMovementWindow()`** (abbrev overlap prediction): uses `mov.durationMinutes || getDefaultFlightDuration(movFt)` for projected end time.
-- **`renderTimelineTracks()`** (timeline bar): uses `m.durationMinutes || getDefaultFlightDuration(ft)` when no end time is stored (replaces the former hardcoded 60-min fallback).
+### 8.10 Admin IA v1 — two-pane Admin layout with dirty-state tracking
 
-#### 4) Contraction advisory removed
+**Outcome:** complete
 
-- `callsign_confusion_contraction` alert is no longer computed, pushed, or checked:
-  - Block removed from `generateMovementAlerts()` (was "Guardrail: check if abbreviation key collides with known VKB contractions").
-  - `callsign_confusion_contraction` removed from `isCallsignAlert` filter guard (history view).
-  - `callsign_confusion_contraction` removed from `hasCallsignConfusion` check (strip callsign class).
-- Yellow/red overlap and collision alerts (`callsign_confusion_reg`, `callsign_collision_reg`, `callsign_confusion_ua`, `callsign_collision_ua`) are fully preserved.
+Delivered:
 
-#### Invariants maintained
-- Canonical UTC HH:MM time storage untouched.
-- `durationMinutes` is never written to actual time fields.
-- Active-strip actual guard unchanged.
-- Counter/totals, booking sync, WTC, modal lifecycle, formations: untouched.
-- Edit/Duplicate modals unchanged.
+* two-pane admin shell
+* section navigation
+* sticky save bar with dirty-state awareness
+* clearer separation of save-managed vs immediate-save admin areas
+* danger-zone restructuring
 
-#### Manual smoke checklist
-- [ ] Admin → Flight Offsets: DEP Duration and ARR Duration present; "Flight Duration" global row gone; "OVR Activate" row gone
-- [ ] Admin → Auto-Activation: OVR activation control still present and functional
-- [ ] New DEP modal → Times: "Duration" field visible; blank = uses admin DEP Duration default
-- [ ] New ARR modal → Times: "Duration" field visible; blank = uses admin ARR Duration default
-- [ ] New LOC modal → Times: "Duration" field visible; blank = uses LOC Duration default
-- [ ] New OVR modal → Times: "Duration" field visible; blank = uses OVR Duration default
-- [ ] New movement with Duration=90 → timeline bar extends 90 min from start
-- [ ] New movement with Duration blank → timeline bar extends per admin default
-- [ ] Single strip with registration-as-callsign: NO "matches a known callsign contraction" advisory
-- [ ] Yellow/red overlap and collision alerts still trigger correctly with two conflicting strips
+Significance:
+
+* admin moved from an unstructured page into a maintainable control surface
+
+### 8.11 Admin IA v1.1 — copy clarity / restore preflight improvements
+
+**Outcome:** complete
+
+Delivered:
+
+* improved descriptive copy across admin sections
+* clarified which areas save immediately
+* restore preflight summary before import
+* clearer reset-to-demo wording matching real behaviour
+
+### 8.12 Admin IA v1.2 — backup envelope / timestamped filenames / restore format detection
+
+**Outcome:** complete
+
+Delivered:
+
+* metadata envelope for backup export
+* timestamped filenames
+* restore preflight format detection across current and legacy shapes
+* warning/blocking paths for invalid/unrecognized payloads
+
+Significance:
+
+* backup/restore behaviour became more trustworthy and auditable
+
+### 8.13 Timings / duration / warning-severity sprint
+
+**Outcome:** complete
+
+Delivered:
+
+* OVR timing label corrections
+* Flight Duration override behaviour
+* two-level abbreviation warning severity
+* per-type DEP/ARR duration support in Admin
+* per-strip Duration field in create/edit/duplicate flows
+* duration ↔ planned-end bidirectional sync
+* timing grid parity and deterministic tab order across movement forms
+
+Significance:
+
+* timing behaviour is now much more coherent and operator-friendly across the entire strip lifecycle
+
+### 8.14 Sprint 8 — Booking/Strip reconciliation summary surfaced to operator
+
+**Outcome:** complete
+
+Delivered:
+
+* `bookingSync.reconcileLinks()` output enriched with `conflictList` for reporting
+* `app.js` captures reconciliation return value as `reconcileSummary`
+* `showReconcileBanner(reconcileSummary)` invoked after initial render
+* banner mounts between `nav.nav-bar` and `main.page-body`
+* no-op when issue count is zero
+* info/blue presentation for clear/repair-only cases
+* warning/amber presentation when conflicts exist
+* summary line reports total issue count
+* details toggle reveals counts and conflict list
+* conflict list capped to first 10 with overflow indicator
+* dismiss button removes banner for current session until reload
+* supporting CSS added for banner variants, detail panel, fade-in, and overflow styles
+
+**Important scope note:**
+`reconcileLinks()` reporting shape was extended, but reconciliation policy/resolution logic was not changed.
+
+Significance:
+
+* reconciliation is now auditable in the UI rather than silently happening at bootstrap
+* operators can see when automatic integrity repair/clear actions have occurred
 
 ---
 
-## 5) Operating Procedure (Manager–Worker)
+## 9) Current status summary
 
-### 5.1 Before any new task ticket
-- QA Lead (ChatGPT) reviews the latest `STATE.md` and frames the ticket in terms of:
-  - invariants
-  - acceptance criteria
-  - evidence requirements
+### 9.1 What is true now
 
-### 5.2 Requirements for Claude on every ticket
-At end of work session, Claude must:
-1) Update this `STATE.md`:
-   - Mark newly completed items
-   - Add/adjust technical debt entries
-   - Set the next sprint objective
-2) Provide an **Audit Summary + Evidence Pack** (file/function/selector level).
+As of 2026-03-10:
 
-### 5.3 Source of truth rule
-If a Claude summary conflicts with repository contents, the repo (zip/diff) wins; `STATE.md` must be corrected accordingly.
+* FDMS Lite remains on the approved desktop-local v1 path
+* Live Board, booking sync, admin, formations, timing/duration, and reconciliation surfacing are all landed
+* the project is in a more trustworthy and internally consistent state than the older ledger header implied
+* Sprint 8 is complete and should be treated as the latest completed sprint in future handovers unless superseded
 
----
+### 9.2 What the next architect/chat should assume
 
-### 4.20 Sprint: Edit modal Duration field, UTC/Local toggle policy for Edit, registration autofill fix
+Assume the following as baseline truths unless Stuart reports otherwise from manual testing:
 
-**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit d3ca0b9)
-**Branch:** `claude/edit-duration-toggle-policy-and-reg-autofill`
-
-#### 1) Duration (min) field in Edit modal
-
-- **`ui_liveboard.js`** `openEditMovementModal()` — Times section: added `<input id="editDuration">` (type=number, min=1, max=720, placeholder="default") after `renderTimesGrid()`, populated with `m.durationMinutes || ''`. Labelled "Duration / min (timeline only)".
-- **Save handler** (`js-save-edit`): reads `editDuration`, stores `durationMinutes` (null if blank or ≤0) in `updates` object passed to `updateMovement()`.
-- **"Save & Complete" handler** (`js-save-complete-edit`): same read/store pattern as Save handler.
-- `getMovementWindow()` and `renderTimelineTracks()` already respected `mov.durationMinutes` from sprint 2; no changes needed there.
-
-#### 2) UTC/Local toggle policy applied to Edit modal
-
-- **`ui_liveboard.js`** `openEditMovementModal()` — Times section: the always-visible "Times shown in:" toggle `<div>` is now guarded by `shouldShowNewFormTimeModeToggle()`, matching the New modal pattern.
-- **`bindTimeModeToggle()` call** for `editTimeModeToggle` is also guarded — only called when the toggle is rendered (prevents `getElementById` returning null on hidden elements).
-
-#### 3) Registration autofill fix — `change` + `blur` events, named handlers
-
-- **New DEP/ARR/OVR modal** (`openNewFlightModal`): autofill callback extracted to named function `applyNewRegAutofill`; `"change"` and `"blur"` listeners added alongside existing `"input"`.
-- **New LOC modal** (`openNewLocModal`): autofill callback extracted to `applyLocRegAutofill`; `"change"` and `"blur"` listeners added.
-- **Edit modal** (`openEditMovementModal`): autofill callback extracted to `applyRegAutofill`; `"change"` and `"blur"` listeners added.
-- Dataset readiness is handled inside `lookupRegistration()` via the `!vkbData.loaded` guard — no additional changes required.
-- No stale-async risk: all autofill paths are synchronous VKB lookups, not async.
-
-#### Invariants maintained
-- Canonical UTC HH:MM time storage untouched.
-- `durationMinutes` never written to actual time fields (depActual/arrActual).
-- Active-strip actual guard unchanged.
-- Counter/totals, booking sync, WTC, modal lifecycle, formations: untouched.
-- New/Duplicate modal Duration fields and their save handlers unchanged.
-
-#### Manual smoke checklist
-- [ ] Edit DEP/ARR/LOC/OVR strip → Times section: "Duration" field visible, pre-filled if `durationMinutes` set
-- [ ] Edit strip, set Duration=45, Save → timeline bar now extends 45 min from start time
-- [ ] Edit strip, clear Duration, Save → timeline uses admin per-type default again
-- [ ] Admin config `newFormUtcLocalTogglePolicy=hide` → "Times shown in:" toggle absent from Edit modal
-- [ ] Admin config `newFormUtcLocalTogglePolicy=show` → toggle visible in Edit modal
-- [ ] Type registration into Edit modal (partial or full), press Tab → aircraft type auto-fills
-- [ ] Type registration into Edit modal from dropdown selection (change event) → aircraft type auto-fills
-- [ ] Type registration that isn't in VKB → `inferTypeFromReg` fallback still applies
+* timing/duration sprint is landed
+* reconciliation banner sprint is landed
+* reconciliation is visible, not silent
+* booking/strip integrity policy is stable and should not be reworked casually
+* any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
 ---
 
-### 4.21 Sprint: Normalize Times grid layout + tab order across all modals/types (DEP/ARR/LOC/OVR)
+## 10) Guidance for future ledger maintenance
 
-**Base:** `claude/timings-overrides-duration-abbrev-9Pl9R` (commit c1f7486)
-**Branch:** `claude/normalize-times-grid-all-modals-all-types`
+When updating this file after each sprint:
 
-#### Changes
+1. update the top `Last updated` line
+2. update the `Latest completed sprint` label
+3. append a new sprint entry under Section 8 rather than rewriting history informally
+4. state clearly whether behaviour changed, or only reporting/UX changed
+5. record NO-DRIFT confirmations for high-risk subsystems when relevant
+6. keep parked backlog separate from active sprint work
 
-**`renderTimesGrid()` refactored** — now outputs 6 `modal-field` cells for a `modal-section-grid-3` wrapper:
-- Row 1: ETD/EOFT | Duration | ETA/ELFT
-- Row 2: ATD/AOFT | spacer   | ATA/ALFT
-- Adds `durationId` (required) and `durationVal` (optional) parameters.
-
-**All modals normalized to the locked layout:**
-
-Row 0: `modal-section-grid` (2-col) — DOF left | UTC/Local toggle right (policy-gated)
-Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA / ATD|spacer|ATA
-
-- **New DEP/ARR/OVR** and **New LOC**: planned/actual toggle fields use explicit `grid-column:1/3;grid-row:1` so Duration (col2/row1) stays stable when groups are toggled.
-- **Edit modal**: Duration cell moves into `renderTimesGrid()`; standalone Duration div removed.
-- **Duplicate modal**: DOF/toggle pair moved into 2-col row; toggle policy-gated; `dupDuration` field added via `renderTimesGrid()`; saved as `durationMinutes` in save handler; `bindTimeModeToggle` guarded.
-
-#### Invariants maintained
-- Canonical UTC HH:MM time storage untouched.
-- `durationMinutes` is never written to actual time fields.
-- Planned/actual toggle JS handlers and `data-timing-group` logic unchanged.
-- Active-strip actual guard, alert system, counters, booking sync, WTC: all untouched.
-
-#### Manual smoke checklist
-- [ ] New DEP: Times layout DOF/toggle row + ETD|Duration|ETA row
-- [ ] New DEP Actual mode: ATD|Duration|ATA; Duration stays in middle
-- [ ] New ARR: same layout as DEP
-- [ ] New OVR: EOFT|Duration|ELFT / AOFT|spacer|ALFT; ELFT/ALFT disabled
-- [ ] New LOC: ETD|Duration|ETA / ATD|spacer|ATA
-- [ ] Edit DEP: ETD|Duration|ETA / ATD|spacer|ATA; Duration pre-filled if set
-- [ ] Edit OVR: EOFT|Duration|ELFT / AOFT|spacer|ALFT; ELFT/ALFT disabled
-- [ ] Duplicate: DOF+toggle row, ETD|Duration|ETA / ATD|spacer|ATA; toggle hidden when policy=hide
-- [ ] Tab order (Edit DEP): DOF → ETD → Duration → ETA → ATD → ATA
-- [ ] Tab order (New DEP planned): DOF → ETD → Duration → ETA
-- [ ] No console errors on any modal open
-
----
-
-### 4.22 Sprint: Duration as true override for projection (not fallback)
-
-**Branch:** `claude/duration-override-projection-not-fallback`
-
-#### Problem
-`movement.durationMinutes` was only used when no ETA/ATA or arrPlanned/arrActual existed. When end-time fields were populated, they took precedence and Duration was silently ignored.
-
-#### Fix — two targeted changes in `ui_liveboard.js`
-
-**`getMovementWindow()` (~line 1754)** — overlap/alert window computation:
-- Old: `movDur` computed from `durationMinutes || default`; used only in `else` branch when no arrActual/arrPlanned.
-- New: if `mov.durationMinutes > 0`, set `endMin = startMin + mov.durationMinutes` immediately (before arrActual/arrPlanned check). Fall through to stored end times and then admin default only when `durationMinutes` is absent.
-
-**`renderTimelineTracks()` (~line 6268)** — timeline bar length:
-- Old: `endMinutes = timeToMinutes(endTimeStr)`; `durationMinutes` only applied if `endMinutes` was NaN.
-- New: if `m.durationMinutes > 0`, set `endMinutes = startMinutes + m.durationMinutes` before consulting `getMovementEndTime()`. Fallback chain (stored end time → admin default) runs only when `durationMinutes` is absent.
-- Also removed duplicate `!Number.isFinite(startMinutes)` guard.
-
-#### Invariants maintained
-- Canonical UTC HH:MM time storage untouched; Duration never writes ETA/ATA.
-- `getMovementStartTime()`, `getMovementEndTime()`, counter/totals, activation rules, booking sync, WTC: all untouched.
-
-#### Manual smoke checklist
-- [ ] New LOC, ETD=12:31, ETA=13:11, Duration=90 → Times column shows 12:31/13:11; timeline bar spans 12:31–14:01
-- [ ] Clear Duration on above strip → timeline reverts to ETA-based length (12:31–13:11)
-- [ ] New DEP with ETA set and Duration=60 → timeline bar is exactly 60 min from ETD regardless of ETA value
-- [ ] Strip with no ETA and no Duration → timeline uses admin per-type default length
-- [ ] Overlap alert window respects Duration override (two LOC strips overlap iff Duration-extended windows intersect)
-- [ ] No console errors
-
----
-
-### 4.23 Sprint: Fix Duration override for projection (timeline bar + overlap window + tooltip)
-
-**Branch:** `claude/fix-duration-override-for-projection`
-
-#### Changes — `ui_liveboard.js`
-
-`durationMinutes > 0` is now checked first in both `getMovementWindow()` and `renderTimelineTracks()`:
-- `endMin / endMinutes = start + durationMinutes` before any arrActual/arrPlanned or `getMovementEndTime()` lookup.
-- Stored end-time fields and admin per-type default only consulted when `durationMinutes` is absent.
-
-**Tooltip fix (`renderTimelineTracks()`):** `bar.title` now uses `minutesToTime(endMinutes)` instead of raw `endTimeStr`; previously the tooltip showed stored ETA/ATA even when Duration was overriding the bar length.
-
-#### Invariants maintained
-- Canonical UTC HH:MM storage untouched; Duration never writes ETA/ATA.
-- Counter/totals, activation rules, booking sync, WTC, modal layouts: unchanged.
-
-#### Manual smoke checklist
-- [ ] New LOC, ETD=12:31, ETA=13:11, Duration=45 → Times column 12:31/13:11; timeline bar ends at 13:16
-- [ ] Hover tooltip shows "12:31 - 13:16" (not 13:11)
-- [ ] Edit strip, clear Duration → bar and tooltip revert to ETA-based end (13:11)
-- [ ] OVR strip with EOFT set and Duration=30 → bar is 30 min from EOFT
-- [ ] No console errors
-
----
-
-### 4.24 Sprint: Bidirectional Duration ↔ planned-end sync in all modals
-
-**Branch:** `claude/sync-duration-and-planned-end-time`
-Verified on Windows (Chrome, 2026-03-10).
-
-#### New helper: `bindPlannedTimesSync(startId, endId, durationId)`
-
-Single shared function (added near `addMinutesToTime`, line ~902) that implements last-touched-wins bidirectional sync:
-
-- **Duration edited** → `end = minutesToTime(timeToMinutes(start) + dur)` — writes into end-time field.
-- **End-time edited** → `dur = endMin − startMin` (with overnight wrap) — writes into duration field.
-- **Start edited** → recomputes whichever side was last touched (`'duration'` | `'end'`).
-- **Either field cleared** → `_lastTouched` reset to null; start edits become no-ops until the user re-enters a value.
-- **`endEl.disabled`** (OVR ELFT): only Duration→end direction is bound; end→duration listener skipped.
-- Operates on whatever the inputs currently display (UTC or local); UTC conversion happens in the save handler.
-
-#### Call sites added (one per modal)
-
-| Modal | start | end | duration |
-|---|---|---|---|
-| New DEP/ARR/OVR | `newDepPlanned` | `newArrPlanned` | `newDuration` |
-| New LOC | `newLocStart` | `newLocEnd` | `newLocDuration` |
-| Edit | `editDepPlanned` | `editArrPlanned` | `editDuration` |
-| Duplicate | `dupDepPlanned` | `dupArrPlanned` | `dupDuration` |
-
-Each call is placed after `bindTimeModeToggle` / `bindNewFormTimingToggle` so inputs are already in the correct display mode before sync listeners activate.
-
-#### Invariants maintained
-- Canonical UTC HH:MM storage unchanged; actual time fields untouched.
-- Actual fields (ATD/ATA) have no sync listeners.
-- Counter/totals, activation rules, booking sync, WTC, timeline logic: unchanged.
-
-#### Manual smoke checklist
-- [ ] New LOC, ETD=09:40, Duration=60 → ETA auto-fills to 10:40
-- [ ] New LOC, ETD=09:40, ETA=10:20 → Duration auto-fills to 40
-- [ ] OVR, EOFT=10:00, Duration=5 → ELFT=10:05 (ELFT field is disabled, written by JS)
-- [ ] New DEP, enter ETD=08:00, Duration=90, then change ETD to 09:00 → ETA shifts to 10:30
-- [ ] New LOC, enter ETA=11:00 first (no ETD) → Duration stays blank, no error
-- [ ] Clear Duration field → ETA stays, no further updates on ETD change until Duration re-entered
-- [ ] Edit DEP strip, set Duration=45 → ETA updates; save → strip reopened with Duration=45 and updated ETA
-- [ ] Duplicate modal same behaviour as New
-- [ ] No console errors
-
----
+This file should remain readable by a fresh engineer or fresh chat session without needing to reconstruct hidden context from prior conversations.
