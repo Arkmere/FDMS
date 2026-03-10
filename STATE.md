@@ -1622,3 +1622,47 @@ Row 1–2: `modal-section-grid-3 modal-subgrid-gap` (3-col) — ETD|Duration|ETA
 - [ ] No console errors
 
 ---
+
+### 4.24 Sprint: Bidirectional Duration ↔ planned-end sync in all modals
+
+**Branch:** `claude/sync-duration-and-planned-end-time`
+
+#### New helper: `bindPlannedTimesSync(startId, endId, durationId)`
+
+Single shared function (added near `addMinutesToTime`, line ~902) that implements last-touched-wins bidirectional sync:
+
+- **Duration edited** → `end = minutesToTime(timeToMinutes(start) + dur)` — writes into end-time field.
+- **End-time edited** → `dur = endMin − startMin` (with overnight wrap) — writes into duration field.
+- **Start edited** → recomputes whichever side was last touched (`'duration'` | `'end'`).
+- **Either field cleared** → `_lastTouched` reset to null; start edits become no-ops until the user re-enters a value.
+- **`endEl.disabled`** (OVR ELFT): only Duration→end direction is bound; end→duration listener skipped.
+- Operates on whatever the inputs currently display (UTC or local); UTC conversion happens in the save handler.
+
+#### Call sites added (one per modal)
+
+| Modal | start | end | duration |
+|---|---|---|---|
+| New DEP/ARR/OVR | `newDepPlanned` | `newArrPlanned` | `newDuration` |
+| New LOC | `newLocStart` | `newLocEnd` | `newLocDuration` |
+| Edit | `editDepPlanned` | `editArrPlanned` | `editDuration` |
+| Duplicate | `dupDepPlanned` | `dupArrPlanned` | `dupDuration` |
+
+Each call is placed after `bindTimeModeToggle` / `bindNewFormTimingToggle` so inputs are already in the correct display mode before sync listeners activate.
+
+#### Invariants maintained
+- Canonical UTC HH:MM storage unchanged; actual time fields untouched.
+- Actual fields (ATD/ATA) have no sync listeners.
+- Counter/totals, activation rules, booking sync, WTC, timeline logic: unchanged.
+
+#### Manual smoke checklist
+- [ ] New LOC, ETD=09:40, Duration=60 → ETA auto-fills to 10:40
+- [ ] New LOC, ETD=09:40, ETA=10:20 → Duration auto-fills to 40
+- [ ] OVR, EOFT=10:00, Duration=5 → ELFT=10:05 (ELFT field is disabled, written by JS)
+- [ ] New DEP, enter ETD=08:00, Duration=90, then change ETD to 09:00 → ETA shifts to 10:30
+- [ ] New LOC, enter ETA=11:00 first (no ETD) → Duration stays blank, no error
+- [ ] Clear Duration field → ETA stays, no further updates on ETD change until Duration re-entered
+- [ ] Edit DEP strip, set Duration=45 → ETA updates; save → strip reopened with Duration=45 and updated ETA
+- [ ] Duplicate modal same behaviour as New
+- [ ] No console errors
+
+---
