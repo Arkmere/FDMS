@@ -1825,7 +1825,7 @@ tr.strip.ft-ovr > td {
   background: var(--ft-dep);
 }
 .timeline-movement-bar.ft-arr {
-  background: #8b8b8b; /* Grey for inbound/arrival movements */
+  background: var(--ft-arr);
 }
 .timeline-movement-bar.ft-ovr {
   background: var(--ft-ovr);
@@ -2965,15 +2965,24 @@ tr.strip.ft-ovr > td {
 .time-display-cell {
   white-space: nowrap;
 }
+/* Each time value (dep or arr) is inline-block so the label <span> can sit above it */
+.js-edit-dep-time,
+.js-edit-arr-time {
+  display: inline-block;
+  vertical-align: bottom;
+  text-align: center;
+  line-height: 1.2;
+}
 
 .time-label {
+  display: block;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   opacity: 0.65;
-  vertical-align: super;
-  margin-right: 1px;
+  line-height: 1.1;
+  margin-bottom: 1px;
   user-select: none;
 }
 

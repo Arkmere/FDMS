@@ -533,11 +533,11 @@ function advanceInlineEditor(movementId, currentFieldName, direction) {
  * @param {string} inputType - Type of input ('text', 'time')
  * @param {function} onSave - Callback after save (optional)
  */
-function enableInlineEdit(el, movementId, fieldName, inputType = 'text', onSave = null) {
+function enableInlineEdit(el, movementId, fieldName, inputType = 'text', onSave = null, tooltipText = null) {
   if (!el || el.dataset.inlineEditEnabled) return;
   el.dataset.inlineEditEnabled = 'true';
   el.style.cursor = 'pointer';
-  el.title = 'Double-click to edit';
+  el.title = tooltipText || 'Double-click to edit';
 
   el.addEventListener('dblclick', (e) => {
     e.stopPropagation();
@@ -738,6 +738,13 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     }
 
     onMovementUpdated(updatedMovement);
+
+    // Part E: For time field edits on ACTIVE strips, re-evaluate whether status
+    // should revert to PLANNED (if the new time is now outside the activate window).
+    const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(fieldName);
+    if (isTimeField) {
+      reEvaluateStatusAfterTimeChange(movementId);
+    }
 
     // Re-render — renderLiveBoard already calls renderTimeline at its end, but
     // renderTimelineTracks is also called explicitly so timeline always stays
@@ -2171,6 +2178,68 @@ function determineInitialStatus(flightType, dof, depPlanned, arrPlanned) {
 }
 
 /**
+ * Re-evaluate status after a time field change.
+ * If a movement is ACTIVE (no actual completion time recorded) and its primary planned
+ * time has been moved outside the auto-activate window, revert it to PLANNED.
+ * @param {number|string} movementId
+ * @returns {boolean} true if status was reverted
+ */
+function reEvaluateStatusAfterTimeChange(movementId) {
+  const movement = getMovements().find(m => String(m.id) === String(movementId));
+  if (!movement || movement.status !== 'ACTIVE') return false;
+
+  const ft = (movement.flightType || '').toUpperCase();
+
+  // Do not revert if actual completion is already recorded
+  if (ft === 'ARR' || ft === 'LOC') {
+    if (movement.arrActual && String(movement.arrActual).trim()) return false;
+  }
+  if (ft === 'DEP' || ft === 'LOC') {
+    if (movement.depActual && String(movement.depActual).trim()) return false;
+  }
+  if (ft === 'OVR') {
+    if (movement.depActual && String(movement.depActual).trim()) return false;
+  }
+
+  const config = getConfig();
+  const activationSettings = {
+    DEP: { enabled: config.autoActivateDepEnabled ?? false,
+           minutes: Math.min(config.autoActivateDepMinutes || 30, 120) },
+    ARR: { enabled: config.autoActivateArrEnabled ?? config.autoActivateEnabled ?? true,
+           minutes: Math.min(config.autoActivateArrMinutes || config.autoActivateMinutesBeforeEta || 30, 120) },
+    LOC: { enabled: config.autoActivateLocEnabled ?? false,
+           minutes: Math.min(config.autoActivateLocMinutes || 30, 120) },
+    OVR: { enabled: config.autoActivateOvrEnabled ?? config.autoActivateEnabled ?? true,
+           minutes: Math.min(config.autoActivateOvrMinutes || config.ovrAutoActivateMinutes || 30, 120) }
+  };
+
+  const settings = activationSettings[ft];
+  if (!settings || !settings.enabled) return false; // auto-activation is off for this type
+
+  // Get the primary planned time
+  let timeStr;
+  if (ft === 'DEP' || ft === 'LOC') timeStr = getETD(movement);
+  else if (ft === 'OVR') timeStr = getECT(movement);
+  else timeStr = getETA(movement);
+
+  if (!timeStr || !movement.dof) return false;
+
+  const timeParts = timeStr.split(':');
+  if (timeParts.length !== 2) return false;
+
+  const plannedDate = new Date(movement.dof + 'T00:00:00Z');
+  plannedDate.setUTCHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
+  const minutesUntil = Math.floor((plannedDate - new Date()) / (1000 * 60));
+
+  // Revert to PLANNED if more than (window + 5) minutes away — 5-min buffer avoids boundary flipping
+  if (minutesUntil > settings.minutes + 5) {
+    updateMovement(movement.id, { status: 'PLANNED' });
+    return true;
+  }
+  return false;
+}
+
+/**
  * Auto-activate PLANNED movements when they reach the configured time before their planned time
  * Supports all 4 flight types with individual enable/minutes config:
  * - DEP: Activates before ETD (useful for pre-departure checks)
@@ -2317,6 +2386,9 @@ export function renderLiveBoard() {
       } else {
         depDisplay = "-"; depLabel = "";
       }
+    } else if (ft === "ARR" && m.depActual && String(m.depActual).trim()) {
+      // ARR: show depActual (ATD from origin) when populated, even though getATD() returns null for ARR
+      depDisplay = String(m.depActual).trim(); depLabel = "ATD"; depIsActual = true;
     }
     if (ft === "ARR" || ft === "LOC") {
       const ata = getATA(m);
@@ -2357,6 +2429,8 @@ export function renderLiveBoard() {
     const alerts = generateMovementAlerts(m);
     const config = getConfig();
     const enableTooltips = config.enableAlertTooltips !== false;
+    const showLabels = config.showTimeLabelsOnStrip !== false;
+    const showEstimated = config.showEstimatedTimesOnStrip !== false;
 
     // Determine highlighting and tooltips based on alerts
     let overdueClass = '';
@@ -2437,17 +2511,26 @@ export function renderLiveBoard() {
       <td style="text-align: center;">
         <div class="cell-strong"><span class="js-edit-rules">${rulesDisplay}</span></div>
       </td>
-      <td${tooltipTitle}>
+      <td${tooltipTitle}>${(() => {
+        // Apply display toggles
+        const depShowTime = depIsActual ? depDisplay : (showEstimated ? depDisplay : '-');
+        const arrShowTime = arrIsActual ? arrDisplay : (showEstimated ? arrDisplay : '-');
+        const depLabelHtml = (showLabels && depLabel) ? `<span class="time-label">${depLabel}</span>` : '';
+        const arrLabelHtml = (showLabels && arrLabel) ? `<span class="time-label">${arrLabel}</span>` : '';
+        const depClass = depLabel ? (depIsActual ? ' time-actual' : ' time-estimated') : '';
+        const arrClass = arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : '';
+        const depSpan = `<span class="js-edit-dep-time${depClass}">${depLabelHtml}${escapeHtml(depShowTime)}</span>`;
+        const arrSpan = overdueClass
+          ? `<span class="js-edit-arr-time ${overdueClass}${arrClass}">${arrLabelHtml}${escapeHtml(arrShowTime)}</span>`
+          : `<span class="js-edit-arr-time${arrClass}">${arrLabelHtml}${escapeHtml(arrShowTime)}</span>`;
+        return `
         <div class="cell-strong time-display-cell">
-          <span class="js-edit-dep-time${depLabel ? (depIsActual ? ' time-actual' : ' time-estimated') : ''}">${depLabel ? `<span class="time-label">${depLabel}</span> ` : ''}${escapeHtml(depDisplay)}</span>
-          ${(depLabel || arrLabel) ? '' : ''}
+          ${depSpan}
           <span class="time-sep"> / </span>
-          ${overdueClass
-            ? `<span class="js-edit-arr-time ${overdueClass}${arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : ''}">${arrLabel ? `<span class="time-label">${arrLabel}</span> ` : ''}${escapeHtml(arrDisplay)}</span>`
-            : `<span class="js-edit-arr-time${arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : ''}">${arrLabel ? `<span class="time-label">${arrLabel}</span> ` : ''}${escapeHtml(arrDisplay)}</span>`
-          }
+          ${arrSpan}
         </div>
-        <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
+        <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>`;
+      })()}
       </td>
       <td style="text-align: center;">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
@@ -2647,38 +2730,114 @@ export function renderLiveBoard() {
       if (window.updateDailyStats) window.updateDailyStats();
     });
 
+    // Build field-specific tooltips for inline editable cells
+    const _tt = (() => {
+      const WTC_FULL = {
+        L: 'LIGHT', M: 'MEDIUM', H: 'HEAVY', J: 'SUPER',
+        S: 'SMALL', LM: 'LOWER MEDIUM', UM: 'UPPER MEDIUM',
+        A: 'SUPER HEAVY', B: 'UPPER HEAVY', C: 'LOWER HEAVY',
+        D: 'UPPER MEDIUM (RECAT)', E: 'LOWER MEDIUM (RECAT)', F: 'LIGHT (RECAT)'
+      };
+      const RULES_FULL = {
+        VFR: 'VFR – Visual Flight Rules', IFR: 'IFR – Instrument Flight Rules',
+        SVFR: 'SVFR – Special VFR', Y: 'Y – IFR departing, changing to VFR',
+        Z: 'Z – VFR departing, changing to IFR'
+      };
+      const unitInfo = (() => {
+        const unit = lookupUnitFromCallsign(m.callsignCode || '', m.type || '');
+        const op   = lookupOperatorFromCallsign(m.callsignCode || '', m.type || '');
+        return [unit, op].filter(v => v && v !== '-').join(' / ');
+      })();
+      const regOp = (() => {
+        const regData = lookupRegistration(m.registration || '');
+        return regData ? (regData['OPERATOR'] || '').trim() : '';
+      })();
+      const typeName = (() => {
+        if (m.type === 'ZZZZ' && m.aircraftTypeText) return m.aircraftTypeText;
+        const td = lookupAircraftType(m.type || '');
+        return td ? ((td['Common Name'] || td['Model'] || '')).trim() : '';
+      })();
+      const wtcCat = (() => {
+        const raw = (m.wtc || '').toUpperCase().match(/^([A-Z]+)/);
+        return raw ? raw[1] : '';
+      })();
+      const depAdName = m.depAd === 'ZZZZ' && m.depAdText ? `${m.depAdText} (ZZZZ)` : getLocationName(m.depAd || '');
+      const arrAdName = m.arrAd === 'ZZZZ' && m.arrAdText ? `${m.arrAdText} (ZZZZ)` : getLocationName(m.arrAd || '');
+      const suffix = ' – Double-click to edit';
+      return {
+        callsignCode: (unitInfo ? unitInfo + suffix : 'Double-click to edit callsign'),
+        callsignVoice: 'Voice callsign' + suffix,
+        registration:  (regOp ? regOp + suffix : 'Double-click to edit registration'),
+        type:          (typeName ? typeName + suffix : 'Double-click to edit type'),
+        wtc:           (wtcCat && WTC_FULL[wtcCat] ? `WTC ${wtcCat} – ${WTC_FULL[wtcCat]}` + suffix : 'Wake Turbulence Category' + suffix),
+        depAd:         (depAdName ? depAdName + suffix : 'Departure aerodrome' + suffix),
+        arrAd:         (arrAdName ? arrAdName + suffix : 'Arrival aerodrome' + suffix),
+        rules:         ((RULES_FULL[m.rules] || 'Flight rules') + suffix),
+        tngCount:      'T&G – Touch and Go count' + suffix,
+        osCount:       'O/S – Overshoot count' + suffix,
+        fisCount:      'FIS – Flight Information Service count' + suffix,
+        remarks:       'REMARKS' + suffix,
+        depActual:     'ATD – Actual Time of Departure' + suffix,
+        depPlanned:    'ETD – Estimated Time of Departure' + suffix,
+        arrActual:     'ATA – Actual Time of Arrival' + suffix,
+        arrPlanned:    'ETA – Estimated Time of Arrival' + suffix,
+        ect:           'ECT – Estimated Crossing Time' + suffix,
+        act:           'ACT – Actual Crossing Time' + suffix,
+      };
+    })();
+
     // Bind inline edit handlers (double-click to edit)
-    enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-voice"), m.id, "callsignVoice", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-reg"), m.id, "registration", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-type"), m.id, "type", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-wtc"), m.id, "wtc", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-callsign"), m.id, "callsignCode", "text", null, _tt.callsignCode);
+    enableInlineEdit(tr.querySelector(".js-edit-voice"),    m.id, "callsignVoice", "text", null, _tt.callsignVoice);
+    enableInlineEdit(tr.querySelector(".js-edit-reg"),      m.id, "registration",  "text", null, _tt.registration);
+    enableInlineEdit(tr.querySelector(".js-edit-type"),     m.id, "type",          "text", null, _tt.type);
+    enableInlineEdit(tr.querySelector(".js-edit-wtc"),      m.id, "wtc",           "text", null, _tt.wtc);
     // depAd editable only for OVR and ARR (not DEP or LOC)
     if (ft === "OVR" || ft === "ARR") {
-      enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text");
+      enableInlineEdit(tr.querySelector(".js-edit-dep-ad"), m.id, "depAd", "text", null, _tt.depAd);
     }
     // arrAd editable only for OVR and DEP (not ARR or LOC)
     if (ft === "OVR" || ft === "DEP") {
-      enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text");
+      enableInlineEdit(tr.querySelector(".js-edit-arr-ad"), m.id, "arrAd", "text", null, _tt.arrAd);
     }
-    enableInlineEdit(tr.querySelector(".js-edit-rules"), m.id, "rules", "text");
-    enableInlineEdit(tr.querySelector(".js-edit-tng"), m.id, "tngCount", "number");
-    enableInlineEdit(tr.querySelector(".js-edit-os"), m.id, "osCount", "number");
-    enableInlineEdit(tr.querySelector(".js-edit-fis"), m.id, "fisCount", "number");
-    enableInlineEdit(tr.querySelector(".js-edit-remarks"), m.id, "remarks", "text");
+    enableInlineEdit(tr.querySelector(".js-edit-rules"),   m.id, "rules",    "text",   null, _tt.rules);
+    enableInlineEdit(tr.querySelector(".js-edit-tng"),     m.id, "tngCount", "number", null, _tt.tngCount);
+    enableInlineEdit(tr.querySelector(".js-edit-os"),      m.id, "osCount",  "number", null, _tt.osCount);
+    enableInlineEdit(tr.querySelector(".js-edit-fis"),     m.id, "fisCount", "number", null, _tt.fisCount);
+    enableInlineEdit(tr.querySelector(".js-edit-remarks"), m.id, "remarks",  "text",   null, _tt.remarks);
 
     // Time field mapping depends on flight type
     // Use canonical field names: depActual/depPlanned/arrActual/arrPlanned
     const depTimeEl = tr.querySelector(".js-edit-dep-time");
     const arrTimeEl = tr.querySelector(".js-edit-arr-time");
     if (ft === "DEP" || ft === "LOC") {
-      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time");
+      const depField = m.depActual ? "depActual" : "depPlanned";
+      enableInlineEdit(depTimeEl, m.id, depField, "time", null, _tt[depField]);
+    }
+    if (ft === "ARR") {
+      // ARR dep-time cell: editable for depActual (ATD from origin) to support recompute chain
+      const arrAtdOnSave = () => {
+        const updated = getMovements().find(mv => String(mv.id) === String(m.id));
+        if (updated && updated.depActual && updated.durationMinutes > 0 && !updated.arrActual) {
+          const derived = addMinutesToTime(updated.depActual, updated.durationMinutes);
+          if (derived) {
+            updateMovement(updated.id, { arrPlanned: derived });
+            // Part E: re-evaluate status with the newly derived ETA
+            reEvaluateStatusAfterTimeChange(updated.id);
+            renderLiveBoard();
+            renderTimelineTracks();
+          }
+        }
+      };
+      enableInlineEdit(depTimeEl, m.id, "depActual", "time", arrAtdOnSave, _tt.depActual);
     }
     if (ft === "ARR" || ft === "LOC") {
-      enableInlineEdit(arrTimeEl, m.id, m.arrActual ? "arrActual" : "arrPlanned", "time");
+      const arrField = m.arrActual ? "arrActual" : "arrPlanned";
+      enableInlineEdit(arrTimeEl, m.id, arrField, "time", null, _tt[arrField]);
     }
     if (ft === "OVR") {
-      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time");
+      const ovrField = m.depActual ? "act" : "ect";
+      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time", null, _tt[ovrField]);
     }
 
     // Hover sync with timeline bar

@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-18 (Europe/London) — Latest completed sprint: Sprint 9 — Event-based stats, explicit time semantics, ZZZZ/PIC, and lightweight outcome handling
+Last updated: 2026-03-18 (Europe/London) — Latest completed sprint: Post-Sprint 9 correction pass — Admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -625,6 +625,48 @@ Delivered:
 * Booking sync not modified
 * `runwayMovementContribution` (nominal) retained for reporting use; `egowRunwayContribution` (event-based) is additive
 
+### 8.16 Post-Sprint-9 correction pass — Admin display toggles, tooltip enhancement, ARR fixes
+
+**Outcome:** complete
+
+Delivered:
+
+**Part A — Admin strip time-display toggles:**
+* `showTimeLabelsOnStrip` (default ON): labels ETD/ATD/ETA/ATA appear on their own `<span class="time-label">` line above the time value in the Live Board time cell; CSS updated to `display: block` on `.time-label` and `display: inline-block; vertical-align: bottom` on the time spans
+* `showEstimatedTimesOnStrip` (default ON): when OFF, estimated times (ETD/ETA/ECT) are suppressed and rendered as "–"; actual times (ATD/ATA/ACT) always show regardless
+* Both settings stored in `defaultConfig` in `datamodel.js` and wired through Admin → Timezone & Display section in `index.html` and the save/load path in `app.js`
+
+**Part B — Field-specific inline-edit tooltips:**
+* `enableInlineEdit()` now accepts an optional `tooltipText` parameter (6th arg); defaults to "Double-click to edit" when omitted
+* Inline `_tt` object computed per-strip from live lookups:
+  - callsign → unit/company via `lookupUnitFromCallsign` + `lookupOperatorFromCallsign`
+  - registration → OPERATOR via `lookupRegistration`
+  - type → Common Name via `lookupAircraftType`, or `aircraftTypeText` if ZZZZ
+  - wtc → full wording (L=LIGHT, M=MEDIUM, H=HEAVY, J=SUPER, etc.)
+  - depAd/arrAd → aerodrome name via `getLocationName`, or ZZZZ text if applicable
+  - rules → full wording (VFR, IFR, SVFR, Y, Z)
+  - tngCount / osCount / fisCount → T&G / O/S / FIS abbreviation expansions
+  - time fields → ETD/ATD/ETA/ATA/ECT/ACT semantic labels
+
+**Part C — ARR timeline colour:**
+* Fixed `.timeline-movement-bar.ft-arr { background: #8b8b8b; }` → `background: var(--ft-arr);`
+* ARR strips now render in the correct sand/orange colour on the timeline regardless of ATD being populated
+
+**Part D — ARR strip ATD recompute chain:**
+* ARR strips now display `m.depActual` (ATD from origin) in the dep time cell with "ATD" label when populated
+* ARR dep time cell is now inline-editable for `depActual` field
+* `arrAtdOnSave` callback: after saving `depActual` on ARR, if `durationMinutes > 0` and no `arrActual`, derives `arrPlanned = depActual + durationMinutes` and triggers a re-render
+
+**Part E — Status re-evaluation after time changes:**
+* `reEvaluateStatusAfterTimeChange(movementId)` helper added: if a movement is ACTIVE, has no actual completion time, and its primary planned time is now more than `(autoActivateMinutes + 5)` minutes away, reverts status to PLANNED
+* Called from `saveEdit` for all time-field inline edits (`depPlanned`, `arrPlanned`, `depActual`, `arrActual`)
+* Also called from the Part D `arrAtdOnSave` callback after deriving a new `arrPlanned`
+
+**NO-DRIFT confirmations:**
+* No changes to reporting, booking sync, modal lifecycle, or EGOW counting
+* `getATD(m)` semantics unchanged (returns null for ARR); ARR dep time display uses raw `m.depActual` field directly
+* `reEvaluateStatusAfterTimeChange` uses a +5 min buffer to avoid boundary oscillation
+
 ---
 
 ## 9) Current status summary
@@ -634,8 +676,8 @@ Delivered:
 As of 2026-03-18:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, and Sprint 9 features are all landed
-* Sprint 9 is complete and should be treated as the latest completed sprint in future handovers unless superseded
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, and Post-Sprint-9 correction pass are all landed
+* Post-Sprint-9 correction pass is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -646,6 +688,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * reconciliation is visible, not silent
 * booking/strip integrity policy is stable and should not be reworked casually
 * Sprint 9 features are landed: event-based Live Board stats, ETD/ATD/ETA/ATA labels, ZZZZ companion fields, PIC, outcome model
+* Post-Sprint-9 features are landed: admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
