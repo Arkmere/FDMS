@@ -2955,3 +2955,66 @@ tr.strip.ft-ovr > td {
   font-style: italic;
   opacity: 0.7;
 }
+
+/* ============================================================
+   Sprint 9 — Time labels, ZZZZ fields, Outcome model
+   ============================================================ */
+
+/* -- Time display labels (ETD/ATD/ETA/ATA) ------------------- */
+
+.time-display-cell {
+  white-space: nowrap;
+}
+
+.time-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  vertical-align: super;
+  margin-right: 1px;
+  user-select: none;
+}
+
+/* Actual times: normal weight, slightly warmer */
+.time-actual {
+  color: var(--va-text-main);
+  font-weight: 600;
+}
+
+/* Estimated times: italic, muted */
+.time-estimated {
+  font-style: italic;
+  color: var(--va-text-soft);
+  font-weight: 400;
+}
+
+.time-sep {
+  color: var(--va-border-dark);
+  margin: 0 2px;
+}
+
+/* -- ZZZZ companion inputs ----------------------------------- */
+
+.zzzz-companion {
+  font-style: italic;
+  background: #fffbea;
+  border-color: #d4b800;
+}
+
+/* -- Outcome badges in info panel ---------------------------- */
+
+.outcome-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.outcome-diverted  { background: #ffe0b2; color: #8d4f00; }
+.outcome-changed   { background: #e3f2fd; color: #0d47a1; }
+.outcome-cancelled { background: #fce4ec; color: #880e4f; }

@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-10 (Europe/London) — Latest completed sprint: Sprint 8 — Booking/Strip reconciliation summary surfaced to operator
+Last updated: 2026-03-18 (Europe/London) — Latest completed sprint: Sprint 9 — Event-based stats, explicit time semantics, ZZZZ/PIC, and lightweight outcome handling
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -104,15 +104,21 @@ The codebase is organized around these major responsibilities:
 
 ### 2.1 Movement and counter semantics
 
-Runway/daily movement totals use movement-equivalent maths:
+**Live Board daily totals use event-based (EGOW-realized) counting** (as of Sprint 9):
 
-* DEP = 1
-* ARR = 1
-* LOC = 2
-* OVR = 0
-* T&G = +2 movements
-* O/S = +1 movement
-* OVR is counted separately and does **not** contribute to runway daily totals
+* DEP = 1 only if `depActual` exists
+* ARR = 1 only if `arrActual` exists
+* LOC = (depActual ? 1 : 0) + (2 × tngCount) + osCount + (arrActual ? 1 : 0)
+* OVR = 0 always (counted separately in the generic overflights counter)
+* FIS top-bar only counts strips with status ACTIVE or COMPLETED
+
+**Official Monthly Return (reporting.js) uses nominal strip-type-based counting** (unchanged, intentional):
+
+* LOC = 2, DEP/ARR = 1, OVR = 0
+* T&G = +2, O/S = +1
+* This is the official document format; it does not require actual events to have occurred.
+
+These two systems are intentionally different. See the comment block at the top of `reporting.js` for the documented design decision.
 
 ### 2.2 Canonical movement time fields
 
@@ -571,18 +577,65 @@ Significance:
 * reconciliation is now auditable in the UI rather than silently happening at bootstrap
 * operators can see when automatic integrity repair/clear actions have occurred
 
+### 8.15 Sprint 9 — Event-based stats, explicit time semantics, ZZZZ/PIC, and lightweight outcome handling
+
+**Outcome:** complete
+
+Delivered:
+
+**Stage 1 — Event-based daily stats and explicit time semantics:**
+* `egowRunwayContribution(m)` added to `datamodel.js` — counts only realized EGOW events
+* Live Board daily stats (`calculateDailyStats` in `app.js`) now uses `egowRunwayContribution` instead of nominal `runwayMovementContribution`
+* FIS top-bar counter now excludes PLANNED and CANCELLED strips (only ACTIVE and COMPLETED contribute)
+* Live Board time cells now display explicit ETD/ATD/ETA/ATA labels
+* Estimated times rendered as italic/muted; actual times as normal weight
+* OVR times display ECT/ACT labels
+
+**Stage 2 — ZZZZ companion fields and PIC:**
+* `depAdText`, `arrAdText`, `aircraftTypeText` fields added to movement model
+* `bindZzzzCompanion()` helper wires show/hide behaviour: companion shown iff code = ZZZZ, required when shown
+* ZZZZ companion inputs present in both create and edit modals for DEP AD, ARR AD, Aircraft Type
+* Save paths validate ZZZZ companion fields before saving
+* `captain` field relabelled as PIC in all UI; stored field name unchanged for backward compatibility
+* PIC field added to create and edit modals
+* Info panel updated: shows PIC, prefers ZZZZ text over code in DEP/ARR/Type display
+
+**Stage 3 — Lightweight outcome handling:**
+* New outcome fields added: `outcomeStatus` (NORMAL/DIVERTED/CHANGED/CANCELLED), `outcomeReason`, `actualDestinationAd`, `actualDestinationText`, `outcomeTime`
+* Outcome collapsible section added to edit modal
+* Outcome status dropdown shows/hides destination and time fields for DIVERTED/CHANGED
+* `flightType` is never replaced; outcome is additive only
+* Save & Complete handler implements abnormal closure: DIVERTED/CHANGED/CANCELLED do not fabricate EGOW `arrActual`
+* Info panel shows outcome badge and reason when non-NORMAL
+
+**Stage 4 — Reporting alignment:**
+* `reporting.js` header block documents the intentional split:
+  * Live Board daily stats = event-based (realized EGOW)
+  * Monthly Return / Dashboard / Insights = nominal strip-type-based (unchanged, intentional)
+* This divergence is explicit and must not be silently merged in future sprints.
+
+**Migration:**
+* `ensureInitialised()` in `datamodel.js` applies Sprint 9 defaults to old records on load:
+  `depAdText`, `arrAdText`, `aircraftTypeText` → `''`; `outcomeStatus` → `'NORMAL'`; all other outcome fields → `''`
+* Old records load without errors; `captain` field unchanged
+
+**NO-DRIFT confirmations:**
+* `flightType` is never replaced; outcome model is additive
+* OVR separate-counter behavior unchanged
+* Booking sync not modified
+* `runwayMovementContribution` (nominal) retained for reporting use; `egowRunwayContribution` (event-based) is additive
+
 ---
 
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-10:
+As of 2026-03-18:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, and reconciliation surfacing are all landed
-* the project is in a more trustworthy and internally consistent state than the older ledger header implied
-* Sprint 8 is complete and should be treated as the latest completed sprint in future handovers unless superseded
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, and Sprint 9 features are all landed
+* Sprint 9 is complete and should be treated as the latest completed sprint in future handovers unless superseded
 
 ### 9.2 What the next architect/chat should assume
 
@@ -592,6 +645,8 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * reconciliation banner sprint is landed
 * reconciliation is visible, not silent
 * booking/strip integrity policy is stable and should not be reworked casually
+* Sprint 9 features are landed: event-based Live Board stats, ETD/ATD/ETA/ATA labels, ZZZZ companion fields, PIC, outcome model
+* reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
 ---

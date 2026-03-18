@@ -837,6 +837,29 @@ function makeInputUppercase(inputElement) {
 }
 
 /**
+ * Bind ZZZZ companion field show/hide behaviour.
+ * When codeInput equals "ZZZZ" the companionInput is shown; otherwise hidden.
+ * Sets required attribute when shown and removes it when hidden.
+ * @param {HTMLInputElement} codeInput     - The ICAO code field (e.g. depAd, type)
+ * @param {HTMLInputElement} companionInput - The free-text companion field
+ */
+function bindZzzzCompanion(codeInput, companionInput) {
+  if (!codeInput || !companionInput) return;
+  const update = () => {
+    const isZzzz = codeInput.value.trim().toUpperCase() === 'ZZZZ';
+    companionInput.style.display = isZzzz ? '' : 'none';
+    if (isZzzz) {
+      companionInput.setAttribute('required', '');
+    } else {
+      companionInput.removeAttribute('required');
+    }
+  };
+  codeInput.addEventListener('input', update);
+  codeInput.addEventListener('change', update);
+  update(); // run once on bind in case value already set
+}
+
+/**
  * Debounce a function call
  * @param {Function} func - Function to debounce
  * @param {number} wait - Wait time in milliseconds
@@ -1995,9 +2018,11 @@ function renderExpandedRow(tbody, m, context = 'live') {
 
   expTd.colSpan = colCount;
 
-  // Get aircraft type info
+  // Get aircraft type info; prefer ZZZZ text when type is ZZZZ
   const typeData = lookupAircraftType(m.type);
-  const typeDisplay = m.type ? `${escapeHtml(m.type)}${typeData && typeData['Common Name'] ? ` (${escapeHtml(typeData['Common Name'])})` : ''}` : "—";
+  const typeDisplay = (m.type === 'ZZZZ' && m.aircraftTypeText)
+    ? `${escapeHtml(m.aircraftTypeText)} <small style="color:#888">(ZZZZ)</small>`
+    : m.type ? `${escapeHtml(m.type)}${typeData && typeData['Common Name'] ? ` (${escapeHtml(typeData['Common Name'])})` : ''}` : "—";
 
   // Format squawk display (always prepend # if not already present)
   let squawkDisplay = m.squawk || "—";
@@ -2065,13 +2090,16 @@ function renderExpandedRow(tbody, m, context = 'live') {
           <div class="kv">
             <div class="kv-label">Status</div><div class="kv-value">${escapeHtml(statusLabel(m.status))}</div>
             <div class="kv-label">Flight Type</div><div class="kv-value">${escapeHtml(getFullFlightType(m.flightType))}</div>
-            <div class="kv-label">Departure</div><div class="kv-value">${escapeHtml(m.depAd)} – ${escapeHtml(m.depName)}</div>
-            <div class="kv-label">Arrival</div><div class="kv-value">${escapeHtml(m.arrAd)} – ${escapeHtml(m.arrName)}</div>
-            <div class="kv-label">Captain</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
+            <div class="kv-label">Departure</div><div class="kv-value">${m.depAd === 'ZZZZ' && m.depAdText ? escapeHtml(m.depAdText) + ' <small style="color:#888">(ZZZZ)</small>' : escapeHtml(m.depAd) + (m.depName ? ' – ' + escapeHtml(m.depName) : '')}</div>
+            <div class="kv-label">Arrival</div><div class="kv-value">${m.arrAd === 'ZZZZ' && m.arrAdText ? escapeHtml(m.arrAdText) + ' <small style="color:#888">(ZZZZ)</small>' : escapeHtml(m.arrAd) + (m.arrName ? ' – ' + escapeHtml(m.arrName) : '')}</div>
+            <div class="kv-label">PIC</div><div class="kv-value">${escapeHtml(m.captain || "—")}</div>
             <div class="kv-label">POB</div><div class="kv-value">${escapeHtml(m.pob ?? "—")}</div>
             <div class="kv-label">T&amp;Gs</div><div class="kv-value">${escapeHtml(m.tngCount ?? 0)}</div>
             <div class="kv-label">O/S count</div><div class="kv-value">${escapeHtml(m.osCount ?? 0)}</div>
             <div class="kv-label">FIS count</div><div class="kv-value">${escapeHtml(m.fisCount ?? 0)}</div>
+            ${(m.outcomeStatus && m.outcomeStatus !== 'NORMAL') ? `<div class="kv-label">Outcome</div><div class="kv-value outcome-badge outcome-${escapeHtml(m.outcomeStatus.toLowerCase())}">${escapeHtml(m.outcomeStatus)}</div>` : ''}
+            ${(m.outcomeReason) ? `<div class="kv-label">Outcome Reason</div><div class="kv-value">${escapeHtml(m.outcomeReason)}</div>` : ''}
+            ${(m.actualDestinationAd) ? `<div class="kv-label">Actual Dest.</div><div class="kv-value">${m.actualDestinationAd === 'ZZZZ' && m.actualDestinationText ? escapeHtml(m.actualDestinationText) + ' <small style="color:#888">(ZZZZ)</small>' : escapeHtml(m.actualDestinationAd)}</div>` : ''}
           </div>
         </div>
         ${renderFormationDetails(m)}
@@ -2266,22 +2294,52 @@ export function renderLiveBoard() {
     tr.dataset.id = String(m.id);
 
     // Use semantic time fields based on flight type.
-    // For ACTIVE strips, only show confirmed actual times; planned/offset-derived times
-    // are not displayed in the actuals slot to avoid misleading controllers.
+    // Every displayed time is explicitly labeled (ETD/ATD/ETA/ATA).
+    // Estimated times carry class "time-estimated"; actual times carry "time-actual".
     const ft = (m.flightType || "").toUpperCase();
     const isActive = m.status === "ACTIVE";
     let depDisplay = "-";
     let arrDisplay = "-";
+    let depLabel = "";      // ETD or ATD
+    let arrLabel = "";      // ETA or ATA
+    let depIsActual = false;
+    let arrIsActual = false;
 
     if (ft === "DEP" || ft === "LOC") {
-      depDisplay = getATD(m) || (isActive ? "-" : getETD(m)) || "-";
+      const atd = getATD(m);
+      const etd = getETD(m);
+      if (atd) {
+        depDisplay = atd; depLabel = "ATD"; depIsActual = true;
+      } else if (!isActive && etd) {
+        depDisplay = etd; depLabel = "ETD"; depIsActual = false;
+      } else if (isActive && etd) {
+        depDisplay = etd; depLabel = "ETD"; depIsActual = false;
+      } else {
+        depDisplay = "-"; depLabel = "";
+      }
     }
     if (ft === "ARR" || ft === "LOC") {
-      arrDisplay = getATA(m) || (isActive ? "-" : getETA(m)) || "-";
+      const ata = getATA(m);
+      const eta = getETA(m);
+      if (ata) {
+        arrDisplay = ata; arrLabel = "ATA"; arrIsActual = true;
+      } else if (eta) {
+        arrDisplay = eta; arrLabel = "ETA"; arrIsActual = false;
+      } else {
+        arrDisplay = "-"; arrLabel = "";
+      }
     }
     if (ft === "OVR") {
-      depDisplay = getACT(m) || (isActive ? "-" : getECT(m)) || "-";
-      arrDisplay = "-";
+      const act = getACT(m);
+      const ect = getECT(m);
+      if (act) {
+        depDisplay = act; depLabel = "ACT"; depIsActual = true;
+      } else if (ect) {
+        depDisplay = ect; depLabel = "ECT"; depIsActual = false;
+      } else {
+        depDisplay = "-"; depLabel = "";
+      }
+      arrDisplay = "-"; arrLabel = "";
     }
 
     // Format date (DD/MM/YYYY)
@@ -2380,7 +2438,15 @@ export function renderLiveBoard() {
         <div class="cell-strong"><span class="js-edit-rules">${rulesDisplay}</span></div>
       </td>
       <td${tooltipTitle}>
-        <div class="cell-strong"><span class="js-edit-dep-time">${escapeHtml(depDisplay)}</span> / ${overdueClass ? `<span class="js-edit-arr-time ${overdueClass}">${escapeHtml(arrDisplay)}</span>` : `<span class="js-edit-arr-time">${escapeHtml(arrDisplay)}</span>`}</div>
+        <div class="cell-strong time-display-cell">
+          <span class="js-edit-dep-time${depLabel ? (depIsActual ? ' time-actual' : ' time-estimated') : ''}">${depLabel ? `<span class="time-label">${depLabel}</span> ` : ''}${escapeHtml(depDisplay)}</span>
+          ${(depLabel || arrLabel) ? '' : ''}
+          <span class="time-sep"> / </span>
+          ${overdueClass
+            ? `<span class="js-edit-arr-time ${overdueClass}${arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : ''}">${arrLabel ? `<span class="time-label">${arrLabel}</span> ` : ''}${escapeHtml(arrDisplay)}</span>`
+            : `<span class="js-edit-arr-time${arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : ''}">${arrLabel ? `<span class="time-label">${arrLabel}</span> ` : ''}${escapeHtml(arrDisplay)}</span>`
+          }
+        </div>
         <div class="cell-muted">${staleWarning ? `<span class="stale-movement" title="${staleWarning}">${dofFormatted}</span>` : dofFormatted}<br>${escapeHtml(m.flightType)} · ${escapeHtml(statusLabel(m.status))}</div>
       </td>
       <td style="text-align: center;">
@@ -2888,10 +2954,15 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
             <input id="newType" class="modal-input is-derived" placeholder="EC35, C152" />
+            <input id="newAircraftTypeText" class="modal-input zzzz-companion" placeholder="Aircraft description (required for ZZZZ)" style="display:none; margin-top:4px;" />
           </div>
           <div class="modal-field">
             <label class="modal-label">WTC</label>
             <select id="newWtc" class="modal-input"></select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">PIC</label>
+            <input id="newCaptain" class="modal-input" placeholder="Pilot in Command" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -2940,10 +3011,12 @@ function openNewFlightModal(flightType = "DEP") {
           <div class="modal-field">
             <label class="modal-label">Departure AD</label>
             <input id="newDepAd" class="modal-input" placeholder="EGOS" value="${flightType === "DEP" || flightType === "LOC" ? "EGOW" : ""}" />
+            <input id="newDepAdText" class="modal-input zzzz-companion" placeholder="Location name (required for ZZZZ)" style="display:none; margin-top:4px;" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
             <input id="newArrAd" class="modal-input" placeholder="EGOS" value="${flightType === "ARR" || flightType === "LOC" ? "EGOW" : ""}" />
+            <input id="newArrAdText" class="modal-input zzzz-companion" placeholder="Location name (required for ZZZZ)" style="display:none; margin-top:4px;" />
           </div>
         </div>
       </section>
@@ -3129,6 +3202,11 @@ function openNewFlightModal(flightType = "DEP") {
   makeInputUppercase(unitCodeInput);
   makeInputUppercase(depAdInput);
   makeInputUppercase(arrAdInput);
+
+  // ZZZZ companion field visibility
+  bindZzzzCompanion(depAdInput, document.getElementById("newDepAdText"));
+  bindZzzzCompanion(arrAdInput, document.getElementById("newArrAdText"));
+  bindZzzzCompanion(typeInput, document.getElementById("newAircraftTypeText"));
 
   // EU civil registration normalisation — insert hyphen on blur (hard) and
   // after 250 ms of typing (soft, only if it would add a hyphen).
@@ -3508,6 +3586,20 @@ function openNewFlightModal(flightType = "DEP") {
     const depName = getLocationName(depAd);
     const arrName = getLocationName(arrAd);
 
+    // ZZZZ companion field validation
+    const newDepAdText = document.getElementById("newDepAdText")?.value?.trim() || "";
+    const newArrAdText = document.getElementById("newArrAdText")?.value?.trim() || "";
+    const newAircraftTypeText = document.getElementById("newAircraftTypeText")?.value?.trim() || "";
+    if (depAd.trim().toUpperCase() === 'ZZZZ' && !newDepAdText) {
+      showToast("Departure AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (arrAd.trim().toUpperCase() === 'ZZZZ' && !newArrAdText) {
+      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (aircraftType.trim().toUpperCase() === 'ZZZZ' && !newAircraftTypeText) {
+      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return;
+    }
+
     // Priority is now a plain select; empty string or "-" means no priority
     const priorityLetterRaw = document.getElementById("priorityLetter")?.value || "";
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
@@ -3565,7 +3657,7 @@ function openNewFlightModal(flightType = "DEP") {
       egowDesc: "",
       unitCode: document.getElementById("newUnitCode")?.value || "",
       unitDesc: "",
-      captain: "",
+      captain: document.getElementById("newCaptain")?.value || "",
       pob: parseInt(pob, 10),
       priorityLetter: priorityLetterValue,
       remarks: remarksValue,
@@ -3575,6 +3667,14 @@ function openNewFlightModal(flightType = "DEP") {
       route: routeValue,
       clearance: clearanceValue,
       durationMinutes: (() => { const v = parseInt(document.getElementById("newDuration")?.value || "", 10); return v > 0 ? v : null; })(),
+      depAdText: document.getElementById("newDepAdText")?.value || "",
+      arrAdText: document.getElementById("newArrAdText")?.value || "",
+      aircraftTypeText: document.getElementById("newAircraftTypeText")?.value || "",
+      outcomeStatus: 'NORMAL',
+      outcomeReason: '',
+      actualDestinationAd: '',
+      actualDestinationText: '',
+      outcomeTime: '',
     };
 
     // Validate and read formation (must happen before enrichMovementData)
@@ -4542,10 +4642,15 @@ function openEditMovementModal(m) {
           <div class="modal-field">
             <label class="modal-label">Aircraft Type</label>
             <input id="editType" class="modal-input is-derived" value="${escapeHtml(m.type || "")}" />
+            <input id="editAircraftTypeText" class="modal-input zzzz-companion" placeholder="Aircraft description (required for ZZZZ)" style="display:none; margin-top:4px;" value="${escapeHtml(m.aircraftTypeText || "")}" />
           </div>
           <div class="modal-field">
             <label class="modal-label">WTC</label>
             <input id="editWtcDisplay" class="modal-input is-derived" value="${escapeHtml(m.wtc || "")}" disabled />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">PIC</label>
+            <input id="editCaptain" class="modal-input" value="${escapeHtml(m.captain || "")}" placeholder="Pilot in Command" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -4594,10 +4699,12 @@ function openEditMovementModal(m) {
           <div class="modal-field">
             <label class="modal-label">Departure AD</label>
             <input id="editDepAd" class="modal-input" value="${escapeHtml(m.depAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
+            <input id="editDepAdText" class="modal-input zzzz-companion" placeholder="Location name (required for ZZZZ)" style="display:none; margin-top:4px;" value="${escapeHtml(m.depAdText || "")}" />
           </div>
           <div class="modal-field">
             <label class="modal-label">Arrival AD</label>
             <input id="editArrAd" class="modal-input" value="${escapeHtml(m.arrAd || "")}" ${flightType === "LOC" ? "disabled" : ""} />
+            <input id="editArrAdText" class="modal-input zzzz-companion" placeholder="Location name (required for ZZZZ)" style="display:none; margin-top:4px;" value="${escapeHtml(m.arrAdText || "")}" />
           </div>
         </div>
       </section>
@@ -4734,11 +4841,48 @@ function openEditMovementModal(m) {
           <div id="editFormationElementsContainer"></div>
         </div>
       </section>
+
+      <!-- Collapsible: Outcome -->
+      <section class="modal-section modal-collapsible">
+        <button type="button" class="modal-expander" aria-expanded="${(m.outcomeStatus && m.outcomeStatus !== 'NORMAL') ? "true" : "false"}" data-target="editOutcomeSection">
+          <span class="expander-icon">${(m.outcomeStatus && m.outcomeStatus !== 'NORMAL') ? "▼" : "▶"}</span>
+          Outcome
+          <span class="expander-hint">${(m.outcomeStatus && m.outcomeStatus !== 'NORMAL') ? `(${escapeHtml(m.outcomeStatus)})` : "(optional – for non-normal endings)"}</span>
+        </button>
+        <div id="editOutcomeSection" class="modal-expander-panel" ${(m.outcomeStatus && m.outcomeStatus !== 'NORMAL') ? "" : "hidden"}>
+          <div class="modal-section-grid-3 modal-subgrid-gap">
+            <div class="modal-field">
+              <label class="modal-label">Outcome Status</label>
+              <select id="editOutcomeStatus" class="modal-select">
+                <option value="NORMAL"    ${(!m.outcomeStatus || m.outcomeStatus === 'NORMAL')    ? "selected" : ""}>Normal</option>
+                <option value="DIVERTED"  ${m.outcomeStatus === 'DIVERTED'  ? "selected" : ""}>Diverted</option>
+                <option value="CHANGED"   ${m.outcomeStatus === 'CHANGED'   ? "selected" : ""}>Changed</option>
+                <option value="CANCELLED" ${m.outcomeStatus === 'CANCELLED' ? "selected" : ""}>Cancelled</option>
+              </select>
+            </div>
+            <div class="modal-field js-outcome-dest" style="${(m.outcomeStatus === 'DIVERTED' || m.outcomeStatus === 'CHANGED') ? '' : 'display:none'}">
+              <label class="modal-label">Actual Dest. AD</label>
+              <input id="editActualDestAd" class="modal-input" value="${escapeHtml(m.actualDestinationAd || "")}" placeholder="e.g. EGGP" />
+              <input id="editActualDestText" class="modal-input zzzz-companion" placeholder="Location name (required for ZZZZ)" style="display:none; margin-top:4px;" value="${escapeHtml(m.actualDestinationText || "")}" />
+            </div>
+            <div class="modal-field js-outcome-time" style="${(m.outcomeStatus === 'DIVERTED' || m.outcomeStatus === 'CHANGED') ? '' : 'display:none'}">
+              <label class="modal-label">Outcome Time</label>
+              <input id="editOutcomeTime" class="modal-input" value="${escapeHtml(m.outcomeTime || "")}" placeholder="HH:MM" style="width:80px;" />
+            </div>
+          </div>
+          <div class="modal-section-grid modal-subgrid-gap">
+            <div class="modal-field modal-field-full">
+              <label class="modal-label">Reason / Notes</label>
+              <input id="editOutcomeReason" class="modal-input" value="${escapeHtml(m.outcomeReason || "")}" placeholder="Optional reason or notes" />
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost js-close-modal" type="button">Cancel</button>
       <div style="display: flex; gap: 8px;">
-        <button class="btn btn-secondary-modal js-save-complete-edit" type="button">Save & Complete</button>
+        <button class="btn btn-secondary-modal js-save-complete-edit" type="button">Save &amp; Complete</button>
         <button class="btn btn-primary js-save-edit" type="button">Save Changes</button>
       </div>
     </div>
@@ -4764,6 +4908,32 @@ function openEditMovementModal(m) {
   makeInputUppercase(unitCodeInput);
   makeInputUppercase(depAdInput);
   makeInputUppercase(arrAdInput);
+
+  // ZZZZ companion field visibility
+  bindZzzzCompanion(depAdInput, document.getElementById("editDepAdText"));
+  bindZzzzCompanion(arrAdInput, document.getElementById("editArrAdText"));
+  bindZzzzCompanion(typeInput,  document.getElementById("editAircraftTypeText"));
+
+  // Outcome status show/hide for destination/time fields
+  const outcomeStatusSel = document.getElementById("editOutcomeStatus");
+  const outcomeDestEls = document.querySelectorAll("#editOutcomeSection .js-outcome-dest");
+  const outcomeTimeEls = document.querySelectorAll("#editOutcomeSection .js-outcome-time");
+  const actualDestAdInput = document.getElementById("editActualDestAd");
+  const actualDestTextInput = document.getElementById("editActualDestText");
+  if (outcomeStatusSel) {
+    const updateOutcomeFields = () => {
+      const v = outcomeStatusSel.value;
+      const showDest = v === 'DIVERTED' || v === 'CHANGED';
+      outcomeDestEls.forEach(el => { el.style.display = showDest ? '' : 'none'; });
+      outcomeTimeEls.forEach(el => { el.style.display = showDest ? '' : 'none'; });
+    };
+    outcomeStatusSel.addEventListener('change', updateOutcomeFields);
+    // Also wire ZZZZ companion for actual destination
+    if (actualDestAdInput && actualDestTextInput) {
+      makeInputUppercase(actualDestAdInput);
+      bindZzzzCompanion(actualDestAdInput, actualDestTextInput);
+    }
+  }
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -5087,13 +5257,36 @@ function openEditMovementModal(m) {
       fisCount: editFisCountValue,
       egowCode: document.getElementById("editEgowCode")?.value || "",
       unitCode: document.getElementById("editUnitCode")?.value || "",
+      captain: document.getElementById("editCaptain")?.value || "",
       priorityLetter: editPriorityLetterValue,
       remarks: editRemarksValue,
       warnings: editWarningsValue,
       squawk: editSquawkValue,
       route: editRouteValue,
       clearance: editClearanceValue,
+      depAdText: document.getElementById("editDepAdText")?.value?.trim() || "",
+      arrAdText: document.getElementById("editArrAdText")?.value?.trim() || "",
+      aircraftTypeText: document.getElementById("editAircraftTypeText")?.value?.trim() || "",
+      outcomeStatus: document.getElementById("editOutcomeStatus")?.value || 'NORMAL',
+      outcomeReason: document.getElementById("editOutcomeReason")?.value || "",
+      actualDestinationAd: document.getElementById("editActualDestAd")?.value || "",
+      actualDestinationText: document.getElementById("editActualDestText")?.value?.trim() || "",
+      outcomeTime: document.getElementById("editOutcomeTime")?.value || "",
     };
+
+    // Validate ZZZZ companion fields
+    if (updates.depAd?.trim().toUpperCase() === 'ZZZZ' && !updates.depAdText) {
+      showToast("Departure AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (updates.arrAd?.trim().toUpperCase() === 'ZZZZ' && !updates.arrAdText) {
+      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (updates.type?.trim().toUpperCase() === 'ZZZZ' && !updates.aircraftTypeText) {
+      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return;
+    }
+    if ((updates.actualDestinationAd || "").trim().toUpperCase() === 'ZZZZ' && !updates.actualDestinationText) {
+      showToast("Actual Destination is ZZZZ — location name is required", 'error'); return;
+    }
 
     // Validate and read formation
     const editFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
@@ -5169,9 +5362,26 @@ function openEditMovementModal(m) {
       if (arrActual)  arrActual  = convertLocalToUTC(arrActual);
     }
 
-    // Set actual times if not provided
-    if (!depActual) depActual = depPlanned || currentTime;
-    if (!arrActual) arrActual = arrPlanned || currentTime;
+    // Read outcome fields — these govern whether actual times are required/invented
+    const scOutcomeStatus     = document.getElementById("editOutcomeStatus")?.value || 'NORMAL';
+    const scOutcomeReason     = document.getElementById("editOutcomeReason")?.value || "";
+    const scActualDestAd      = document.getElementById("editActualDestAd")?.value || "";
+    const scActualDestText    = document.getElementById("editActualDestText")?.value?.trim() || "";
+    const scOutcomeTime       = document.getElementById("editOutcomeTime")?.value || "";
+    const scDepAdText         = document.getElementById("editDepAdText")?.value?.trim() || "";
+    const scArrAdText         = document.getElementById("editArrAdText")?.value?.trim() || "";
+    const scAircraftTypeText  = document.getElementById("editAircraftTypeText")?.value?.trim() || "";
+
+    // Abnormal closure rules — only fill in actual times for NORMAL outcome
+    // DIVERTED / CHANGED / CANCELLED: do not fabricate EGOW arrival times
+    const isAbnormal = scOutcomeStatus !== 'NORMAL';
+
+    if (!isAbnormal) {
+      // Normal completion: fill in actual times from plan or clock if not already set
+      if (!depActual) depActual = depPlanned || currentTime;
+      if (!arrActual) arrActual = arrPlanned || currentTime;
+    }
+    // For abnormal outcomes: leave depActual/arrActual as whatever was entered (may be blank)
 
     // Get VKB data
     const regValue = document.getElementById("editReg")?.value || "";
@@ -5225,13 +5435,36 @@ function openEditMovementModal(m) {
       fisCount: editFisCountValue,
       egowCode: egowCode,
       unitCode: document.getElementById("editUnitCode")?.value || "",
+      captain: document.getElementById("editCaptain")?.value || "",
       priorityLetter: editPriorityLetterValue,
       remarks: editRemarksValue,
       warnings: editWarningsValue,
       squawk: editSquawkValue,
       route: editRouteValue,
       clearance: editClearanceValue,
+      depAdText: scDepAdText,
+      arrAdText: scArrAdText,
+      aircraftTypeText: scAircraftTypeText,
+      outcomeStatus: scOutcomeStatus,
+      outcomeReason: scOutcomeReason,
+      actualDestinationAd: scActualDestAd,
+      actualDestinationText: scActualDestText,
+      outcomeTime: scOutcomeTime,
     };
+
+    // ZZZZ companion validation
+    if (updates.depAd?.trim().toUpperCase() === 'ZZZZ' && !updates.depAdText) {
+      showToast("Departure AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (updates.arrAd?.trim().toUpperCase() === 'ZZZZ' && !updates.arrAdText) {
+      showToast("Arrival AD is ZZZZ — location name is required", 'error'); return;
+    }
+    if (updates.type?.trim().toUpperCase() === 'ZZZZ' && !updates.aircraftTypeText) {
+      showToast("Aircraft Type is ZZZZ — aircraft description is required", 'error'); return;
+    }
+    if ((scActualDestAd).trim().toUpperCase() === 'ZZZZ' && !scActualDestText) {
+      showToast("Actual Destination is ZZZZ — location name is required", 'error'); return;
+    }
 
     // Validate and read formation
     const saveCpFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
@@ -5247,7 +5480,10 @@ function openEditMovementModal(m) {
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
-    showToast("Movement saved and completed", 'success');
+    const completionMsg = isAbnormal
+      ? `Movement closed (${scOutcomeStatus})`
+      : "Movement saved and completed";
+    showToast(completionMsg, 'success');
 
     closeActiveModal();
   });
