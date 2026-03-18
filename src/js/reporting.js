@@ -1,5 +1,26 @@
 // reporting.js
 // Reporting engine for Official Monthly Return, Dashboard KPIs, and Insights leaderboards
+//
+// REPORTING SEMANTICS (Sprint 9 review — intentional design decision)
+// ====================================================================
+// This module uses NOMINAL strip-type-based counting for all outputs:
+//   LOC = 2, DEP/ARR = 1, OVR = 0, plus T&G×2, O/S×1.
+//
+// This is intentional and correct for the Official Monthly Return,
+// which is a pre-defined official document format based on strip type.
+// The Monthly Return reports what types of operations were planned/conducted,
+// not purely which EGOW events physically occurred.
+//
+// The Live Board daily totals (in app.js) were updated in Sprint 9 to use
+// event-based EGOW counting (egowRunwayContribution) to accurately reflect
+// real-time operational activity.
+//
+// THESE TWO SYSTEMS ARE INTENTIONALLY DIFFERENT and must remain separate:
+//   - Live Board daily stats: event-based (actual dep/arr required to count)
+//   - Monthly Return / Dashboard / Insights: nominal strip-type-based
+//
+// This divergence is documented here and in STATE.md and must not be
+// accidentally merged or silently changed in future sprints.
 
 import { getMovements } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';

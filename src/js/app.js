@@ -41,7 +41,8 @@ import {
   decrementGenericOverflights,
   getMovements,
   isOverflight,
-  runwayMovementContribution
+  runwayMovementContribution,
+  egowRunwayContribution
 } from "./datamodel.js";
 
 import {
@@ -1134,9 +1135,10 @@ function initAdminPanelHandlers() {
 function calculateStripFisCount() {
   const movements = getMovements();
   const today = getTodayDateString();
-  // Only count FIS from movements with today's date of flight
+  // Only count FIS from today's ACTIVE or COMPLETED movements.
+  // PLANNED and CANCELLED strips are excluded — they have not entered operational service.
   return movements
-    .filter(m => m.dof === today)
+    .filter(m => m.dof === today && (m.status === 'ACTIVE' || m.status === 'COMPLETED'))
     .reduce((total, m) => total + (m.fisCount || 0), 0);
 }
 
@@ -1200,8 +1202,9 @@ function calculateDailyStats() {
       continue;
     }
 
-    // Runway movement-equivalent: DEP=1, ARR=1, LOC=2, + 2×tng + 1×os
-    const contrib = runwayMovementContribution(m);
+    // Event-based runway contribution: only realized EGOW events count.
+    // depActual required for DEP/LOC departure credit; arrActual required for ARR/LOC arrival credit.
+    const contrib = egowRunwayContribution(m);
     total += contrib;
 
     const { egowFlightType } = classifyMovement(m);

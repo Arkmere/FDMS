@@ -457,9 +457,22 @@ function ensureInitialised() {
     // Use stored data (may be empty array)
     movements = loaded;
     // Normalize any formation objects (backward compat + WTC recompute)
+    // Also apply Sprint 9 migration defaults for new fields.
     let needsSave = false;
     movements.forEach(m => {
       if (m.formation) { m.formation = normalizeFormation(m.formation); needsSave = true; }
+      // Sprint 9: ZZZZ companion text fields
+      if (m.depAdText === undefined)       { m.depAdText       = ''; needsSave = true; }
+      if (m.arrAdText === undefined)       { m.arrAdText       = ''; needsSave = true; }
+      if (m.aircraftTypeText === undefined){ m.aircraftTypeText = ''; needsSave = true; }
+      // Sprint 9: lightweight outcome model
+      if (m.outcomeStatus === undefined)         { m.outcomeStatus         = 'NORMAL'; needsSave = true; }
+      if (m.outcomeReason === undefined)         { m.outcomeReason         = '';       needsSave = true; }
+      if (m.actualDestinationAd === undefined)   { m.actualDestinationAd   = '';       needsSave = true; }
+      if (m.actualDestinationText === undefined) { m.actualDestinationText = '';       needsSave = true; }
+      if (m.outcomeTime === undefined)           { m.outcomeTime           = '';       needsSave = true; }
+      // Sprint 9: PIC field — uses existing captain; no migration needed but ensure defined
+      if (m.captain === undefined) { m.captain = ''; needsSave = true; }
     });
     if (needsSave) saveToStorage();
   } else {
@@ -723,10 +736,14 @@ function asNonNegInt(v) {
 
 /**
  * Runway movement-equivalent contribution of one movement.
+ * NOMINAL (plan-based) counting — used by reporting.js for Monthly Return.
  * OVR returns 0 (overflights excluded from runway totals; counted separately).
  * DEP/ARR contribute 1 base + counter additions.
  * LOC contributes 2 base + counter additions.
  * Formula: base + (2 × tngCount) + (1 × osCount)
+ *
+ * NOTE: For Live Board daily totals use egowRunwayContribution() instead,
+ * which only counts realized EGOW events.
  *
  * @param {object} m - Movement object
  * @returns {number}
@@ -744,6 +761,35 @@ export function runwayMovementContribution(m) {
     0;
 
   return base + (2 * tng) + os;
+}
+
+/**
+ * Event-based runway contribution for Live Board daily totals.
+ * Only counts EGOW events that have actually occurred.
+ *
+ * Rules:
+ *   DEP  = 1 if depActual exists, else 0
+ *   ARR  = 1 if arrActual exists, else 0
+ *   LOC  = (depActual ? 1 : 0) + (2 × tngCount) + osCount + (arrActual ? 1 : 0)
+ *   OVR  = 0 always
+ *
+ * T&G and O/S contribute regardless of actual times (they are discrete logged events).
+ *
+ * @param {object} m - Movement object
+ * @returns {number}
+ */
+export function egowRunwayContribution(m) {
+  const ft  = String(m.flightType || "").toUpperCase();
+  const tng = asNonNegInt(m.tngCount);
+  const os  = asNonNegInt(m.osCount);
+  const hasDep = !!(m.depActual && String(m.depActual).trim());
+  const hasArr = !!(m.arrActual && String(m.arrActual).trim());
+
+  if (ft === "OVR") return 0;
+  if (ft === "DEP") return hasDep ? 1 : 0;
+  if (ft === "ARR") return hasArr ? 1 : 0;
+  if (ft === "LOC") return (hasDep ? 1 : 0) + (2 * tng) + os + (hasArr ? 1 : 0);
+  return 0;
 }
 
 /**
