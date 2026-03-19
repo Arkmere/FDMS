@@ -786,6 +786,8 @@ function initAdminPanelHandlers() {
   const configAlwaysHideLocal = document.getElementById("configAlwaysHideLocal");
   const configNewFormUtcTogglePolicy = document.getElementById("configNewFormUtcTogglePolicy");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
+  const configShowTimeLabels = document.getElementById("configShowTimeLabels");
+  const configShowEstimatedTimes = document.getElementById("configShowEstimatedTimes");
   // Auto-activation settings per flight type
   const configAutoActivateDepEnabled = document.getElementById("configAutoActivateDepEnabled");
   const configAutoActivateDepMinutes = document.getElementById("configAutoActivateDepMinutes");
@@ -813,6 +815,7 @@ function initAdminPanelHandlers() {
   // All tracked config inputs (order matters only for snapshot key identity)
   const CHECKBOX_IDS = [
     'configHideLocalIfSame', 'configAlwaysHideLocal', 'configEnableAlertTooltips',
+    'configShowTimeLabels', 'configShowEstimatedTimes',
     'configAutoActivateDepEnabled', 'configAutoActivateArrEnabled',
     'configAutoActivateLocEnabled', 'configAutoActivateOvrEnabled',
     'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
@@ -899,6 +902,8 @@ function initAdminPanelHandlers() {
   if (configAlwaysHideLocal) configAlwaysHideLocal.checked = currentConfig.alwaysHideLocalTimeInBanner || false;
   if (configNewFormUtcTogglePolicy) configNewFormUtcTogglePolicy.value = currentConfig.newFormUtcLocalTogglePolicy || "auto";
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
+  if (configShowTimeLabels) configShowTimeLabels.checked = currentConfig.showTimeLabelsOnStrip !== false;
+  if (configShowEstimatedTimes) configShowEstimatedTimes.checked = currentConfig.showEstimatedTimesOnStrip !== false;
   // Auto-activation settings per flight type
   if (configAutoActivateDepEnabled) configAutoActivateDepEnabled.checked = currentConfig.autoActivateDepEnabled || false;
   if (configAutoActivateDepMinutes) configAutoActivateDepMinutes.value = currentConfig.autoActivateDepMinutes || 30;
@@ -1027,6 +1032,8 @@ function initAdminPanelHandlers() {
     const hideLocalIfSame = configHideLocalIfSame?.checked || false;
     const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
     const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
+    const showTimeLabelsOnStrip = configShowTimeLabels?.checked !== false;
+    const showEstimatedTimesOnStrip = configShowEstimatedTimes?.checked !== false;
     // Auto-activation settings per flight type
     const autoActivateDepEnabled = configAutoActivateDepEnabled?.checked || false;
     const autoActivateDepMinutes = parseInt(configAutoActivateDepMinutes?.value || "30", 10);
@@ -1083,6 +1090,8 @@ function initAdminPanelHandlers() {
       hideLocalTimeInBannerIfSame: hideLocalIfSame,
       alwaysHideLocalTimeInBanner: alwaysHideLocal,
       enableAlertTooltips: enableAlertTooltips,
+      showTimeLabelsOnStrip: showTimeLabelsOnStrip,
+      showEstimatedTimesOnStrip: showEstimatedTimesOnStrip,
       // Auto-activation settings per flight type
       autoActivateDepEnabled: autoActivateDepEnabled,
       autoActivateDepMinutes: autoActivateDepMinutes,

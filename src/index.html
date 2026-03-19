@@ -1025,6 +1025,25 @@
                     </div>
                   </div>
 
+                  <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 8px;">
+                      Strip Time Display
+                    </label>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configShowTimeLabels" style="cursor: pointer;">
+                        <span style="font-size: 12px;">Show time labels (ETD / ATD / ETA / ATA) above times on strips</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configShowEstimatedTimes" style="cursor: pointer;">
+                        <span style="font-size: 12px;">Show estimated times on strips (when OFF, estimated times show as "–")</span>
+                      </label>
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 6px;">
+                      When labels are ON they appear on their own line above the time value. Actual times (ATD/ATA) always show regardless of the estimated-times toggle.
+                    </div>
+                  </div>
+
                   <div style="margin-bottom: 8px;">
                     <label style="display: block; font-weight: bold; margin-bottom: 8px;">
                       Alert Display Options

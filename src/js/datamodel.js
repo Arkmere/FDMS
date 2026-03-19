@@ -52,7 +52,9 @@ const defaultConfig = {
   arrToDepOffsetMinutes: 30,         // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
   inlineEditIdleMs: 120000,          // Inline-edit idle timeout before auto-cancel (ms); min enforced 5000
   timeInputMode: "UTC",              // Time input display mode in modals: "UTC" or "LOCAL"
-  newFormUtcLocalTogglePolicy: "auto" // UTC/Local toggle visibility in new-strip forms: "auto" | "show" | "hide"
+  newFormUtcLocalTogglePolicy: "auto", // UTC/Local toggle visibility in new-strip forms: "auto" | "show" | "hide"
+  showTimeLabelsOnStrip: true,       // Show ETD/ATD/ETA/ATA labels on Live Board time cells (label on own line above time)
+  showEstimatedTimesOnStrip: true    // Show estimated times (ETD/ETA/ECT) on strip; when OFF show "-" for estimated, actual times always show
 };
 
 // Configuration state
