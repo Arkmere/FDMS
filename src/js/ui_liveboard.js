@@ -2231,8 +2231,8 @@ function reEvaluateStatusAfterTimeChange(movementId) {
   plannedDate.setUTCHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
   const minutesUntil = Math.floor((plannedDate - new Date()) / (1000 * 60));
 
-  // Revert to PLANNED if more than (window + 5) minutes away — 5-min buffer avoids boundary flipping
-  if (minutesUntil > settings.minutes + 5) {
+  // Revert to PLANNED if more than the configured activation window away
+  if (minutesUntil > settings.minutes) {
     updateMovement(movement.id, { status: 'PLANNED' });
     return true;
   }
@@ -2748,9 +2748,84 @@ export function renderLiveBoard() {
         const op   = lookupOperatorFromCallsign(m.callsignCode || '', m.type || '');
         return [unit, op].filter(v => v && v !== '-').join(' / ');
       })();
-      const regOp = (() => {
-        const regData = lookupRegistration(m.registration || '');
-        return regData ? (regData['OPERATOR'] || '').trim() : '';
+      const regNationality = (() => {
+        const reg = (m.registration || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!reg) return '';
+        // ICAO registration prefix → nationality/state (ordered longest-first where ambiguous)
+        const PREFIX_MAP = [
+          // Military / special
+          ['ZZ',  'UK Military'],
+          // Two-letter prefixes (must be checked before single-letter overlaps)
+          ['AP',  'Pakistan'],       ['A2',  'Botswana'],        ['A3',  'Tonga'],
+          ['A5',  'Bhutan'],         ['A6',  'United Arab Emirates'], ['A7', 'Qatar'],
+          ['A9C', 'Bahrain'],
+          ['B',   'China / Taiwan'], // catch-all for B
+          ['C2',  'Nauru'],          ['C3',  'Andorra'],         ['C5',  'Gambia'],
+          ['C6',  'Bahamas'],        ['C9',  'Mozambique'],      ['CC',  'Chile'],
+          ['CN',  'Morocco'],        ['CP',  'Bolivia'],         ['CS',  'Portugal'],
+          ['CU',  'Cuba'],           ['CX',  'Uruguay'],         ['CY',  'Cyprus (abandoned)'],
+          ['D2',  'Angola'],         ['D4',  'Cape Verde'],      ['D6',  'Comoros'],
+          ['DQ',  'Fiji'],           ['DU',  'Philippines'],
+          ['E3',  'Eritrea'],        ['E7',  'Bosnia and Herzegovina'],
+          ['EC',  'Spain'],          ['EI',  'Ireland'],         ['EK',  'Armenia'],
+          ['EL',  'Liberia'],        ['EP',  'Iran'],            ['ER',  'Moldova'],
+          ['ES',  'Estonia'],        ['ET',  'Ethiopia'],        ['EW',  'Belarus'],
+          ['EX',  'Kyrgyzstan'],     ['EY',  'Tajikistan'],      ['EZ',  'Turkmenistan'],
+          ['F',   'France'],
+          ['G',   'United Kingdom'],
+          ['HA',  'Hungary'],        ['HB',  'Switzerland'],     ['HC',  'Ecuador'],
+          ['HD',  'Ecuador'],        ['HH',  'Haiti'],           ['HI',  'Dominican Republic'],
+          ['HK',  'Colombia'],       ['HL',  'South Korea'],     ['HP',  'Panama'],
+          ['HR',  'Honduras'],       ['HS',  'Thailand'],        ['HV',  'Vatican'],
+          ['HZ',  'Saudi Arabia'],
+          ['I',   'Italy'],
+          ['J2',  'Djibouti'],       ['J3',  'Grenada'],         ['J5',  'Guinea-Bissau'],
+          ['J6',  'Saint Lucia'],    ['J7',  'Dominica'],        ['J8',  'Saint Vincent'],
+          ['JA',  'Japan'],          ['JY',  'Jordan'],
+          ['LN',  'Norway'],         ['LQ',  'Bosnia'],          ['LV',  'Argentina'],
+          ['LX',  'Luxembourg'],     ['LY',  'Lithuania'],       ['LZ',  'Bulgaria'],
+          ['N',   'United States'],
+          ['OB',  'Peru'],           ['OD',  'Lebanon'],         ['OE',  'Austria'],
+          ['OH',  'Finland'],        ['OK',  'Czech Republic'],  ['OM',  'Slovakia'],
+          ['OO',  'Belgium'],        ['OY',  'Denmark'],
+          ['P',   'North Korea'],    ['P2',  'Papua New Guinea'], ['P4', 'Aruba'],
+          ['PH',  'Netherlands'],    ['PJ',  'Sint Maarten'],    ['PK',  'Indonesia'],
+          ['PP',  'Brazil'],         ['PR',  'Brazil'],          ['PT',  'Brazil'],
+          ['PU',  'Brazil'],         ['PZ',  'Suriname'],
+          ['RA',  'Russia'],         ['RK',  'South Korea'],     ['RP',  'Philippines'],
+          ['S2',  'Bangladesh'],     ['S5',  'Slovenia'],        ['S7',  'Seychelles'],
+          ['S9',  'São Tomé and Príncipe'],
+          ['SE',  'Sweden'],         ['SN',  'Poland'],          ['SO',  'Senegal'],
+          ['SP',  'Poland'],         ['ST',  'Sudan'],           ['SU',  'Egypt'],
+          ['SX',  'Greece'],
+          ['T2',  'Tuvalu'],         ['T3',  'Kiribati'],        ['T7',  'San Marino'],
+          ['T9',  'Bosnia'],         ['TC',  'Turkey'],          ['TF',  'Iceland'],
+          ['TG',  'Guatemala'],      ['TI',  'Costa Rica'],      ['TJ',  'Cameroon'],
+          ['TL',  'Central African Republic'], ['TN', 'Republic of Congo'],
+          ['TR',  'Gabon'],          ['TS',  'Tunisia'],         ['TT',  'Trinidad and Tobago'],
+          ['TU',  'Ivory Coast'],    ['TY',  'Benin'],           ['TZ',  'Mali'],
+          ['UK',  'Uzbekistan'],     ['UN',  'Kazakhstan'],      ['UR',  'Ukraine'],
+          ['V2',  'Antigua and Barbuda'], ['V3', 'Belize'],      ['V4',  'Saint Kitts and Nevis'],
+          ['V5',  'Namibia'],        ['V6',  'Micronesia'],      ['V7',  'Marshall Islands'],
+          ['V8',  'Brunei'],         ['VH',  'Australia'],       ['VN',  'Vietnam'],
+          ['VP',  'British Territories'], ['VQ', 'British Territories'],
+          ['VT',  'India'],
+          ['XA',  'Mexico'],         ['XB',  'Mexico'],          ['XC',  'Mexico'],
+          ['XT',  'Burkina Faso'],   ['XU',  'Cambodia'],        ['XV',  'Vietnam'],
+          ['XY',  'Myanmar'],        ['XZ',  'Myanmar'],
+          ['YA',  'Afghanistan'],    ['YI',  'Iraq'],            ['YJ',  'Vanuatu'],
+          ['YK',  'Syria'],          ['YL',  'Latvia'],          ['YM',  'Turkey'],
+          ['YN',  'Nicaragua'],      ['YO',  'Romania'],         ['YR',  'Romania'],
+          ['YS',  'El Salvador'],    ['YU',  'Serbia'],          ['YV',  'Venezuela'],
+          ['Z',   'Zimbabwe'],
+          ['ZA',  'Albania'],        ['ZK',  'New Zealand'],     ['ZL',  'New Zealand'],
+          ['ZM',  'New Zealand'],    ['ZP',  'Paraguay'],        ['ZS',  'South Africa'],
+          ['ZU',  'South Africa'],   ['ZW',  'Zimbabwe'],
+        ];
+        for (const [prefix, nation] of PREFIX_MAP) {
+          if (reg.startsWith(prefix)) return nation;
+        }
+        return '';
       })();
       const typeName = (() => {
         if (m.type === 'ZZZZ' && m.aircraftTypeText) return m.aircraftTypeText;
@@ -2763,26 +2838,25 @@ export function renderLiveBoard() {
       })();
       const depAdName = m.depAd === 'ZZZZ' && m.depAdText ? `${m.depAdText} (ZZZZ)` : getLocationName(m.depAd || '');
       const arrAdName = m.arrAd === 'ZZZZ' && m.arrAdText ? `${m.arrAdText} (ZZZZ)` : getLocationName(m.arrAd || '');
-      const suffix = ' – Double-click to edit';
       return {
-        callsignCode: (unitInfo ? unitInfo + suffix : 'Double-click to edit callsign'),
-        callsignVoice: 'Voice callsign' + suffix,
-        registration:  (regOp ? regOp + suffix : 'Double-click to edit registration'),
-        type:          (typeName ? typeName + suffix : 'Double-click to edit type'),
-        wtc:           (wtcCat && WTC_FULL[wtcCat] ? `WTC ${wtcCat} – ${WTC_FULL[wtcCat]}` + suffix : 'Wake Turbulence Category' + suffix),
-        depAd:         (depAdName ? depAdName + suffix : 'Departure aerodrome' + suffix),
-        arrAd:         (arrAdName ? arrAdName + suffix : 'Arrival aerodrome' + suffix),
-        rules:         ((RULES_FULL[m.rules] || 'Flight rules') + suffix),
-        tngCount:      'T&G – Touch and Go count' + suffix,
-        osCount:       'O/S – Overshoot count' + suffix,
-        fisCount:      'FIS – Flight Information Service count' + suffix,
-        remarks:       'REMARKS' + suffix,
-        depActual:     'ATD – Actual Time of Departure' + suffix,
-        depPlanned:    'ETD – Estimated Time of Departure' + suffix,
-        arrActual:     'ATA – Actual Time of Arrival' + suffix,
-        arrPlanned:    'ETA – Estimated Time of Arrival' + suffix,
-        ect:           'ECT – Estimated Crossing Time' + suffix,
-        act:           'ACT – Actual Crossing Time' + suffix,
+        callsignCode: (unitInfo || 'Callsign'),
+        callsignVoice: 'Voice callsign',
+        registration:  (regNationality || 'Registration'),
+        type:          (typeName || 'Aircraft type'),
+        wtc:           (wtcCat && WTC_FULL[wtcCat] ? `WTC ${wtcCat} – ${WTC_FULL[wtcCat]}` : 'Wake Turbulence Category'),
+        depAd:         (depAdName || 'Departure aerodrome'),
+        arrAd:         (arrAdName || 'Arrival aerodrome'),
+        rules:         (RULES_FULL[m.rules] || 'Flight rules'),
+        tngCount:      'T&G – Touch and Go count',
+        osCount:       'O/S – Overshoot count',
+        fisCount:      'FIS – Flight Information Service count',
+        remarks:       'REMARKS',
+        depActual:     'ATD – Actual Time of Departure',
+        depPlanned:    'ETD – Estimated Time of Departure',
+        arrActual:     'ATA – Actual Time of Arrival',
+        arrPlanned:    'ETA – Estimated Time of Arrival',
+        ect:           'ECT – Estimated Crossing Time',
+        act:           'ACT – Actual Crossing Time',
       };
     })();
 
