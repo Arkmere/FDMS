@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-18 (Europe/London) — Latest completed sprint: Post-Sprint 9 correction pass — Admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
+Last updated: 2026-03-20 (Europe/London) — Latest completed sprint: Sprint 10 — Timing normalization — single resolved timing model, ARR timeline bar fix, unified recalculation path
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -667,17 +667,78 @@ Delivered:
 * `getATD(m)` semantics unchanged (returns null for ARR); ARR dep time display uses raw `m.depActual` field directly
 * `reEvaluateStatusAfterTimeChange` uses a +5 min buffer to avoid boundary oscillation
 
+### 8.17 Sprint 10 — Timing normalization / single resolved timing model
+
+**Outcome:** complete
+
+**Phase 1 — Audit findings (divergence points identified):**
+
+1. **Timeline ARR start time (CRITICAL):** `getMovementStartTime()` for ARR returned `ATA || ETA` — using the arrival side as the bar START. Spec requires bar start = ETD (planned) or ATD (active/completed), never ETA/ATA.
+2. **Timeline ARR/LOC end time:** `getMovementEndTime()` for ARR returned `ATA || ETA` — end was correct semantically, but start being wrong made the whole span wrong.
+3. **No inline edit recalculation:** Inline time edits saved only the single touched field. No dependent side (e.g. ETA after ETD edit) was recalculated. Only the modal's `bindPlannedTimesSync` had any bidirectional sync.
+4. **Modal ARR sync direction wrong:** `bindPlannedTimesSync` was called with ETD=start, ETA=end for all types. For ARR, the canonical root is ETA and ETD is derived. The modal was computing ETA from ETD for ARR, which is backwards.
+5. **`transitionToActive` did not recalculate ETA:** After the Active button set ATD to current time, ETA was not updated to ATD + Duration. Strip retained the old planned ETA after activation.
+6. **`arrAtdOnSave` partial workaround:** An ad-hoc inline-edit callback existed only for the ARR dep-time cell; it was the only inline recalculate path and only worked for `durationMinutes > 0`. Not general.
+7. **`getMovementWindow` (WTC overlap):** Used `depActual || depPlanned` as raw start, not aware of ARR planned semantics (where start = ETD not ETA).
+
+**Phase 2 — Delivered:**
+
+**A. Canonical timing model added to `datamodel.js`:**
+* Private helpers `_tmToMins(t)` and `_minsToTm(m)` — pure HH:MM arithmetic, no Date dependency
+* `getDurationSource(movement)` — exported. Returns `{ minutes, isExplicit }`. Explicit = user-entered `durationMinutes`; non-explicit = admin default fallback. Distinction used by ARR safeguard.
+* `resolvedStartTime(movement)` — exported. Always returns the departure/start anchor (ETD or ATD), never ETA/ATA. For ARR planned: uses `depPlanned` if stored, else computes `arrPlanned − duration`.
+* `resolvedEndTime(movement)` — exported. Returns `arrActual || arrPlanned` for all types (ATA||ETA for DEP/LOC/ARR; ALFT||ELFT for OVR).
+* `recalculateTimingModel(movement, changedField)` — exported. Returns a patch object. Implements all canonical rules per spec for DEP/LOC/ARR/OVR in both planned and active states. ARR safeguard: if duration is non-explicit AND `arrPlanned` already exists in active state, does not blindly overwrite with ATD+default (patch._weakPrediction sentinel).
+
+**B. `ui_liveboard.js` — Timeline fix:**
+* `getMovementStartTime(m)` now delegates to `resolvedStartTime(m)` — ARR bar no longer starts at ETA/ATA
+* `getMovementEndTime(m)` now delegates to `resolvedEndTime(m)`
+* Timeline end calculation simplified: uses resolved end time; falls back to `getDurationSource` default only if no end time stored
+* `getMovementWindow()` (WTC overlap) now uses resolved start/end times
+
+**C. Modal time sync — ARR direction fix:**
+* `bindPlannedTimesSync` extended with optional `opts.arrMode` parameter
+* ARR mode: ETA (arrPlanned) is the root; ETD (depPlanned) is the dependent. Duration/ETA change → ETD. ETD change → Duration.
+* DEP/LOC/OVR mode: unchanged (ETD is root, ETA is dependent)
+* All three `bindPlannedTimesSync` call sites (new-flight, edit, duplicate modals) now pass `{ arrMode: flightType === 'ARR' }` — ARR modal syncs in the correct direction
+
+**D. Inline edit save — recalculation wired:**
+* `saveEdit` in `enableInlineEdit` now calls `recalculateTimingModel(updatedMovement, fieldName)` after persisting any timing/duration field
+* ARR `_weakPrediction` sentinel respected: suppressed overwrite of existing ETA when duration is non-explicit
+* The ad-hoc `arrAtdOnSave` callback removed; generic path handles all cases
+
+**E. `transitionToActive` — ETA update after activation:**
+* After setting `depActual` to current time, calls `recalculateTimingModel(updatedMovement, 'depActual')`
+* For DEP/LOC: ETA = ATD + Duration (always)
+* For ARR: ETA = ATD + Duration only if duration is explicit (ARR safeguard honoured)
+* For OVR: ELFT = ATOF + Duration if ALFT not yet set
+
+**NO-DRIFT confirmations:**
+* Event-based Live Board daily stats model unchanged
+* Nominal Monthly Return / Dashboard / Insights model unchanged
+* `flightType` semantics unchanged
+* Additive outcome model unchanged
+* OVR separate-counter behaviour unchanged
+* Booking reconciliation policy unchanged
+* Hard delete vs cancel distinction unchanged
+* ZZZZ / PIC fields unchanged
+
+**Limitations / known residual items:**
+* Duplicate modal (`openDuplicateMovementModal`) uses a fixed ARR-mode bind based on the source movement type — correct for same-type duplicates; type change after dup creation not retroactively handled (deferred, low priority)
+* OVR Timeline in the duplicate modal is treated same as DEP/LOC (not ARR mode), which is correct
+* For legacy movements where `durationMinutes` was set but `arrPlanned` was not in sync, the first inline time edit or activation will now apply the correct recalculation
+
 ---
 
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-18:
+As of 2026-03-20:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, and Post-Sprint-9 correction pass are all landed
-* Post-Sprint-9 correction pass is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, and Sprint 10 timing normalization are all landed
+* Sprint 10 (timing normalization) is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -689,6 +750,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * booking/strip integrity policy is stable and should not be reworked casually
 * Sprint 9 features are landed: event-based Live Board stats, ETD/ATD/ETA/ATA labels, ZZZZ companion fields, PIC, outcome model
 * Post-Sprint-9 features are landed: admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
+* Sprint 10 features are landed: single resolved timing model (`getDurationSource`, `resolvedStartTime`, `resolvedEndTime`, `recalculateTimingModel` in datamodel.js); Timeline ARR bar start fixed to ETD/ATD; ARR modal sync direction corrected; inline edits now recalculate dependent timing; `transitionToActive` recalculates ETA from ATD
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 

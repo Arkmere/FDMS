@@ -30,7 +30,11 @@ import {
   updateFormationElement,
   cascadeFormationStatus,
   isValidWtcChar,
-  isValidIcaoAd
+  isValidIcaoAd,
+  getDurationSource,
+  resolvedStartTime,
+  resolvedEndTime,
+  recalculateTimingModel
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -737,6 +741,21 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       return false;
     }
 
+    // ── Canonical timing model: recalculate dependent side after time/duration changes ──
+    // This is the single authoritative recalculation path for inline edits.
+    // Modal edits use bindPlannedTimesSync for live UI feedback and save the
+    // already-computed values; inline edits must trigger recalc here on commit.
+    const timingFields = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual', 'durationMinutes'];
+    if (timingFields.includes(fieldName)) {
+      const timingPatch = recalculateTimingModel(updatedMovement, fieldName);
+      const isWeak = timingPatch._weakPrediction;
+      delete timingPatch._weakPrediction;
+      if (Object.keys(timingPatch).length > 0 && !isWeak) {
+        updateMovement(movementId, timingPatch);
+      }
+      // isWeak: ARR active with non-explicit duration + existing ETA — no overwrite
+    }
+
     onMovementUpdated(updatedMovement);
 
     // Part E: For time field edits on ACTIVE strips, re-evaluate whether status
@@ -933,75 +952,130 @@ function addMinutesToTime(time, minutesToAdd) {
  * Bind bidirectional sync between the planned-start, planned-end, and duration
  * fields in a Times section.
  *
- * Rules (last-touched wins):
- *   Duration edited  → end = start + durationMinutes  (writes into endEl)
- *   End-time edited  → duration = end − start minutes (writes into durEl)
+ * DEP / LOC mode (default):
+ *   Duration edited  → end = start + duration
+ *   End-time edited  → duration = end − start
  *   Start edited     → recomputes whichever side was last touched
- *   Either field cleared → stops overriding the other; no-op on start change
  *   endEl disabled   → only Duration→end direction is bound (e.g. OVR ELFT)
+ *
+ * ARR mode (opts.arrMode = true):
+ *   ETA (endEl) is the governing root; ETD (startEl) is the dependent side.
+ *   Duration edited  → ETD = ETA − duration
+ *   ETA edited       → ETD = ETA − duration
+ *   ETD edited       → duration = ETA − ETD   (user explicitly set ETD)
  *
  * Works in any display mode (UTC or local) because it operates on whatever
  * values the inputs currently show — conversion to/from UTC happens in save.
+ *
+ * @param {string} startId   - Element ID for ETD / EOFT input
+ * @param {string} endId     - Element ID for ETA / ELFT input
+ * @param {string} durationId - Element ID for Duration input
+ * @param {object} [opts]    - Options
+ * @param {boolean} [opts.arrMode=false] - ARR mode: ETA is root, ETD is dependent
  */
-function bindPlannedTimesSync(startId, endId, durationId) {
+function bindPlannedTimesSync(startId, endId, durationId, opts = {}) {
+  const arrMode = !!(opts && opts.arrMode);
   const startEl = document.getElementById(startId);
   const endEl   = document.getElementById(endId);
   const durEl   = document.getElementById(durationId);
   if (!startEl || !durEl) return;
 
-  // 'duration' | 'end' | null — which field the user last explicitly edited
-  let _lastTouched = null;
+  if (arrMode) {
+    /* ── ARR mode: ETA (endEl) = root, ETD (startEl) = dependent ─────── */
 
-  const applyDurationToEnd = () => {
-    if (!endEl) return;
-    const startMin = timeToMinutes(startEl.value);
-    const dur = parseInt(durEl.value, 10);
-    if (!Number.isFinite(startMin) || !(dur > 0)) return;
-    endEl.value = minutesToTime(startMin + dur);
-  };
+    // Compute ETD = ETA − Duration and write into startEl
+    const applyToStart = () => {
+      if (!endEl) return;
+      const endMin = timeToMinutes(endEl.value);
+      const dur    = parseInt(durEl.value, 10);
+      if (!Number.isFinite(endMin) || !(dur > 0)) return;
+      startEl.value = minutesToTime(endMin - dur);
+    };
 
-  const applyEndToDuration = () => {
-    if (!endEl) return;
-    const startMin = timeToMinutes(startEl.value);
-    const endMin   = timeToMinutes(endEl.value);
-    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return;
-    let diff = endMin - startMin;
-    if (diff <= 0) diff += 1440; // overnight wrap
-    if (diff > 0 && diff <= 1440) durEl.value = String(diff);
-  };
+    // Compute Duration = ETA − ETD and write into durEl
+    const applyStartToDuration = () => {
+      if (!endEl) return;
+      const endMin   = timeToMinutes(endEl.value);
+      const startMin = timeToMinutes(startEl.value);
+      if (!Number.isFinite(endMin) || !Number.isFinite(startMin)) return;
+      let diff = endMin - startMin;
+      if (diff <= 0) diff += 1440;
+      if (diff > 0 && diff <= 1440) durEl.value = String(diff);
+    };
 
-  // Duration changed → update end-time
-  durEl.addEventListener('input', () => {
-    const dur = parseInt(durEl.value, 10);
-    if (!durEl.value.trim() || !(dur > 0)) {
-      _lastTouched = null; // cleared — stop overriding end until re-entered
-      return;
+    // Duration changed → update ETD
+    durEl.addEventListener('input', () => {
+      if (!durEl.value.trim() || !(parseInt(durEl.value, 10) > 0)) return;
+      applyToStart();
+    });
+
+    // ETA changed → update ETD
+    if (endEl && !endEl.disabled) {
+      endEl.addEventListener('input', applyToStart);
+      endEl.addEventListener('blur',  applyToStart);
     }
-    _lastTouched = 'duration';
-    applyDurationToEnd();
-  });
 
-  // End-time changed → update duration (skip for disabled fields, e.g. OVR ELFT)
-  if (endEl && !endEl.disabled) {
-    const onEndEdit = () => {
-      if (!endEl.value.trim()) {
-        if (_lastTouched === 'end') _lastTouched = null;
+    // ETD manually changed → update Duration (ETD is user-driven in this case)
+    startEl.addEventListener('input', applyStartToDuration);
+    startEl.addEventListener('blur',  applyStartToDuration);
+
+  } else {
+    /* ── DEP / LOC / OVR mode: ETD (startEl) = root, ETA (endEl) = dependent */
+
+    // 'duration' | 'end' | null — which field the user last explicitly edited
+    let _lastTouched = null;
+
+    const applyDurationToEnd = () => {
+      if (!endEl) return;
+      const startMin = timeToMinutes(startEl.value);
+      const dur = parseInt(durEl.value, 10);
+      if (!Number.isFinite(startMin) || !(dur > 0)) return;
+      endEl.value = minutesToTime(startMin + dur);
+    };
+
+    const applyEndToDuration = () => {
+      if (!endEl) return;
+      const startMin = timeToMinutes(startEl.value);
+      const endMin   = timeToMinutes(endEl.value);
+      if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return;
+      let diff = endMin - startMin;
+      if (diff <= 0) diff += 1440; // overnight wrap
+      if (diff > 0 && diff <= 1440) durEl.value = String(diff);
+    };
+
+    // Duration changed → update end-time
+    durEl.addEventListener('input', () => {
+      const dur = parseInt(durEl.value, 10);
+      if (!durEl.value.trim() || !(dur > 0)) {
+        _lastTouched = null; // cleared — stop overriding end until re-entered
         return;
       }
-      _lastTouched = 'end';
-      applyEndToDuration();
-    };
-    endEl.addEventListener('input', onEndEdit);
-    endEl.addEventListener('blur',  onEndEdit);
-  }
+      _lastTouched = 'duration';
+      applyDurationToEnd();
+    });
 
-  // Start changed → recompute the last-touched counterpart
-  const onStartChange = () => {
-    if (_lastTouched === 'duration') applyDurationToEnd();
-    else if (_lastTouched === 'end') applyEndToDuration();
-  };
-  startEl.addEventListener('input', onStartChange);
-  startEl.addEventListener('blur',  onStartChange);
+    // End-time changed → update duration (skip for disabled fields, e.g. OVR ELFT)
+    if (endEl && !endEl.disabled) {
+      const onEndEdit = () => {
+        if (!endEl.value.trim()) {
+          if (_lastTouched === 'end') _lastTouched = null;
+          return;
+        }
+        _lastTouched = 'end';
+        applyEndToDuration();
+      };
+      endEl.addEventListener('input', onEndEdit);
+      endEl.addEventListener('blur',  onEndEdit);
+    }
+
+    // Start changed → recompute the last-touched counterpart
+    const onStartChange = () => {
+      if (_lastTouched === 'duration') applyDurationToEnd();
+      else if (_lastTouched === 'end') applyEndToDuration();
+    };
+    startEl.addEventListener('input', onStartChange);
+    startEl.addEventListener('blur',  onStartChange);
+  }
 }
 
 /* -----------------------------------------------------------------------
@@ -1845,33 +1919,22 @@ function generateMovementAlerts(m) {
   }
 
   // Helper: compute predicted ACTIVE window [startMin, endMin] for a movement.
+  // Uses resolved timing model for start/end anchors (canonical spec).
   // Returns null if window cannot be determined.
   function getMovementWindow(mov) {
-    const movFt = (mov.flightType || '').toUpperCase();
-    let startMin = null;
-    if (mov.depActual) {
-      startMin = timeToMinutes(mov.depActual);
-    } else if (mov.depPlanned) {
-      startMin = timeToMinutes(mov.depPlanned);
-    }
-    if (startMin === null || !Number.isFinite(startMin)) return null;
+    const startStr = resolvedStartTime(mov);
+    if (!startStr) return null;
+    let startMin = timeToMinutes(startStr);
+    if (!Number.isFinite(startMin)) return null;
 
-    // Duration override: if set, always use start + durationMinutes (ignores stored end times).
-    // If not set, use stored end times then fall back to admin per-type default.
-    let endMin = null;
-    if (mov.durationMinutes > 0) {
-      endMin = startMin + mov.durationMinutes;
-    } else if (movFt === 'ARR' || movFt === 'LOC') {
-      if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
-      else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + getDefaultFlightDuration(movFt);
-    } else {
-      // DEP / OVR
-      if (mov.arrActual) endMin = timeToMinutes(mov.arrActual);
-      else if (mov.arrPlanned) endMin = timeToMinutes(mov.arrPlanned);
-      else endMin = startMin + getDefaultFlightDuration(movFt);
+    const endStr = resolvedEndTime(mov);
+    let endMin = timeToMinutes(endStr);
+    if (!Number.isFinite(endMin)) {
+      const ft = (mov.flightType || '').toUpperCase();
+      const { minutes } = getDurationSource(mov);
+      endMin = startMin + minutes;
     }
-    if (!Number.isFinite(endMin)) return null;
+
     // Handle overnight wrap
     if (endMin < startMin) endMin += 24 * 60;
     return { start: startMin, end: endMin };
@@ -2889,21 +2952,10 @@ export function renderLiveBoard() {
       enableInlineEdit(depTimeEl, m.id, depField, "time", null, _tt[depField]);
     }
     if (ft === "ARR") {
-      // ARR dep-time cell: editable for depActual (ATD from origin) to support recompute chain
-      const arrAtdOnSave = () => {
-        const updated = getMovements().find(mv => String(mv.id) === String(m.id));
-        if (updated && updated.depActual && updated.durationMinutes > 0 && !updated.arrActual) {
-          const derived = addMinutesToTime(updated.depActual, updated.durationMinutes);
-          if (derived) {
-            updateMovement(updated.id, { arrPlanned: derived });
-            // Part E: re-evaluate status with the newly derived ETA
-            reEvaluateStatusAfterTimeChange(updated.id);
-            renderLiveBoard();
-            renderTimelineTracks();
-          }
-        }
-      };
-      enableInlineEdit(depTimeEl, m.id, "depActual", "time", arrAtdOnSave, _tt.depActual);
+      // ARR dep-time cell: editable for depActual (ATD from origin).
+      // ETA recalculation (ETA = ATD + Duration) is handled by the generic
+      // recalculateTimingModel path in saveEdit — no separate callback needed.
+      enableInlineEdit(depTimeEl, m.id, "depActual", "time", null, _tt.depActual);
     }
     if (ft === "ARR" || ft === "LOC") {
       const arrField = m.arrActual ? "arrActual" : "arrPlanned";
@@ -3666,7 +3718,9 @@ function openNewFlightModal(flightType = "DEP") {
   bindNewFormTimingToggle("newFlightTimingToggle", ".js-save-complete-flight");
 
   // Bind bidirectional Duration ↔ planned-end sync
-  bindPlannedTimesSync("newDepPlanned", "newArrPlanned", "newDuration");
+  // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
+  bindPlannedTimesSync("newDepPlanned", "newArrPlanned", "newDuration",
+    { arrMode: flightType === 'ARR' });
 
   // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
@@ -5336,7 +5390,9 @@ function openEditMovementModal(m) {
   }
 
   // Bind bidirectional Duration ↔ planned-end sync
-  bindPlannedTimesSync("editDepPlanned", "editArrPlanned", "editDuration");
+  // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
+  bindPlannedTimesSync("editDepPlanned", "editArrPlanned", "editDuration",
+    { arrMode: m.flightType === 'ARR' });
 
   // Bind save handler with validation
   document.querySelector(".js-save-edit")?.addEventListener("click", () => {
@@ -5857,7 +5913,9 @@ function openDuplicateMovementModal(m) {
   }
 
   // Bind bidirectional Duration ↔ planned-end sync
-  bindPlannedTimesSync("dupDepPlanned", "dupArrPlanned", "dupDuration");
+  // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
+  bindPlannedTimesSync("dupDepPlanned", "dupArrPlanned", "dupDuration",
+    { arrMode: flightType === 'ARR' });
 
   // Bind save handler with validation
   document.querySelector(".js-save-dup")?.addEventListener("click", () => {
@@ -6156,7 +6214,20 @@ function transitionToActive(id) {
     showToast(`Flight activated early - DOF updated from ${movement.dof.split('-').reverse().join('/')} to today`, 'info');
   }
 
-  updateMovement(id, updates);
+  const updatedMovement = updateMovement(id, updates);
+
+  // Canonical timing model: after ATD is set, recalculate ETA = ATD + Duration.
+  // For ARR: only recalculate if duration is explicit (safeguard: don't blindly
+  // overwrite a planned ETA with ATD + admin-default duration).
+  if (updatedMovement) {
+    const timingPatch = recalculateTimingModel(updatedMovement, 'depActual');
+    const isWeak = timingPatch._weakPrediction;
+    delete timingPatch._weakPrediction;
+    if (Object.keys(timingPatch).length > 0 && !isWeak) {
+      updateMovement(id, timingPatch);
+    }
+    // isWeak: ARR with non-explicit duration + existing ETA — preserve the planned ETA
+  }
 
   renderLiveBoard();
   renderHistoryBoard();
@@ -6756,27 +6827,31 @@ function renderTimelineScale() {
 }
 
 /**
- * Get the primary time for a movement (ETD for departures/locals, ETA for arrivals,
- * ECT for overflights).
+ * Resolved start time for the Timeline bar left anchor.
+ * Delegates to the canonical timing model (resolvedStartTime from datamodel.js).
+ *
+ * Canonical bar start anchors:
+ *   DEP/LOC planned: ETD     DEP/LOC active: ATD     DEP/LOC completed: ATD
+ *   ARR     planned: ETD     ARR     active: ATD     ARR     completed: ATD
+ *   OVR     planned: EOFT    OVR     active: ATOF    OVR     completed: ATOF
+ *
+ * Note for ARR: ETA is the calculation root in planned state, but ETD is still
+ * the bar START anchor.  Do not use ETA/ATA as bar start for ARR.
  */
 function getMovementStartTime(m) {
-  const ft = (m.flightType || '').toUpperCase();
-  // Actual-first ordering so timeline bars reflect committed times immediately
-  if (ft === 'ARR') return getATA(m) || getETA(m) || null;          // actual arrival first
-  if (ft === 'OVR') return getACT(m) || getECT(m) || null;          // actual crossing first
-  return getATD(m) || getETD(m) || null;                             // DEP, LOC — actual departure first
+  return resolvedStartTime(m);
 }
 
 /**
- * Get the end time for a movement.
- * ARR/LOC: actual-first (getATA || getETA) — matches strip display semantics.
- * DEP/OVR: use raw arrActual/arrPlanned as timeline end if present
- *           (getATA/getETA are semantically restricted to ARR/LOC only).
+ * Resolved end time for the Timeline bar right anchor.
+ * Delegates to the canonical timing model (resolvedEndTime from datamodel.js).
+ *
+ * Canonical bar end anchors:
+ *   DEP/LOC/ARR: ATA when completed, ETA otherwise
+ *   OVR:         ALFT when completed, ELFT otherwise
  */
 function getMovementEndTime(m) {
-  const ft = (m.flightType || '').toUpperCase();
-  if (ft === 'ARR' || ft === 'LOC') return getATA(m) || getETA(m) || null;
-  return m.arrActual || m.arrPlanned || null;  // DEP/OVR fallback
+  return resolvedEndTime(m);
 }
 
 /**
@@ -6823,17 +6898,14 @@ function renderTimelineTracks() {
     let startMinutes = timeToMinutes(startTimeStr);
     if (!Number.isFinite(startMinutes)) return;
 
-    // Duration override: if set, always use start + durationMinutes (ignores stored end times).
-    // If not set, use stored end time then fall back to admin per-type default.
-    let endMinutes;
-    if (m.durationMinutes > 0) {
-      endMinutes = startMinutes + m.durationMinutes;
-    } else {
-      endMinutes = timeToMinutes(endTimeStr);
-      if (!Number.isFinite(endMinutes)) {
-        const ft = (m.flightType || '').toUpperCase();
-        endMinutes = startMinutes + getDefaultFlightDuration(ft);
-      }
+    // Compute end anchor using resolved end time (ATA||ETA for DEP/LOC/ARR; ALFT||ELFT for OVR).
+    // startMinutes is always the resolved departure-side anchor (ETD/ATD, never ETA/ATA),
+    // so duration-based fallback is semantically correct for all movement types.
+    let endMinutes = timeToMinutes(endTimeStr);
+    if (!Number.isFinite(endMinutes)) {
+      // No resolved end time — fall back to duration-based estimate
+      const { minutes } = getDurationSource(m);
+      endMinutes = startMinutes + minutes;
     }
 
     // Handle overnight flights (end time < start time)

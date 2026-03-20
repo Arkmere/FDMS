@@ -685,6 +685,298 @@ export function getACT(movement) {
   return null;
 }
 
+/* -----------------------------------------------------------------------
+   Canonical Timing Model — single authoritative timing layer
+   Implements FDMS Timings Specifications.md
+
+   Three distinct concepts:
+     A. Governing root time  — used for recalculation logic
+     B. Resolved start/end   — used for Timeline bar anchors
+     C. Visible labels       — presentation only (ETD/ATD/ETA/ATA)
+
+   Do NOT conflate these.  ARR planned: root=ETA, but bar start=ETD.
+----------------------------------------------------------------------- */
+
+/**
+ * Private: convert HH:MM string to total minutes (midnight-anchored).
+ * Returns NaN for invalid/empty input.
+ */
+function _tmToMins(t) {
+  if (!t || typeof t !== 'string') return NaN;
+  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return NaN;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+/**
+ * Private: convert total minutes to HH:MM string, wrapping within 24h.
+ */
+function _minsToTm(mins) {
+  const totalMins = ((Math.round(mins) % 1440) + 1440) % 1440;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Return the effective duration in minutes and whether it is explicitly
+ * user-entered vs. a fallback admin default.
+ *
+ * This distinction matters: for ARR in active state, ATD-driven ETA
+ * recalculation is only trusted when duration is explicit.
+ *
+ * @param {object} movement
+ * @returns {{ minutes: number, isExplicit: boolean }}
+ */
+export function getDurationSource(movement) {
+  const ft = (movement.flightType || '').toUpperCase();
+  if (Number.isFinite(movement.durationMinutes) && movement.durationMinutes > 0) {
+    return { minutes: movement.durationMinutes, isExplicit: true };
+  }
+  const defaults = {
+    DEP: config.depFlightDurationMinutes  || 60,
+    ARR: config.arrFlightDurationMinutes  || 60,
+    LOC: config.locFlightDurationMinutes  || 40,
+    OVR: config.ovrFlightDurationMinutes  ||  5,
+  };
+  return { minutes: defaults[ft] || 60, isExplicit: false };
+}
+
+/**
+ * Resolved start time — the LEFT anchor of the Timeline bar.
+ *
+ * This is always the departure/start side of the movement span.
+ * It is NOT the calculation root for ARR in planned state (that is ETA).
+ *
+ *   DEP / LOC  planned: ETD (depPlanned)
+ *   DEP / LOC  active:  ATD (depActual)
+ *   ARR        active:  ATD (depActual)
+ *   ARR        planned: ETD (depPlanned if stored; else computed as ETA − Duration)
+ *   OVR        planned: EOFT (depPlanned)
+ *   OVR        active:  ATOF (depActual)
+ *
+ * @param {object} movement
+ * @returns {string|null} HH:MM or null
+ */
+export function resolvedStartTime(movement) {
+  const ft = (movement.flightType || '').toUpperCase();
+
+  if (ft === 'DEP' || ft === 'LOC' || ft === 'OVR') {
+    return movement.depActual || movement.depPlanned || null;
+  }
+
+  if (ft === 'ARR') {
+    // Active: ATD (depActual) is the bar start anchor
+    if (movement.depActual) return movement.depActual;
+    // Planned and ETD explicitly stored → use it
+    if (movement.depPlanned) return movement.depPlanned;
+    // No stored ETD: compute from ETA − Duration as fallback
+    const etaMin = _tmToMins(movement.arrPlanned);
+    if (Number.isFinite(etaMin)) {
+      const { minutes } = getDurationSource(movement);
+      if (minutes > 0) return _minsToTm(etaMin - minutes);
+    }
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * Resolved end time — the RIGHT anchor of the Timeline bar.
+ *
+ *   DEP / LOC / ARR: ATA (arrActual) if present, else ETA (arrPlanned)
+ *   OVR:             ALFT (arrActual) if present, else ELFT (arrPlanned)
+ *
+ * @param {object} movement
+ * @returns {string|null} HH:MM or null
+ */
+export function resolvedEndTime(movement) {
+  return movement.arrActual || movement.arrPlanned || null;
+}
+
+/**
+ * Recalculate the dependent timing field after changedField was updated.
+ *
+ * Returns a patch object (may be empty {}) with fields to update.
+ * Does NOT mutate the movement — caller must persist the patch.
+ *
+ * Governing rules by movement type and state:
+ *
+ *   DEP / LOC planned (no ATD):
+ *     ETD or Duration changed → ETA = ETD + Duration
+ *     ETA changed             → Duration = ETA − ETD
+ *
+ *   DEP / LOC active (ATD present):
+ *     ATD or Duration changed → ETA = ATD + Duration
+ *     ETA changed             → Duration = ETA − ATD
+ *
+ *   ARR planned (no ATD):
+ *     ETA or Duration changed → ETD = ETA − Duration   ← root is ETA
+ *     ETD changed             → Duration = ETA − ETD
+ *
+ *   ARR active (ATD present):
+ *     ATD or Duration changed → ETA = ATD + Duration
+ *                               (skipped if duration is not explicit AND
+ *                                arrPlanned already exists — see safeguard)
+ *     ETA changed             → Duration = ETA − ATD
+ *
+ *   OVR planned (no ATOF):
+ *     EOFT or Duration changed → ELFT = EOFT + Duration
+ *     ELFT changed             → Duration = ELFT − EOFT
+ *
+ *   OVR active (ATOF present):
+ *     ATOF or Duration changed → ELFT = ATOF + Duration (only if ALFT not set)
+ *     ELFT changed             → Duration = ELFT − ATOF
+ *
+ * Special patch marker: patch._weakPrediction = true when ARR active
+ * recalculation was suppressed due to non-explicit duration + existing ETA.
+ * Callers should inspect this before deciding whether to persist.
+ *
+ * @param {object} movement   — movement object AFTER the change was applied
+ * @param {string} changedField — which field was just changed
+ * @returns {object} patch to apply (never mutate movement directly)
+ */
+export function recalculateTimingModel(movement, changedField) {
+  const ft  = (movement.flightType || '').toUpperCase();
+  const dur = getDurationSource(movement);
+  const patch = {};
+
+  /* ── DEP / LOC ─────────────────────────────────────────────────────── */
+  if (ft === 'DEP' || ft === 'LOC') {
+    const hasAtd = !!(movement.depActual && movement.depActual.trim());
+
+    if (hasAtd) {
+      // Active: root = ATD (depActual)
+      if (changedField === 'depActual' || changedField === 'durationMinutes') {
+        const startMin = _tmToMins(movement.depActual);
+        if (Number.isFinite(startMin) && dur.minutes > 0) {
+          patch.arrPlanned = _minsToTm(startMin + dur.minutes);
+        }
+      } else if (changedField === 'arrPlanned') {
+        const startMin = _tmToMins(movement.depActual);
+        const endMin   = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(startMin) && Number.isFinite(endMin)) {
+          let diff = endMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    } else {
+      // Planned: root = ETD (depPlanned)
+      if (changedField === 'depPlanned' || changedField === 'durationMinutes') {
+        const startMin = _tmToMins(movement.depPlanned);
+        if (Number.isFinite(startMin) && dur.minutes > 0) {
+          patch.arrPlanned = _minsToTm(startMin + dur.minutes);
+        }
+      } else if (changedField === 'arrPlanned') {
+        const startMin = _tmToMins(movement.depPlanned);
+        const endMin   = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(startMin) && Number.isFinite(endMin)) {
+          let diff = endMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    }
+    return patch;
+  }
+
+  /* ── ARR ────────────────────────────────────────────────────────────── */
+  if (ft === 'ARR') {
+    const hasAtd = !!(movement.depActual && movement.depActual.trim());
+
+    if (hasAtd) {
+      // Active: root = ATD (depActual)
+      if (changedField === 'depActual' || changedField === 'durationMinutes') {
+        const startMin = _tmToMins(movement.depActual);
+        if (Number.isFinite(startMin) && dur.minutes > 0) {
+          // Safeguard: if duration is non-explicit AND an ETA already exists,
+          // do not blindly overwrite the planned ETA with ATD+default.
+          if (dur.isExplicit || !movement.arrPlanned) {
+            patch.arrPlanned = _minsToTm(startMin + dur.minutes);
+          } else {
+            // Weak prediction — emit marker; caller decides whether to persist
+            patch._weakPrediction = true;
+          }
+        }
+      } else if (changedField === 'arrPlanned') {
+        // User explicitly edited ETA → derive Duration
+        const startMin = _tmToMins(movement.depActual);
+        const endMin   = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(startMin) && Number.isFinite(endMin)) {
+          let diff = endMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    } else {
+      // Planned: root = ETA (arrPlanned)
+      if (changedField === 'arrPlanned' || changedField === 'durationMinutes') {
+        const rootMin = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(rootMin) && dur.minutes > 0) {
+          patch.depPlanned = _minsToTm(rootMin - dur.minutes);
+        }
+      } else if (changedField === 'depPlanned') {
+        // User manually edited ETD → derive Duration
+        const rootMin  = _tmToMins(movement.arrPlanned);
+        const startMin = _tmToMins(movement.depPlanned);
+        if (Number.isFinite(rootMin) && Number.isFinite(startMin)) {
+          let diff = rootMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    }
+    return patch;
+  }
+
+  /* ── OVR ────────────────────────────────────────────────────────────── */
+  if (ft === 'OVR') {
+    const hasAtof = !!(movement.depActual && movement.depActual.trim());
+
+    if (hasAtof) {
+      // Active: root = ATOF (depActual)
+      if (changedField === 'depActual' || changedField === 'durationMinutes') {
+        // Only drive ELFT if ALFT is not yet set
+        if (!movement.arrActual) {
+          const startMin = _tmToMins(movement.depActual);
+          if (Number.isFinite(startMin) && dur.minutes > 0) {
+            patch.arrPlanned = _minsToTm(startMin + dur.minutes);
+          }
+        }
+      } else if (changedField === 'arrPlanned') {
+        const startMin = _tmToMins(movement.depActual);
+        const endMin   = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(startMin) && Number.isFinite(endMin)) {
+          let diff = endMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    } else {
+      // Planned: root = EOFT (depPlanned)
+      if (changedField === 'depPlanned' || changedField === 'durationMinutes') {
+        const startMin = _tmToMins(movement.depPlanned);
+        if (Number.isFinite(startMin) && dur.minutes > 0) {
+          patch.arrPlanned = _minsToTm(startMin + dur.minutes);
+        }
+      } else if (changedField === 'arrPlanned') {
+        const startMin = _tmToMins(movement.depPlanned);
+        const endMin   = _tmToMins(movement.arrPlanned);
+        if (Number.isFinite(startMin) && Number.isFinite(endMin)) {
+          let diff = endMin - startMin;
+          if (diff <= 0) diff += 1440;
+          if (diff > 0 && diff <= 1440) patch.durationMinutes = diff;
+        }
+      }
+    }
+    return patch;
+  }
+
+  return patch;
+}
+
 /* -----------------------------
    Formation WTC Helpers
 ------------------------------ */
