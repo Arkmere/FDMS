@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Sprint 10.1 — Timing normalization follow-on: DEP/OVR arr-side display fix, ACTIVE strip ETA migration, per-type estimated-times config
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 1 (post-10.1) — DEP/OVR secondary-time inline edit binding; ARR auto-activation ATD fabrication fix
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -783,6 +783,53 @@ Four residual defects found by manual verification after Sprint 10:
 
 ---
 
+### 8.19 Ticket 1 (post-Sprint 10.1) — Inline edit binding and ARR activation fix
+
+**Outcome:** complete
+
+**Three defects addressed:**
+
+**A. DEP secondary-time inline editing not working**
+
+Root cause: The `enableInlineEdit` binding block for `arrTimeEl` used `if (ft === "ARR" || ft === "LOC")` — DEP was excluded, so the rendered `<span class="js-edit-arr-time">` had no double-click handler. The `_buildTabOrder` applicable condition had the same gap. The rendered value was display-only for DEP.
+
+Fix (`ui_liveboard.js`):
+- Binding block changed to `if (ft === "ARR" || ft === "LOC" || ft === "DEP")`. DEP arr-side binds to `m.arrActual ? "arrActual" : "arrPlanned"` (ATA if recorded, otherwise ETA). Tooltips: `_tt.arrActual` ("ATA – Actual Time of Arrival") / `_tt.arrPlanned` ("ETA – Estimated Time of Arrival") — already correct.
+- `_buildTabOrder` `applicable` updated to `ft === 'ARR' || ft === 'LOC' || ft === 'DEP' || ft === 'OVR'` so Tab-order navigation includes the cell.
+
+**B. OVR secondary-time inline editing not working**
+
+Root cause: The OVR binding block only called `enableInlineEdit` for `depTimeEl` (ACT/ECT, left side). No binding existed for `arrTimeEl` (ALFT/ELFT, right side). `_buildTabOrder` applicable also excluded OVR for arr-time.
+
+Fix (`ui_liveboard.js`):
+- Added OVR arr-side binding inside the OVR block: `enableInlineEdit(arrTimeEl, m.id, m.arrActual ? "arrActual" : "arrPlanned", "time", null, _tt[ovrArrField])` where `ovrArrField` is `"alft"` or `"elft"` (lookup key for the tooltip only).
+- Added `alft: 'ALFT – Actual Last Frequency Time'` and `elft: 'ELFT – Estimated Last Frequency Time'` to `_tt` for OVR arr-side tooltips.
+- Renamed OVR dep-side local variable `ovrField` → `ovrDepField` to avoid shadowing.
+- `_buildTabOrder` `applicable` updated as described in Part A above.
+
+**C. ARR auto-activation must not fabricate ATD**
+
+Root cause: `transitionToActive()` unconditionally set `depActual: currentTime` in the updates object for all flight types. When `autoActivatePlannedMovements()` called this for an ARR strip, it wrote a fabricated ATD equal to the moment of auto-activation, which is not evidence of an actual departure event.
+
+Fix (`ui_liveboard.js`, `transitionToActive`):
+- `depActual` is only included in the updates object when `ft !== 'ARR'`.
+- For ARR, the transition is status-only (`{ status: "ACTIVE" }` plus optional DOF correction).
+- The timing recalculation block after `updateMovement` is also guarded with `ft !== 'ARR'` for clarity (no ATD was set, so recalculation would produce no meaningful patch for ARR anyway).
+- This fix applies to both auto-activation and manual "→ Active" button presses for ARR — both are status events, not departure-event witnesses.
+
+**NO-DRIFT confirmations:**
+- Event-based Live Board daily stats model unchanged
+- Nominal counts unchanged
+- OVR separate-counter unchanged
+- Booking reconciliation policy unchanged
+- All other timing model logic unchanged
+
+**Deferred / limitations:**
+- If an ARR is activated and then the operator wants to enter ATD (origin departure time), they do so via inline edit on the left-side dep-time cell — this path was already working from prior sprints.
+- The revert guard in `reEvaluateStatusAfterTimeChange` already correctly ignores `depActual` for ARR — no change needed.
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -790,8 +837,8 @@ Four residual defects found by manual verification after Sprint 10:
 As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10 timing normalization, and Sprint 10.1 follow-on correction are all landed
-* Sprint 10.1 (timing normalization follow-on) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, and Ticket 1 (inline edit + ARR activation fix) are all landed
+* Ticket 1 (post-10.1) is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -805,6 +852,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Post-Sprint-9 features are landed: admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
 * Sprint 10 features are landed: single resolved timing model (`getDurationSource`, `resolvedStartTime`, `resolvedEndTime`, `recalculateTimingModel` in datamodel.js); Timeline ARR bar start fixed to ETD/ATD; ARR modal sync direction corrected; inline edits now recalculate dependent timing; `transitionToActive` recalculates ETA from ATD
 * Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
+* Ticket 1 (post-10.1) features are landed: DEP right-side time is now inline-editable (double-click opens edit for ATA/ETA); OVR right-side time (ALFT/ELFT) is now inline-editable; ARR auto-activation (and manual activation) is status-only — no longer fabricates ATD
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 

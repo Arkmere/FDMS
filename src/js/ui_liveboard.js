@@ -475,7 +475,7 @@ function _buildTabOrder(rowEl, movement) {
       applicable: ft === 'DEP' || ft === 'LOC' || ft === 'OVR' },
     { selector: '.js-edit-arr-time',  inputType: 'time',
       fieldName: (m) => m.arrActual ? 'arrActual' : 'arrPlanned',
-      applicable: ft === 'ARR' || ft === 'LOC' },
+      applicable: ft === 'ARR' || ft === 'LOC' || ft === 'DEP' || ft === 'OVR' },
     // field 11 is NOT inline-editable — skipped
     { selector: '.js-edit-tng',       inputType: 'number',
       fieldName: () => 'tngCount',      applicable: true },
@@ -2938,6 +2938,8 @@ export function renderLiveBoard() {
         arrPlanned:    'ETA – Estimated Time of Arrival',
         ect:           'ECT – Estimated Crossing Time',
         act:           'ACT – Actual Crossing Time',
+        elft:          'ELFT – Estimated Last Frequency Time',
+        alft:          'ALFT – Actual Last Frequency Time',
       };
     })();
 
@@ -2975,13 +2977,16 @@ export function renderLiveBoard() {
       // recalculateTimingModel path in saveEdit — no separate callback needed.
       enableInlineEdit(depTimeEl, m.id, "depActual", "time", null, _tt.depActual);
     }
-    if (ft === "ARR" || ft === "LOC") {
+    if (ft === "ARR" || ft === "LOC" || ft === "DEP") {
       const arrField = m.arrActual ? "arrActual" : "arrPlanned";
       enableInlineEdit(arrTimeEl, m.id, arrField, "time", null, _tt[arrField]);
     }
     if (ft === "OVR") {
-      const ovrField = m.depActual ? "act" : "ect";
-      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time", null, _tt[ovrField]);
+      const ovrDepField = m.depActual ? "act" : "ect";
+      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time", null, _tt[ovrDepField]);
+      // OVR arr-side (ALFT/ELFT): bind to arrActual or arrPlanned
+      const ovrArrField = m.arrActual ? "alft" : "elft";
+      enableInlineEdit(arrTimeEl, m.id, m.arrActual ? "arrActual" : "arrPlanned", "time", null, _tt[ovrArrField]);
     }
 
     // Hover sync with timeline bar
@@ -6227,12 +6232,19 @@ function transitionToActive(id) {
   // Get today's date in YYYY-MM-DD format
   const todayStr = getTodayDateString();
 
-  // Get the movement to check its DOF
+  // Get the movement to check its DOF and type
   const movement = getMovements().find(m => m.id === id);
-  const updates = {
-    status: "ACTIVE",
-    depActual: currentTime
-  };
+  const ft = (movement?.flightType || '').toUpperCase();
+
+  // ARR: status-only transition — do NOT fabricate ATD.
+  // ATD for ARR is the departure time from the origin; it is unknown until
+  // the operator explicitly enters it. Auto-activation (or even manual button
+  // press) does not constitute evidence of an actual departure event.
+  // DEP/LOC/OVR: set depActual to current time as the departure/crossing event.
+  const updates = { status: "ACTIVE" };
+  if (ft !== 'ARR') {
+    updates.depActual = currentTime;
+  }
 
   // If DOF is in the future, update it to today
   if (movement && movement.dof && movement.dof > todayStr) {
@@ -6243,16 +6255,15 @@ function transitionToActive(id) {
   const updatedMovement = updateMovement(id, updates);
 
   // Canonical timing model: after ATD is set, recalculate ETA = ATD + Duration.
-  // For ARR: only recalculate if duration is explicit (safeguard: don't blindly
-  // overwrite a planned ETA with ATD + admin-default duration).
-  if (updatedMovement) {
+  // For ARR: ATD was not set above, so this patch is a no-op; included for
+  // completeness in case depActual was already present before activation.
+  if (updatedMovement && ft !== 'ARR') {
     const timingPatch = recalculateTimingModel(updatedMovement, 'depActual');
     const isWeak = timingPatch._weakPrediction;
     delete timingPatch._weakPrediction;
     if (Object.keys(timingPatch).length > 0 && !isWeak) {
       updateMovement(id, timingPatch);
     }
-    // isWeak: ARR with non-explicit duration + existing ETA — preserve the planned ETA
   }
 
   renderLiveBoard();
