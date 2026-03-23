@@ -6917,6 +6917,73 @@ function getDefaultFlightDuration(flightType) {
 }
 
 /**
+ * Fixed-window durations for DEP/ARR bars on the day Timeline.
+ * DEP: forward window starting at departure anchor (ATD || ETD).
+ * ARR: backward window ending at arrival anchor (ATA || ETA).
+ * Named as separate keys to allow independent tuning in a later ticket.
+ */
+const DAY_TIMELINE_FIXED_WINDOWS = {
+  depMinutes: 10,
+  arrMinutes: 10,
+};
+
+/**
+ * Resolve the display span (startMinutes, endMinutes since midnight) for a
+ * movement on the day Timeline.
+ *
+ * DEP — forward fixed window from departure anchor (ATD || ETD).
+ * ARR — backward fixed window ending at arrival anchor (ATA || ETA).
+ * LOC — unchanged: full span via canonical resolved start/end.
+ * OVR — unchanged: full span via canonical resolved start/end.
+ *
+ * Returns { startMinutes, endMinutes } where both values are finite numbers,
+ * or null if the anchor is unavailable and the bar should be skipped.
+ */
+function getDayTimelineDisplayRange(m) {
+  const ft = (m.flightType || '').toUpperCase();
+
+  if (ft === 'DEP') {
+    const anchor = getATD(m) || getETD(m);
+    if (!anchor) return null;
+    const anchorMinutes = timeToMinutes(anchor);
+    if (!Number.isFinite(anchorMinutes)) return null;
+    return {
+      startMinutes: anchorMinutes,
+      endMinutes: anchorMinutes + DAY_TIMELINE_FIXED_WINDOWS.depMinutes,
+    };
+  }
+
+  if (ft === 'ARR') {
+    const anchor = getATA(m) || getETA(m);
+    if (!anchor) return null;
+    const anchorMinutes = timeToMinutes(anchor);
+    if (!Number.isFinite(anchorMinutes)) return null;
+    return {
+      startMinutes: anchorMinutes - DAY_TIMELINE_FIXED_WINDOWS.arrMinutes,
+      endMinutes: anchorMinutes,
+    };
+  }
+
+  // LOC and OVR: use canonical resolved start/end — unchanged behavior.
+  const startTimeStr = getMovementStartTime(m);
+  if (!startTimeStr) return null;
+  const startMinutes = timeToMinutes(startTimeStr);
+  if (!Number.isFinite(startMinutes)) return null;
+
+  const endTimeStr = getMovementEndTime(m);
+  let endMinutes = timeToMinutes(endTimeStr);
+  if (!Number.isFinite(endMinutes)) {
+    const { minutes } = getDurationSource(m);
+    endMinutes = startMinutes + minutes;
+  }
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60;
+  }
+
+  return { startMinutes, endMinutes };
+}
+
+/**
  * Render the timeline scale (hour markers)
  */
 function renderTimelineScale() {
@@ -7005,28 +7072,10 @@ function renderTimelineTracks() {
   const trackEndTimes = []; // Each element is the end minute of a bar in that track
 
   relevantMovements.forEach(m => {
-    const startTimeStr = getMovementStartTime(m);
-    const endTimeStr = getMovementEndTime(m);
-
-    if (!startTimeStr) return;
-
-    let startMinutes = timeToMinutes(startTimeStr);
-    if (!Number.isFinite(startMinutes)) return;
-
-    // Compute end anchor using resolved end time (ATA||ETA for DEP/LOC/ARR; ALFT||ELFT for OVR).
-    // startMinutes is always the resolved departure-side anchor (ETD/ATD, never ETA/ATA),
-    // so duration-based fallback is semantically correct for all movement types.
-    let endMinutes = timeToMinutes(endTimeStr);
-    if (!Number.isFinite(endMinutes)) {
-      // No resolved end time — fall back to duration-based estimate
-      const { minutes } = getDurationSource(m);
-      endMinutes = startMinutes + minutes;
-    }
-
-    // Handle overnight flights (end time < start time)
-    if (endMinutes < startMinutes) {
-      endMinutes += 24 * 60;
-    }
+    // DEP/ARR use fixed-window display spans; LOC/OVR use canonical resolved span.
+    const range = getDayTimelineDisplayRange(m);
+    if (!range) return;
+    let { startMinutes, endMinutes } = range;
 
     // Skip if entirely outside timeline window
     if (endMinutes < timelineStartMinutes || startMinutes > timelineEndMinutes) {
@@ -7072,7 +7121,7 @@ function renderTimelineTracks() {
     bar.className = `timeline-movement-bar ${ftClass} ${movementStatusClass}`;
     bar.style.left = `${leftPercent}%`;
     bar.style.width = `${actualWidthPercent}%`;
-    bar.title = `${m.callsignCode || 'Unknown'}\n${startTimeStr} - ${minutesToTime(endMinutes)}\n${m.flightType || ''} (${m.status})`;
+    bar.title = `${m.callsignCode || 'Unknown'}\n${minutesToTime(startMinutes)} - ${minutesToTime(endMinutes)}\n${m.flightType || ''} (${m.status})`;
     // No text content - bars are thin visual indicators only
     bar.dataset.movementId = m.id;
 

@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 2 (post-10.1) — Activate/Complete semantics by movement type; BM EGOW Unit validation
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 3 (post-10.1) — Day Timeline fixed DEP/ARR display windows
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -879,8 +879,79 @@ Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass th
 As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, and Ticket 2 are all landed
-* Ticket 2 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, and Ticket 3 are all landed
+* Ticket 3 (post-10.1) is the latest completed work
+
+---
+
+### 8.21 Ticket 3 (post-10.1) — Day Timeline fixed DEP/ARR display windows
+
+**Outcome:** complete
+
+**Summary of changes:**
+
+DEP and ARR movement bars on the day Timeline no longer render as full-duration flight bars. They now render as short fixed-window bars anchored to the resolved departure or arrival time:
+
+- **DEP**: bar starts at ATD (if actual exists) else ETD; bar runs forward for 10 minutes.
+- **ARR**: bar ends at ATA (if actual exists) else ETA; bar runs backward for 10 minutes.
+- **LOC**: unchanged — full canonical resolved span.
+- **OVR**: unchanged — full canonical resolved span.
+
+**Files changed:**
+
+- `src/js/ui_liveboard.js` — only file modified.
+
+**Where the constants live:**
+
+`DAY_TIMELINE_FIXED_WINDOWS` constant at line ~6925 in `ui_liveboard.js`, immediately before the `renderTimelineScale` function. Defined as `{ depMinutes: 10, arrMinutes: 10 }` — separate keys allow independent tuning in a later ticket without changing the structure.
+
+**Implementation approach:**
+
+Added a new helper function `getDayTimelineDisplayRange(m)` that encapsulates the per-type display-span policy for the day Timeline:
+- DEP: `{ start: anchorMinutes, end: anchorMinutes + depMinutes }`
+- ARR: `{ start: anchorMinutes - arrMinutes, end: anchorMinutes }`
+- LOC/OVR: full canonical span via existing `getMovementStartTime` / `getMovementEndTime` / `getDurationSource` logic (unchanged)
+
+`renderTimelineTracks()` now calls `getDayTimelineDisplayRange(m)` instead of computing start/end inline. No other rendering logic changed. The canonical timing model in `datamodel.js` was not touched.
+
+**LOC/OVR unchanged:** confirmed — LOC and OVR fall through to the existing resolved-span logic inside `getDayTimelineDisplayRange`, which is a direct extraction of the prior inline calculation. No behavioral difference for these types.
+
+**Edge cases handled:**
+- Missing anchor: returns `null` → movement is skipped (matches prior behavior for unrenderable timing).
+- Cross-midnight clipping: a 10-minute window crossing the day boundary is handled by the existing clamp-to-timeline-bounds logic (`Math.max` / `Math.min`), which already handles overnight cases. The DEP/ARR windows may partially extend outside the 06–22 visible window and will be clipped or skipped just as full-duration bars were.
+- Actual vs estimated: ATD is checked before ETD for DEP; ATA is checked before ETA for ARR — aligned with Sprint 10 normalization semantics.
+- Status gating: not gated on status name — any movement with a valid anchor time will render. A PLANNED ARR with ETA renders; an ACTIVE/COMPLETED DEP with ATD renders.
+
+**Manual verification scenarios:**
+1. Planned DEP with ETD only → short 10-min bar from ETD.
+2. Active/completed DEP with ATD → short 10-min bar from ATD.
+3. Planned ARR with ETA only → short 10-min bar ending at ETA.
+4. Completed ARR with ATA → short 10-min bar ending at ATA.
+5. LOC strip → unchanged full-span bar.
+6. OVR strip → unchanged full-span bar.
+7. Mixed board (DEP + ARR + LOC + OVR) → DEP/ARR show short windows; LOC/OVR unchanged.
+8. DEP near 23:58 → bar visible from 23:58–00:08; clipped at timeline end if within 06–22 window.
+9. ARR at 00:04 → bar runs 23:54–00:04; clipped at timeline start if needed.
+
+**NO-DRIFT confirmations:**
+- Stored timing fields (`depPlanned`, `depActual`, `arrPlanned`, `arrActual`) not modified.
+- Sprint 10 timing normalization model (`resolvedStartTime`, `resolvedEndTime`, `getDurationSource`) unchanged.
+- Ticket 1 and Ticket 2 semantics unchanged.
+- Live Board daily counters (event-based EGOW-realized) unchanged.
+- Monthly Return / Dashboard / Insights (nominal strip-type-based) unchanged.
+- WTC logic unchanged.
+- History/counter logic unchanged.
+- Booking reconciliation logic unchanged.
+- Activate/Complete semantics unchanged.
+- Inline/modal edit semantics unchanged.
+- `flightType` field unchanged.
+- OVR excluded from runway movement totals — unchanged.
+
+**Known caveats:**
+- A 10-minute window is narrower than the 2% minimum-width floor for bars. The existing `minWidthPercent = 2` floor still applies, so very narrow windows may render slightly wider than 10 minutes visually on wide screens. This is cosmetic only.
+- The sort order for ARR movements in track allocation remains anchored to the canonical resolved start time (ETD/ATD), not the new display anchor (ETA/ATA − 10 min). This is acceptable — sort order affects track allocation, not bar position. Track allocation may be slightly suboptimal for ARR in edge cases but is not incorrect.
+
+---
 
 ### 9.2 What the next architect/chat should assume
 
@@ -896,6 +967,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
 * Ticket 1 (post-10.1) features are landed: DEP right-side time is now inline-editable (double-click opens edit for ATA/ETA); OVR right-side time (ALFT/ELFT) is now inline-editable; ARR auto-activation (and manual activation) is status-only — no longer fabricates ATD
 * Ticket 2 (post-10.1) features are landed: Activate guards existing ATD for DEP/LOC/OVR; Complete is type-aware (DEP no ATA, LOC/ARR/OVR stamp ATA=now only if absent); BM EGOW Unit code validation enforced in all 6 save paths (new DEP/ARR/OVR save+complete, new LOC save+complete, edit save+complete)
+* Ticket 3 (post-10.1) features are landed: day Timeline DEP bars now render as 10-minute forward windows from ATD/ETD anchor; ARR bars render as 10-minute backward windows ending at ATA/ETA anchor; LOC/OVR rendering unchanged; `DAY_TIMELINE_FIXED_WINDOWS` constant and `getDayTimelineDisplayRange()` helper added to `ui_liveboard.js`; no timing model changes
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
