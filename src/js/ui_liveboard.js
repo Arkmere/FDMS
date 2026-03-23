@@ -3941,8 +3941,19 @@ function openNewFlightModal(flightType = "DEP") {
       }
     }
 
+    // OVR-specific: if EOFT (depPlanned) is blank in planned mode, treat as an
+    // immediate/now crossing — create as ACTIVE and stamp ACT (depActual) = now.
+    // If EOFT is provided, keep normal planned-mode behavior.
+    const _ovrImmediateActive = selectedFlightType === "OVR"
+      && _timingMode === "planned"
+      && !depPlanned;
+    if (_ovrImmediateActive) {
+      const _now = new Date();
+      depActual = `${String(_now.getUTCHours()).padStart(2, '0')}:${String(_now.getUTCMinutes()).padStart(2, '0')}`;
+    }
+
     // Create movement - determine initial status based on whether time is past
-    const initialStatus = _timingMode === "active"
+    const initialStatus = (_timingMode === "active" || _ovrImmediateActive)
       ? "ACTIVE"
       : determineInitialStatus(selectedFlightType, dof, depPlanned, arrPlanned);
     let movement = {
