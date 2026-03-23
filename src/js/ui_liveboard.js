@@ -3869,6 +3869,13 @@ function openNewFlightModal(flightType = "DEP") {
       showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error');
       return;
     }
+    if (egowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("newUnitCode")?.value || "").trim();
+      if (!unitCodeVal) {
+        showToast("EGOW Unit code is required for BM flights", 'error');
+        return;
+      }
+    }
 
     // Get operator and popular name from VKB registration data
     const regValue = document.getElementById("newReg")?.value || "";
@@ -4043,6 +4050,13 @@ function openNewFlightModal(flightType = "DEP") {
     if (!egowCode || !validEgowCodes.includes(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
+    }
+    if (egowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("newUnitCode")?.value || "").trim();
+      if (!unitCodeVal) {
+        showToast("EGOW Unit code is required for BM flights", 'error');
+        return;
+      }
     }
 
     // Validate and normalize times
@@ -4659,6 +4673,10 @@ function openNewLocFlightModal() {
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
     if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+    if (egowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
+      if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
+    }
 
     const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
     if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
@@ -4793,6 +4811,10 @@ function openNewLocFlightModal() {
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
     if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+    if (egowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
+      if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
+    }
 
     const depValidation = validateTime(depPlanned);
     if (depValidation.normalized) depPlanned = depValidation.normalized;
@@ -5505,6 +5527,25 @@ function openEditMovementModal(m) {
       if (arrActualPastCheck.isPast) showToast(arrActualPastCheck.warning, 'warning');
     }
 
+    // Validate callsign
+    const editCallsignValidation = validateRequired(callsignCode, "Callsign Code");
+    if (!editCallsignValidation.valid) { showToast(editCallsignValidation.error, 'error'); return; }
+
+    // Validate EGOW Code
+    const editEgowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
+    const editValidEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    if (!editEgowCode || !editValidEgowCodes.includes(editEgowCode)) {
+      showToast("Valid EGOW Code is required", 'error');
+      return;
+    }
+    if (editEgowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("editUnitCode")?.value || "").trim();
+      if (!unitCodeVal) {
+        showToast("EGOW Unit code is required for BM flights", 'error');
+        return;
+      }
+    }
+
     // Get WTC based on aircraft type and flight type
     const aircraftType = document.getElementById("editType")?.value || "";
     const selectedFlightType = document.getElementById("editFlightType")?.value || flightType;
@@ -5661,6 +5702,13 @@ function openEditMovementModal(m) {
     if (!egowCode || !validEgowCodes.includes(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
+    }
+    if (egowCode === 'BM') {
+      const unitCodeVal = (document.getElementById("editUnitCode")?.value || "").trim();
+      if (!unitCodeVal) {
+        showToast("EGOW Unit code is required for BM flights", 'error');
+        return;
+      }
     }
 
     // Normalize times
@@ -6240,9 +6288,10 @@ function transitionToActive(id) {
   // ATD for ARR is the departure time from the origin; it is unknown until
   // the operator explicitly enters it. Auto-activation (or even manual button
   // press) does not constitute evidence of an actual departure event.
-  // DEP/LOC/OVR: set depActual to current time as the departure/crossing event.
+  // DEP/LOC/OVR: stamp depActual = now only if not already present.
+  // (Preserve manual ATD/ACT if the operator entered it before clicking Active.)
   const updates = { status: "ACTIVE" };
-  if (ft !== 'ARR') {
+  if (ft !== 'ARR' && !(movement?.depActual && String(movement.depActual).trim())) {
     updates.depActual = currentTime;
   }
 
@@ -6272,8 +6321,15 @@ function transitionToActive(id) {
 }
 
 /**
- * Transition an ACTIVE movement to COMPLETED
- * Sets ATA to current time if not already set
+ * Transition an ACTIVE movement to COMPLETED.
+ *
+ * Completion-side actual time stamping rules:
+ *   DEP  — no arrival-side actual is generated (DEP completion has no ATA concept)
+ *   LOC  — stamp arrActual = now only if arrActual not already present
+ *   ARR  — stamp arrActual = now only if arrActual not already present
+ *   OVR  — stamp arrActual (ALFT) = now only if arrActual not already present
+ *
+ * In all cases, a manually entered actual time is preserved.
  */
 function transitionToCompleted(id) {
   const now = new Date();
@@ -6282,11 +6338,19 @@ function transitionToCompleted(id) {
   const currentTime = `${hours}:${minutes}`;
 
   const movement = getMovements().find(m => m.id === id);
+  const ft = (movement?.flightType || '').toUpperCase();
 
-  updateMovement(id, {
-    status: "COMPLETED",
-    arrActual: currentTime
-  });
+  const completionUpdates = { status: "COMPLETED" };
+
+  // Stamp arrival-side actual only for non-DEP types and only when not already recorded
+  if (ft !== 'DEP') {
+    const hasArrActual = !!(movement?.arrActual && String(movement.arrActual).trim());
+    if (!hasArrActual) {
+      completionUpdates.arrActual = currentTime;
+    }
+  }
+
+  updateMovement(id, completionUpdates);
   // Cascade formation elements to COMPLETED
   cascadeFormationStatus(id, "COMPLETED");
 
