@@ -787,7 +787,10 @@ function initAdminPanelHandlers() {
   const configNewFormUtcTogglePolicy = document.getElementById("configNewFormUtcTogglePolicy");
   const configEnableAlertTooltips = document.getElementById("configEnableAlertTooltips");
   const configShowTimeLabels = document.getElementById("configShowTimeLabels");
-  const configShowEstimatedTimes = document.getElementById("configShowEstimatedTimes");
+  const configShowDepEstimatedTimes = document.getElementById("configShowDepEstimatedTimes");
+  const configShowArrEstimatedTimes = document.getElementById("configShowArrEstimatedTimes");
+  const configShowLocEstimatedTimes = document.getElementById("configShowLocEstimatedTimes");
+  const configShowOvrEstimatedTimes = document.getElementById("configShowOvrEstimatedTimes");
   // Auto-activation settings per flight type
   const configAutoActivateDepEnabled = document.getElementById("configAutoActivateDepEnabled");
   const configAutoActivateDepMinutes = document.getElementById("configAutoActivateDepMinutes");
@@ -815,7 +818,9 @@ function initAdminPanelHandlers() {
   // All tracked config inputs (order matters only for snapshot key identity)
   const CHECKBOX_IDS = [
     'configHideLocalIfSame', 'configAlwaysHideLocal', 'configEnableAlertTooltips',
-    'configShowTimeLabels', 'configShowEstimatedTimes',
+    'configShowTimeLabels',
+    'configShowDepEstimatedTimes', 'configShowArrEstimatedTimes',
+    'configShowLocEstimatedTimes', 'configShowOvrEstimatedTimes',
     'configAutoActivateDepEnabled', 'configAutoActivateArrEnabled',
     'configAutoActivateLocEnabled', 'configAutoActivateOvrEnabled',
     'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
@@ -903,7 +908,10 @@ function initAdminPanelHandlers() {
   if (configNewFormUtcTogglePolicy) configNewFormUtcTogglePolicy.value = currentConfig.newFormUtcLocalTogglePolicy || "auto";
   if (configEnableAlertTooltips) configEnableAlertTooltips.checked = currentConfig.enableAlertTooltips !== false;
   if (configShowTimeLabels) configShowTimeLabels.checked = currentConfig.showTimeLabelsOnStrip !== false;
-  if (configShowEstimatedTimes) configShowEstimatedTimes.checked = currentConfig.showEstimatedTimesOnStrip !== false;
+  if (configShowDepEstimatedTimes) configShowDepEstimatedTimes.checked = currentConfig.showDepEstimatedTimesOnStrip !== false;
+  if (configShowArrEstimatedTimes) configShowArrEstimatedTimes.checked = currentConfig.showArrEstimatedTimesOnStrip !== false;
+  if (configShowLocEstimatedTimes) configShowLocEstimatedTimes.checked = currentConfig.showLocEstimatedTimesOnStrip !== false;
+  if (configShowOvrEstimatedTimes) configShowOvrEstimatedTimes.checked = currentConfig.showOvrEstimatedTimesOnStrip !== false;
   // Auto-activation settings per flight type
   if (configAutoActivateDepEnabled) configAutoActivateDepEnabled.checked = currentConfig.autoActivateDepEnabled || false;
   if (configAutoActivateDepMinutes) configAutoActivateDepMinutes.value = currentConfig.autoActivateDepMinutes || 30;
@@ -1033,7 +1041,10 @@ function initAdminPanelHandlers() {
     const alwaysHideLocal = configAlwaysHideLocal?.checked || false;
     const enableAlertTooltips = configEnableAlertTooltips?.checked !== false;
     const showTimeLabelsOnStrip = configShowTimeLabels?.checked !== false;
-    const showEstimatedTimesOnStrip = configShowEstimatedTimes?.checked !== false;
+    const showDepEstimatedTimesOnStrip = configShowDepEstimatedTimes?.checked !== false;
+    const showArrEstimatedTimesOnStrip = configShowArrEstimatedTimes?.checked !== false;
+    const showLocEstimatedTimesOnStrip = configShowLocEstimatedTimes?.checked !== false;
+    const showOvrEstimatedTimesOnStrip = configShowOvrEstimatedTimes?.checked !== false;
     // Auto-activation settings per flight type
     const autoActivateDepEnabled = configAutoActivateDepEnabled?.checked || false;
     const autoActivateDepMinutes = parseInt(configAutoActivateDepMinutes?.value || "30", 10);
@@ -1091,7 +1102,10 @@ function initAdminPanelHandlers() {
       alwaysHideLocalTimeInBanner: alwaysHideLocal,
       enableAlertTooltips: enableAlertTooltips,
       showTimeLabelsOnStrip: showTimeLabelsOnStrip,
-      showEstimatedTimesOnStrip: showEstimatedTimesOnStrip,
+      showDepEstimatedTimesOnStrip: showDepEstimatedTimesOnStrip,
+      showArrEstimatedTimesOnStrip: showArrEstimatedTimesOnStrip,
+      showLocEstimatedTimesOnStrip: showLocEstimatedTimesOnStrip,
+      showOvrEstimatedTimesOnStrip: showOvrEstimatedTimesOnStrip,
       // Auto-activation settings per flight type
       autoActivateDepEnabled: autoActivateDepEnabled,
       autoActivateDepMinutes: autoActivateDepMinutes,

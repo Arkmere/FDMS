@@ -54,7 +54,11 @@ const defaultConfig = {
   timeInputMode: "UTC",              // Time input display mode in modals: "UTC" or "LOCAL"
   newFormUtcLocalTogglePolicy: "auto", // UTC/Local toggle visibility in new-strip forms: "auto" | "show" | "hide"
   showTimeLabelsOnStrip: true,       // Show ETD/ATD/ETA/ATA labels on Live Board time cells (label on own line above time)
-  showEstimatedTimesOnStrip: true    // Show estimated times (ETD/ETA/ECT) on strip; when OFF show "-" for estimated, actual times always show
+  showEstimatedTimesOnStrip: true,   // Legacy global flag — kept for backward-compat migration; prefer per-type flags below
+  showDepEstimatedTimesOnStrip: true, // DEP: show ETA/ATA on strip when no actual yet
+  showArrEstimatedTimesOnStrip: true, // ARR: show ETD/ETA on strip when no actual yet
+  showLocEstimatedTimesOnStrip: true, // LOC: show ETA/ATA on strip when no actual yet
+  showOvrEstimatedTimesOnStrip: true  // OVR: show ELFT on strip when no actual yet
 };
 
 // Configuration state
@@ -420,6 +424,15 @@ function loadConfig() {
     if (raw) {
       const parsed = JSON.parse(raw);
       config = { ...defaultConfig, ...parsed };
+      // Sprint 10.1 migration: if per-type estimated-time flags are absent,
+      // derive them from the legacy global flag so existing OFF configs stay OFF.
+      if (parsed.showDepEstimatedTimesOnStrip === undefined) {
+        const globalVal = parsed.showEstimatedTimesOnStrip !== false;
+        config.showDepEstimatedTimesOnStrip = globalVal;
+        config.showArrEstimatedTimesOnStrip = globalVal;
+        config.showLocEstimatedTimesOnStrip = globalVal;
+        config.showOvrEstimatedTimesOnStrip = globalVal;
+      }
     } else {
       config = { ...defaultConfig };
     }
@@ -475,6 +488,21 @@ function ensureInitialised() {
       if (m.outcomeTime === undefined)           { m.outcomeTime           = '';       needsSave = true; }
       // Sprint 9: PIC field — uses existing captain; no migration needed but ensure defined
       if (m.captain === undefined) { m.captain = ''; needsSave = true; }
+      // Sprint 10.1: recalculate derived ETA for ACTIVE DEP/LOC/OVR strips where ATD exists
+      // but arrPlanned may be stale (ETD-based). Apply canonical timing model forward from ATD.
+      if (m.status === 'ACTIVE') {
+        const mft = (m.flightType || '').toUpperCase();
+        const hasAtd = !!(m.depActual && String(m.depActual).trim());
+        if (hasAtd && (mft === 'DEP' || mft === 'LOC' || mft === 'OVR') && !m.arrActual) {
+          const patch = recalculateTimingModel(m, 'depActual');
+          const isWeak = patch._weakPrediction;
+          delete patch._weakPrediction;
+          if (Object.keys(patch).length > 0 && !isWeak) {
+            Object.assign(m, patch);
+            needsSave = true;
+          }
+        }
+      }
     });
     if (needsSave) saveToStorage();
   } else {

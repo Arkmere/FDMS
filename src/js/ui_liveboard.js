@@ -2453,6 +2453,13 @@ export function renderLiveBoard() {
       // ARR: show depActual (ATD from origin) when populated, even though getATD() returns null for ARR
       depDisplay = String(m.depActual).trim(); depLabel = "ATD"; depIsActual = true;
     }
+    if (ft === "DEP") {
+      // arr-side for DEP: ATA (arrActual) or ETA (arrPlanned)
+      const ata = m.arrActual && String(m.arrActual).trim() ? String(m.arrActual).trim() : null;
+      const eta = m.arrPlanned && String(m.arrPlanned).trim() ? String(m.arrPlanned).trim() : null;
+      if (ata) { arrDisplay = ata; arrLabel = "ATA"; arrIsActual = true; }
+      else if (eta) { arrDisplay = eta; arrLabel = "ETA"; arrIsActual = false; }
+    }
     if (ft === "ARR" || ft === "LOC") {
       const ata = getATA(m);
       const eta = getETA(m);
@@ -2474,7 +2481,11 @@ export function renderLiveBoard() {
       } else {
         depDisplay = "-"; depLabel = "";
       }
-      arrDisplay = "-"; arrLabel = "";
+      // arr-side for OVR: ALFT (arrActual) or ELFT (arrPlanned)
+      const alft = m.arrActual && String(m.arrActual).trim() ? String(m.arrActual).trim() : null;
+      const elft = m.arrPlanned && String(m.arrPlanned).trim() ? String(m.arrPlanned).trim() : null;
+      if (alft) { arrDisplay = alft; arrLabel = "ALFT"; arrIsActual = true; }
+      else if (elft) { arrDisplay = elft; arrLabel = "ELFT"; arrIsActual = false; }
     }
 
     // Format date (DD/MM/YYYY)
@@ -2493,7 +2504,14 @@ export function renderLiveBoard() {
     const config = getConfig();
     const enableTooltips = config.enableAlertTooltips !== false;
     const showLabels = config.showTimeLabelsOnStrip !== false;
-    const showEstimated = config.showEstimatedTimesOnStrip !== false;
+    const showDepEstimated = config.showDepEstimatedTimesOnStrip !== false;
+    const showArrEstimated = config.showArrEstimatedTimesOnStrip !== false;
+    const showLocEstimated = config.showLocEstimatedTimesOnStrip !== false;
+    const showOvrEstimated = config.showOvrEstimatedTimesOnStrip !== false;
+    const showEstimated = ft === "ARR" ? showArrEstimated
+      : ft === "LOC" ? showLocEstimated
+      : ft === "OVR" ? showOvrEstimated
+      : showDepEstimated;
 
     // Determine highlighting and tooltips based on alerts
     let overdueClass = '';
@@ -5584,7 +5602,15 @@ function openEditMovementModal(m) {
     if (editFm?._error) { showToast(editFm.message, 'error'); return; }
     updates.formation = editFm;
 
-    updateMovement(m.id, updates);
+    const savedMovement = updateMovement(m.id, updates);
+
+    // If ATD was changed in the edit, propagate canonical timing recalculation
+    if (savedMovement && updates.depActual !== undefined) {
+      const timingPatch = recalculateTimingModel(savedMovement, 'depActual');
+      const isWeak = timingPatch._weakPrediction;
+      delete timingPatch._weakPrediction;
+      if (Object.keys(timingPatch).length > 0 && !isWeak) updateMovement(m.id, timingPatch);
+    }
 
     // Sync back to booking if this strip is linked
     onMovementUpdated(m);

@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-20 (Europe/London) — Latest completed sprint: Sprint 10 — Timing normalization — single resolved timing model, ARR timeline bar fix, unified recalculation path
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Sprint 10.1 — Timing normalization follow-on: DEP/OVR arr-side display fix, ACTIVE strip ETA migration, per-type estimated-times config
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -730,15 +730,68 @@ Delivered:
 
 ---
 
+### 8.18 Sprint 10.1 — Timing normalization follow-on correction
+
+**Outcome:** complete
+
+**Root causes addressed:**
+
+Four residual defects found by manual verification after Sprint 10:
+
+1. **Active DEP strips showed "ATD / –"** — the strip renderer's arr-side display block (`if ft === "ARR" || ft === "LOC"`) excluded DEP entirely. `arrDisplay` stayed "-" even when `arrPlanned` (ETA) was correctly computed by Sprint 10 recalculation.
+2. **Active OVR strips showed "ACT / –"** — arr-side was hardcoded `arrDisplay = "-"; arrLabel = ""` unconditionally, ignoring `arrActual` (ALFT) and `arrPlanned` (ELFT).
+3. **Active LOC strips showed stale ETA** — pre-existing ACTIVE strips (e.g. demo LOC strip with `depActual: "15:05"`, `arrPlanned: "15:40"` derived from ETD 15:00+40) were never migrated. Sprint 10 recalculation only ran on new Activate presses or subsequent inline edits; no boot-time migration existed.
+4. **Single global `showEstimatedTimesOnStrip` flag too coarse** — one toggle controlled all four movement types; operators needed per-type granularity (e.g. suppress estimated DEP times but keep ARR/LOC estimates visible).
+
+**Delivered:**
+
+**A. Display layer — `ui_liveboard.js` strip renderer:**
+* Added `if (ft === "DEP")` block: shows `m.arrActual` (ATA) or `m.arrPlanned` (ETA) for DEP arr-side. Labels: "ATA" / "ETA". `arrIsActual` set correctly.
+* Fixed OVR arr-side: removed hardcoded `arrDisplay = "-"; arrLabel = ""`. Now shows `m.arrActual` (ALFT) or `m.arrPlanned` (ELFT) with labels "ALFT" / "ELFT".
+* Replaced single `showEstimated` variable with four per-type variables: `showDepEstimated`, `showArrEstimated`, `showLocEstimated`, `showOvrEstimated`. Strip renderer selects the correct flag per `ft`.
+
+**B. Config model — `datamodel.js`:**
+* Added four per-type flags to `defaultConfig`: `showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip` — all default `true`.
+* Legacy global `showEstimatedTimesOnStrip` retained in `defaultConfig` with comment (backward-compat migration source).
+* `loadConfig` migration: if parsed config lacks `showDepEstimatedTimesOnStrip`, derives all four per-type flags from the old global flag value — ensuring existing installs with the global flag set to OFF propagate correctly.
+
+**C. Boot-time migration — `datamodel.js` `ensureInitialised`:**
+* In the `movements.forEach` migration block, for each ACTIVE DEP/LOC/OVR strip with `depActual` set and no `arrActual`, calls `recalculateTimingModel(m, 'depActual')` and applies the patch.
+* ARR `_weakPrediction` sentinel respected — non-explicit-duration ARR patches not applied.
+* Ensures all pre-existing ACTIVE strips have correct ATD-derived ETA at first boot, without waiting for an inline edit or re-activation.
+
+**D. Edit modal save path — `ui_liveboard.js`:**
+* After `updateMovement(m.id, updates)` in the Save handler, if `updates.depActual !== undefined` (ATD was explicitly changed in the edit), calls `recalculateTimingModel(savedMovement, 'depActual')` and applies patch.
+* ARR `_weakPrediction` sentinel respected.
+
+**E. Admin UI — `index.html` and `app.js`:**
+* Replaced single `configShowEstimatedTimes` checkbox with four checkboxes: `configShowDepEstimatedTimes`, `configShowArrEstimatedTimes`, `configShowLocEstimatedTimes`, `configShowOvrEstimatedTimes`.
+* `CHECKBOX_IDS` updated — all four participate in snapshot/dirty-check/discard cycle automatically.
+* Load path populates four checkboxes from four config flags.
+* Save path reads four checkboxes and writes four config flags via `updateConfig`.
+
+**NO-DRIFT confirmations:**
+* Event-based Live Board daily stats model unchanged
+* Nominal Monthly Return / Dashboard / Insights model unchanged
+* `flightType` semantics unchanged
+* Additive outcome model unchanged
+* OVR separate-counter behaviour unchanged
+* Booking reconciliation policy unchanged
+* Hard delete vs cancel distinction unchanged
+* ZZZZ / PIC fields unchanged
+* Timeline rendering, `resolvedStartTime`, `resolvedEndTime`, `getDurationSource`, `recalculateTimingModel` logic unchanged from Sprint 10
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-20:
+As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, and Sprint 10 timing normalization are all landed
-* Sprint 10 (timing normalization) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10 timing normalization, and Sprint 10.1 follow-on correction are all landed
+* Sprint 10.1 (timing normalization follow-on) is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -751,6 +804,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Sprint 9 features are landed: event-based Live Board stats, ETD/ATD/ETA/ATA labels, ZZZZ companion fields, PIC, outcome model
 * Post-Sprint-9 features are landed: admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
 * Sprint 10 features are landed: single resolved timing model (`getDurationSource`, `resolvedStartTime`, `resolvedEndTime`, `recalculateTimingModel` in datamodel.js); Timeline ARR bar start fixed to ETD/ATD; ARR modal sync direction corrected; inline edits now recalculate dependent timing; `transitionToActive` recalculates ETA from ATD
+* Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 

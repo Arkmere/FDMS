@@ -1035,12 +1035,24 @@
                         <span style="font-size: 12px;">Show time labels (ETD / ATD / ETA / ATA) above times on strips</span>
                       </label>
                       <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="configShowEstimatedTimes" style="cursor: pointer;">
-                        <span style="font-size: 12px;">Show estimated times on strips (when OFF, estimated times show as "–")</span>
+                        <input type="checkbox" id="configShowDepEstimatedTimes" style="cursor: pointer;">
+                        <span style="font-size: 12px;">DEP: show estimated times on strips (ETA when no ATA yet)</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configShowArrEstimatedTimes" style="cursor: pointer;">
+                        <span style="font-size: 12px;">ARR: show estimated times on strips (ETD / ETA when no actuals yet)</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configShowLocEstimatedTimes" style="cursor: pointer;">
+                        <span style="font-size: 12px;">LOC: show estimated times on strips (ETA when no ATA yet)</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configShowOvrEstimatedTimes" style="cursor: pointer;">
+                        <span style="font-size: 12px;">OVR: show estimated times on strips (ELFT when no ALFT yet)</span>
                       </label>
                     </div>
                     <div style="font-size: 11px; color: #666; margin-top: 6px;">
-                      When labels are ON they appear on their own line above the time value. Actual times (ATD/ATA) always show regardless of the estimated-times toggle.
+                      When labels are ON they appear on their own line above the time value. Actual times (ATD/ATA/ALFT) always show regardless of these toggles.
                     </div>
                   </div>
 
