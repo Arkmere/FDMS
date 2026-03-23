@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-18 (Europe/London) — Latest completed sprint: Post-Sprint 9 correction pass — Admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Sprint 10.1 — Timing normalization follow-on: DEP/OVR arr-side display fix, ACTIVE strip ETA migration, per-type estimated-times config
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -667,17 +667,131 @@ Delivered:
 * `getATD(m)` semantics unchanged (returns null for ARR); ARR dep time display uses raw `m.depActual` field directly
 * `reEvaluateStatusAfterTimeChange` uses a +5 min buffer to avoid boundary oscillation
 
+### 8.17 Sprint 10 — Timing normalization / single resolved timing model
+
+**Outcome:** complete
+
+**Phase 1 — Audit findings (divergence points identified):**
+
+1. **Timeline ARR start time (CRITICAL):** `getMovementStartTime()` for ARR returned `ATA || ETA` — using the arrival side as the bar START. Spec requires bar start = ETD (planned) or ATD (active/completed), never ETA/ATA.
+2. **Timeline ARR/LOC end time:** `getMovementEndTime()` for ARR returned `ATA || ETA` — end was correct semantically, but start being wrong made the whole span wrong.
+3. **No inline edit recalculation:** Inline time edits saved only the single touched field. No dependent side (e.g. ETA after ETD edit) was recalculated. Only the modal's `bindPlannedTimesSync` had any bidirectional sync.
+4. **Modal ARR sync direction wrong:** `bindPlannedTimesSync` was called with ETD=start, ETA=end for all types. For ARR, the canonical root is ETA and ETD is derived. The modal was computing ETA from ETD for ARR, which is backwards.
+5. **`transitionToActive` did not recalculate ETA:** After the Active button set ATD to current time, ETA was not updated to ATD + Duration. Strip retained the old planned ETA after activation.
+6. **`arrAtdOnSave` partial workaround:** An ad-hoc inline-edit callback existed only for the ARR dep-time cell; it was the only inline recalculate path and only worked for `durationMinutes > 0`. Not general.
+7. **`getMovementWindow` (WTC overlap):** Used `depActual || depPlanned` as raw start, not aware of ARR planned semantics (where start = ETD not ETA).
+
+**Phase 2 — Delivered:**
+
+**A. Canonical timing model added to `datamodel.js`:**
+* Private helpers `_tmToMins(t)` and `_minsToTm(m)` — pure HH:MM arithmetic, no Date dependency
+* `getDurationSource(movement)` — exported. Returns `{ minutes, isExplicit }`. Explicit = user-entered `durationMinutes`; non-explicit = admin default fallback. Distinction used by ARR safeguard.
+* `resolvedStartTime(movement)` — exported. Always returns the departure/start anchor (ETD or ATD), never ETA/ATA. For ARR planned: uses `depPlanned` if stored, else computes `arrPlanned − duration`.
+* `resolvedEndTime(movement)` — exported. Returns `arrActual || arrPlanned` for all types (ATA||ETA for DEP/LOC/ARR; ALFT||ELFT for OVR).
+* `recalculateTimingModel(movement, changedField)` — exported. Returns a patch object. Implements all canonical rules per spec for DEP/LOC/ARR/OVR in both planned and active states. ARR safeguard: if duration is non-explicit AND `arrPlanned` already exists in active state, does not blindly overwrite with ATD+default (patch._weakPrediction sentinel).
+
+**B. `ui_liveboard.js` — Timeline fix:**
+* `getMovementStartTime(m)` now delegates to `resolvedStartTime(m)` — ARR bar no longer starts at ETA/ATA
+* `getMovementEndTime(m)` now delegates to `resolvedEndTime(m)`
+* Timeline end calculation simplified: uses resolved end time; falls back to `getDurationSource` default only if no end time stored
+* `getMovementWindow()` (WTC overlap) now uses resolved start/end times
+
+**C. Modal time sync — ARR direction fix:**
+* `bindPlannedTimesSync` extended with optional `opts.arrMode` parameter
+* ARR mode: ETA (arrPlanned) is the root; ETD (depPlanned) is the dependent. Duration/ETA change → ETD. ETD change → Duration.
+* DEP/LOC/OVR mode: unchanged (ETD is root, ETA is dependent)
+* All three `bindPlannedTimesSync` call sites (new-flight, edit, duplicate modals) now pass `{ arrMode: flightType === 'ARR' }` — ARR modal syncs in the correct direction
+
+**D. Inline edit save — recalculation wired:**
+* `saveEdit` in `enableInlineEdit` now calls `recalculateTimingModel(updatedMovement, fieldName)` after persisting any timing/duration field
+* ARR `_weakPrediction` sentinel respected: suppressed overwrite of existing ETA when duration is non-explicit
+* The ad-hoc `arrAtdOnSave` callback removed; generic path handles all cases
+
+**E. `transitionToActive` — ETA update after activation:**
+* After setting `depActual` to current time, calls `recalculateTimingModel(updatedMovement, 'depActual')`
+* For DEP/LOC: ETA = ATD + Duration (always)
+* For ARR: ETA = ATD + Duration only if duration is explicit (ARR safeguard honoured)
+* For OVR: ELFT = ATOF + Duration if ALFT not yet set
+
+**NO-DRIFT confirmations:**
+* Event-based Live Board daily stats model unchanged
+* Nominal Monthly Return / Dashboard / Insights model unchanged
+* `flightType` semantics unchanged
+* Additive outcome model unchanged
+* OVR separate-counter behaviour unchanged
+* Booking reconciliation policy unchanged
+* Hard delete vs cancel distinction unchanged
+* ZZZZ / PIC fields unchanged
+
+**Limitations / known residual items:**
+* Duplicate modal (`openDuplicateMovementModal`) uses a fixed ARR-mode bind based on the source movement type — correct for same-type duplicates; type change after dup creation not retroactively handled (deferred, low priority)
+* OVR Timeline in the duplicate modal is treated same as DEP/LOC (not ARR mode), which is correct
+* For legacy movements where `durationMinutes` was set but `arrPlanned` was not in sync, the first inline time edit or activation will now apply the correct recalculation
+
+---
+
+### 8.18 Sprint 10.1 — Timing normalization follow-on correction
+
+**Outcome:** complete
+
+**Root causes addressed:**
+
+Four residual defects found by manual verification after Sprint 10:
+
+1. **Active DEP strips showed "ATD / –"** — the strip renderer's arr-side display block (`if ft === "ARR" || ft === "LOC"`) excluded DEP entirely. `arrDisplay` stayed "-" even when `arrPlanned` (ETA) was correctly computed by Sprint 10 recalculation.
+2. **Active OVR strips showed "ACT / –"** — arr-side was hardcoded `arrDisplay = "-"; arrLabel = ""` unconditionally, ignoring `arrActual` (ALFT) and `arrPlanned` (ELFT).
+3. **Active LOC strips showed stale ETA** — pre-existing ACTIVE strips (e.g. demo LOC strip with `depActual: "15:05"`, `arrPlanned: "15:40"` derived from ETD 15:00+40) were never migrated. Sprint 10 recalculation only ran on new Activate presses or subsequent inline edits; no boot-time migration existed.
+4. **Single global `showEstimatedTimesOnStrip` flag too coarse** — one toggle controlled all four movement types; operators needed per-type granularity (e.g. suppress estimated DEP times but keep ARR/LOC estimates visible).
+
+**Delivered:**
+
+**A. Display layer — `ui_liveboard.js` strip renderer:**
+* Added `if (ft === "DEP")` block: shows `m.arrActual` (ATA) or `m.arrPlanned` (ETA) for DEP arr-side. Labels: "ATA" / "ETA". `arrIsActual` set correctly.
+* Fixed OVR arr-side: removed hardcoded `arrDisplay = "-"; arrLabel = ""`. Now shows `m.arrActual` (ALFT) or `m.arrPlanned` (ELFT) with labels "ALFT" / "ELFT".
+* Replaced single `showEstimated` variable with four per-type variables: `showDepEstimated`, `showArrEstimated`, `showLocEstimated`, `showOvrEstimated`. Strip renderer selects the correct flag per `ft`.
+
+**B. Config model — `datamodel.js`:**
+* Added four per-type flags to `defaultConfig`: `showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip` — all default `true`.
+* Legacy global `showEstimatedTimesOnStrip` retained in `defaultConfig` with comment (backward-compat migration source).
+* `loadConfig` migration: if parsed config lacks `showDepEstimatedTimesOnStrip`, derives all four per-type flags from the old global flag value — ensuring existing installs with the global flag set to OFF propagate correctly.
+
+**C. Boot-time migration — `datamodel.js` `ensureInitialised`:**
+* In the `movements.forEach` migration block, for each ACTIVE DEP/LOC/OVR strip with `depActual` set and no `arrActual`, calls `recalculateTimingModel(m, 'depActual')` and applies the patch.
+* ARR `_weakPrediction` sentinel respected — non-explicit-duration ARR patches not applied.
+* Ensures all pre-existing ACTIVE strips have correct ATD-derived ETA at first boot, without waiting for an inline edit or re-activation.
+
+**D. Edit modal save path — `ui_liveboard.js`:**
+* After `updateMovement(m.id, updates)` in the Save handler, if `updates.depActual !== undefined` (ATD was explicitly changed in the edit), calls `recalculateTimingModel(savedMovement, 'depActual')` and applies patch.
+* ARR `_weakPrediction` sentinel respected.
+
+**E. Admin UI — `index.html` and `app.js`:**
+* Replaced single `configShowEstimatedTimes` checkbox with four checkboxes: `configShowDepEstimatedTimes`, `configShowArrEstimatedTimes`, `configShowLocEstimatedTimes`, `configShowOvrEstimatedTimes`.
+* `CHECKBOX_IDS` updated — all four participate in snapshot/dirty-check/discard cycle automatically.
+* Load path populates four checkboxes from four config flags.
+* Save path reads four checkboxes and writes four config flags via `updateConfig`.
+
+**NO-DRIFT confirmations:**
+* Event-based Live Board daily stats model unchanged
+* Nominal Monthly Return / Dashboard / Insights model unchanged
+* `flightType` semantics unchanged
+* Additive outcome model unchanged
+* OVR separate-counter behaviour unchanged
+* Booking reconciliation policy unchanged
+* Hard delete vs cancel distinction unchanged
+* ZZZZ / PIC fields unchanged
+* Timeline rendering, `resolvedStartTime`, `resolvedEndTime`, `getDurationSource`, `recalculateTimingModel` logic unchanged from Sprint 10
+
 ---
 
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-18:
+As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, and Post-Sprint-9 correction pass are all landed
-* Post-Sprint-9 correction pass is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10 timing normalization, and Sprint 10.1 follow-on correction are all landed
+* Sprint 10.1 (timing normalization follow-on) is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -689,6 +803,8 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * booking/strip integrity policy is stable and should not be reworked casually
 * Sprint 9 features are landed: event-based Live Board stats, ETD/ATD/ETA/ATA labels, ZZZZ companion fields, PIC, outcome model
 * Post-Sprint-9 features are landed: admin display toggles, field-specific tooltips, ARR timeline colour, ARR ATD recompute chain, status re-evaluation
+* Sprint 10 features are landed: single resolved timing model (`getDurationSource`, `resolvedStartTime`, `resolvedEndTime`, `recalculateTimingModel` in datamodel.js); Timeline ARR bar start fixed to ETD/ATD; ARR modal sync direction corrected; inline edits now recalculate dependent timing; `transitionToActive` recalculates ETA from ATD
+* Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
