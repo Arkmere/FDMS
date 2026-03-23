@@ -814,6 +814,11 @@ function initAdminPanelHandlers() {
   // Reciprocal strip settings
   const configDepToArrOffset = document.getElementById("configDepToArrOffset");
   const configArrToDepOffset = document.getElementById("configArrToDepOffset");
+  // ARR/DEP Timeline display policy settings (Ticket 3a)
+  const configTimelineArrDepShared = document.getElementById("configTimelineArrDepShared");
+  const configTimelineSharedTokenMinutes = document.getElementById("configTimelineSharedTokenMinutes");
+  const configTimelineDepTokenMinutes = document.getElementById("configTimelineDepTokenMinutes");
+  const configTimelineArrTokenMinutes = document.getElementById("configTimelineArrTokenMinutes");
 
   // All tracked config inputs (order matters only for snapshot key identity)
   const CHECKBOX_IDS = [
@@ -825,7 +830,8 @@ function initAdminPanelHandlers() {
     'configAutoActivateLocEnabled', 'configAutoActivateOvrEnabled',
     'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
     'configHistoryShowCallsignAlerts', 'configHistoryShowWtcAlerts',
-    'configTimelineEnabled'
+    'configTimelineEnabled',
+    'configTimelineArrDepShared'
   ];
   const VALUE_IDS = [
     'configDepOffset', 'configDepDuration', 'configArrOffset', 'configArrDuration', 'configLocOffset', 'configLocDuration',
@@ -835,9 +841,12 @@ function initAdminPanelHandlers() {
     'configAutoActivateLocMinutes', 'configAutoActivateOvrMinutes',
     'configWtcSystem', 'configWtcThreshold',
     'configTimelineStartHour', 'configTimelineEndHour',
+    'configTimelineSharedTokenMinutes', 'configTimelineDepTokenMinutes', 'configTimelineArrTokenMinutes',
     'configDepToArrOffset', 'configArrToDepOffset',
     'configNewFormUtcTogglePolicy'
   ];
+  // Radio button groups tracked for dirty state and snapshot (separate from checkboxes/values)
+  const RADIO_GROUPS = ['tlSharedMode', 'tlDepMode', 'tlArrMode'];
 
   // Helper to populate WTC threshold options based on system
   const populateWtcThresholdOptions = (system) => {
@@ -891,6 +900,43 @@ function initAdminPanelHandlers() {
       configWtcThreshold.value = currentValue;
     }
   };
+
+  // Sync the ARR/DEP Timeline display UI to reflect the shared/separate checkbox
+  // and enable/disable token duration fields based on selected radio mode.
+  function syncTimelineUi() {
+    const shared = configTimelineArrDepShared ? configTimelineArrDepShared.checked : true;
+    const tlSharedBlock = document.getElementById('tlSharedBlock');
+    const tlSplitBlock  = document.getElementById('tlSplitBlock');
+    if (tlSharedBlock) tlSharedBlock.style.display = shared ? '' : 'none';
+    if (tlSplitBlock)  tlSplitBlock.style.display  = shared ? 'none' : '';
+
+    // Shared token row
+    const tlSharedModeToken = document.getElementById('tlSharedModeToken');
+    const tlSharedTokenRow  = document.getElementById('tlSharedTokenRow');
+    if (configTimelineSharedTokenMinutes && tlSharedTokenRow) {
+      const active = tlSharedModeToken ? tlSharedModeToken.checked : true;
+      configTimelineSharedTokenMinutes.disabled = !active;
+      tlSharedTokenRow.style.opacity = active ? '' : '0.5';
+    }
+
+    // DEP token row
+    const tlDepModeToken = document.getElementById('tlDepModeToken');
+    const tlDepTokenRow  = document.getElementById('tlDepTokenRow');
+    if (configTimelineDepTokenMinutes && tlDepTokenRow) {
+      const active = tlDepModeToken ? tlDepModeToken.checked : true;
+      configTimelineDepTokenMinutes.disabled = !active;
+      tlDepTokenRow.style.opacity = active ? '' : '0.5';
+    }
+
+    // ARR token row
+    const tlArrModeToken = document.getElementById('tlArrModeToken');
+    const tlArrTokenRow  = document.getElementById('tlArrTokenRow');
+    if (configTimelineArrTokenMinutes && tlArrTokenRow) {
+      const active = tlArrModeToken ? tlArrModeToken.checked : true;
+      configTimelineArrTokenMinutes.disabled = !active;
+      tlArrTokenRow.style.opacity = active ? '' : '0.5';
+    }
+  }
 
   // Load current config values
   const currentConfig = getConfig();
@@ -946,6 +992,22 @@ function initAdminPanelHandlers() {
   if (configTimelineStartHour) configTimelineStartHour.value = currentConfig.timelineStartHour ?? 6;
   if (configTimelineEndHour) configTimelineEndHour.value = currentConfig.timelineEndHour ?? 22;
 
+  // Load ARR/DEP Timeline display policy settings
+  if (configTimelineArrDepShared) configTimelineArrDepShared.checked = currentConfig.timelineArrDepShared !== false;
+  const _tlSharedModeVal = currentConfig.timelineSharedMode === 'full' ? 'full' : 'token';
+  const _tlSharedModeEl = document.querySelector(`input[name="tlSharedMode"][value="${_tlSharedModeVal}"]`);
+  if (_tlSharedModeEl) _tlSharedModeEl.checked = true;
+  if (configTimelineSharedTokenMinutes) configTimelineSharedTokenMinutes.value = currentConfig.timelineSharedTokenMinutes ?? 10;
+  const _tlDepModeVal = currentConfig.timelineDepMode === 'full' ? 'full' : 'token';
+  const _tlDepModeEl = document.querySelector(`input[name="tlDepMode"][value="${_tlDepModeVal}"]`);
+  if (_tlDepModeEl) _tlDepModeEl.checked = true;
+  if (configTimelineDepTokenMinutes) configTimelineDepTokenMinutes.value = currentConfig.timelineDepTokenMinutes ?? 10;
+  const _tlArrModeVal = currentConfig.timelineArrMode === 'full' ? 'full' : 'token';
+  const _tlArrModeEl = document.querySelector(`input[name="tlArrMode"][value="${_tlArrModeVal}"]`);
+  if (_tlArrModeEl) _tlArrModeEl.checked = true;
+  if (configTimelineArrTokenMinutes) configTimelineArrTokenMinutes.value = currentConfig.timelineArrTokenMinutes ?? 10;
+  syncTimelineUi();
+
   // Load Reciprocal strip settings
   if (configDepToArrOffset) configDepToArrOffset.value = currentConfig.depToArrOffsetMinutes ?? 180;
   if (configArrToDepOffset) configArrToDepOffset.value = currentConfig.arrToDepOffsetMinutes ?? 30;
@@ -965,6 +1027,11 @@ function initAdminPanelHandlers() {
       const el = document.getElementById(id);
       if (el) snap[id] = el.value;
     });
+    // Capture selected radio value for each named group
+    RADIO_GROUPS.forEach(name => {
+      const checked = document.querySelector(`input[name="${name}"]:checked`);
+      if (checked) snap[`radio_${name}`] = checked.value;
+    });
     return snap;
   }
 
@@ -977,6 +1044,14 @@ function initAdminPanelHandlers() {
       const el = document.getElementById(id);
       if (el && id in snap) el.value = snap[id];
     });
+    // Restore radio group selections
+    RADIO_GROUPS.forEach(name => {
+      const val = snap[`radio_${name}`];
+      if (val !== undefined) {
+        const radio = document.querySelector(`input[name="${name}"][value="${val}"]`);
+        if (radio) radio.checked = true;
+      }
+    });
     // Re-sync WTC threshold options after restoring WTC system
     if (configWtcSystem) {
       populateWtcThresholdOptions(configWtcSystem.value);
@@ -984,6 +1059,8 @@ function initAdminPanelHandlers() {
         configWtcThreshold.value = snap['configWtcThreshold'];
       }
     }
+    // Re-sync timeline display policy UI after restore
+    syncTimelineUi();
   }
 
   let _configSnapshot = takeSnapshot();
@@ -996,6 +1073,11 @@ function initAdminPanelHandlers() {
     for (const id of VALUE_IDS) {
       const el = document.getElementById(id);
       if (el && el.value !== _configSnapshot[id]) return true;
+    }
+    // Check radio groups
+    for (const name of RADIO_GROUPS) {
+      const checked = document.querySelector(`input[name="${name}"]:checked`);
+      if (checked && checked.value !== _configSnapshot[`radio_${name}`]) return true;
     }
     return false;
   }
@@ -1021,6 +1103,18 @@ function initAdminPanelHandlers() {
     if (el) el.addEventListener('change', checkDirty);
     if (el && el.type === 'number') el.addEventListener('input', checkDirty);
   });
+
+  // Attach change listeners to radio button groups
+  RADIO_GROUPS.forEach(name => {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(radio => {
+      radio.addEventListener('change', () => { syncTimelineUi(); checkDirty(); });
+    });
+  });
+
+  // Shared checkbox toggles shared vs split blocks
+  if (configTimelineArrDepShared) {
+    configTimelineArrDepShared.addEventListener('change', () => { syncTimelineUi(); checkDirty(); });
+  }
 
   // Initial state
   checkDirty();
@@ -1065,6 +1159,17 @@ function initAdminPanelHandlers() {
     const timelineEnabled = configTimelineEnabled?.checked !== false;
     const timelineStartHour = parseInt(configTimelineStartHour?.value || "6", 10);
     const timelineEndHour = parseInt(configTimelineEndHour?.value || "22", 10);
+    // ARR/DEP Timeline display policy settings
+    const timelineArrDepShared = configTimelineArrDepShared?.checked !== false;
+    const tlSharedModeChecked = document.querySelector('input[name="tlSharedMode"]:checked');
+    const timelineSharedMode = (tlSharedModeChecked && tlSharedModeChecked.value === 'full') ? 'full' : 'token';
+    const timelineSharedTokenMinutes = parseInt(configTimelineSharedTokenMinutes?.value || "10", 10);
+    const tlDepModeChecked = document.querySelector('input[name="tlDepMode"]:checked');
+    const timelineDepMode = (tlDepModeChecked && tlDepModeChecked.value === 'full') ? 'full' : 'token';
+    const timelineDepTokenMinutes = parseInt(configTimelineDepTokenMinutes?.value || "10", 10);
+    const tlArrModeChecked = document.querySelector('input[name="tlArrMode"]:checked');
+    const timelineArrMode = (tlArrModeChecked && tlArrModeChecked.value === 'full') ? 'full' : 'token';
+    const timelineArrTokenMinutes = parseInt(configTimelineArrTokenMinutes?.value || "10", 10);
     // Reciprocal strip settings
     const depToArrOffset = parseInt(configDepToArrOffset?.value || "180", 10);
     const arrToDepOffset = parseInt(configArrToDepOffset?.value || "30", 10);
@@ -1082,7 +1187,10 @@ function initAdminPanelHandlers() {
         isNaN(autoActivateDepMinutes) || autoActivateDepMinutes < 5 || autoActivateDepMinutes > 120 ||
         isNaN(autoActivateArrMinutes) || autoActivateArrMinutes < 5 || autoActivateArrMinutes > 120 ||
         isNaN(autoActivateLocMinutes) || autoActivateLocMinutes < 5 || autoActivateLocMinutes > 120 ||
-        isNaN(autoActivateOvrMinutes) || autoActivateOvrMinutes < 5 || autoActivateOvrMinutes > 120) {
+        isNaN(autoActivateOvrMinutes) || autoActivateOvrMinutes < 5 || autoActivateOvrMinutes > 120 ||
+        isNaN(timelineSharedTokenMinutes) || timelineSharedTokenMinutes < 1 || timelineSharedTokenMinutes > 120 ||
+        isNaN(timelineDepTokenMinutes) || timelineDepTokenMinutes < 1 || timelineDepTokenMinutes > 120 ||
+        isNaN(timelineArrTokenMinutes) || timelineArrTokenMinutes < 1 || timelineArrTokenMinutes > 120) {
       showToast("Please enter valid configuration values", 'error');
       return;
     }
@@ -1124,6 +1232,13 @@ function initAdminPanelHandlers() {
       timelineEnabled: timelineEnabled,
       timelineStartHour: timelineStartHour,
       timelineEndHour: timelineEndHour,
+      timelineArrDepShared: timelineArrDepShared,
+      timelineSharedMode: timelineSharedMode,
+      timelineSharedTokenMinutes: timelineSharedTokenMinutes,
+      timelineDepMode: timelineDepMode,
+      timelineDepTokenMinutes: timelineDepTokenMinutes,
+      timelineArrMode: timelineArrMode,
+      timelineArrTokenMinutes: timelineArrTokenMinutes,
       depToArrOffsetMinutes: depToArrOffset,
       arrToDepOffsetMinutes: arrToDepOffset
     });

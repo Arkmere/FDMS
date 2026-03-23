@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 3 (post-10.1) — Day Timeline fixed DEP/ARR display windows
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 3a (post-10.1) — Expose ARR/DEP Timeline display policy in Admin settings
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -879,8 +879,8 @@ Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass th
 As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, and Ticket 3 are all landed
-* Ticket 3 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, and Ticket 3a are all landed
+* Ticket 3a (post-10.1) is the latest completed work
 
 ---
 
@@ -953,6 +953,86 @@ Added a new helper function `getDayTimelineDisplayRange(m)` that encapsulates th
 
 ---
 
+### 8.22 Ticket 3a (post-10.1) — Expose ARR/DEP Timeline display policy in Admin settings
+
+**Outcome:** complete
+
+**Summary of changes:**
+
+Extended Admin → History & Timeline → Day View / Timeline Settings with a new "ARR / DEP Timeline Display" panel. The day Timeline renderer now reads the saved policy instead of always using the hardcoded 10-minute token window.
+
+**New Admin controls:**
+- Checkbox: "Use same timeline display settings for ARR and DEP" (default: checked)
+- When shared: radio group (Token display time / Full flight duration) + token duration input (default 10 min)
+- When separate: identical control pairs for Departures and Arrivals independently
+- Shared/split blocks show/hide dynamically based on the checkbox
+- Token duration input is disabled/de-emphasized when Full flight duration is selected
+- All controls persist across save/discard/reload using the existing settings mechanism
+
+**Files changed:**
+
+1. `src/js/datamodel.js` — 7 new keys added to `defaultConfig`:
+   - `timelineArrDepShared: true`
+   - `timelineSharedMode: "token"`
+   - `timelineSharedTokenMinutes: 10`
+   - `timelineDepMode: "token"`
+   - `timelineDepTokenMinutes: 10`
+   - `timelineArrMode: "token"`
+   - `timelineArrTokenMinutes: 10`
+
+2. `src/index.html` — new "ARR / DEP Timeline Display" panel appended inside `admin-sec-history`, containing: shared checkbox, shared radio group + token duration input, DEP radio group + token duration input, ARR radio group + token duration input.
+
+3. `src/js/app.js` — multiple additions within `initAdminPanelHandlers`:
+   - 4 new element references
+   - `configTimelineArrDepShared` added to `CHECKBOX_IDS`
+   - 3 token minute IDs added to `VALUE_IDS`
+   - `RADIO_GROUPS` array (`['tlSharedMode', 'tlDepMode', 'tlArrMode']`) for radio dirty tracking
+   - `syncTimelineUi()` function: toggles shared vs split blocks, enables/disables token rows
+   - `takeSnapshot` / `applySnapshot` / `isDirty` extended for `RADIO_GROUPS`
+   - Change listeners for radio buttons and shared checkbox
+   - Load logic from saved config
+   - Save logic: extract + validate (1–120 min range) + `updateConfig` with 7 new keys
+
+4. `src/js/ui_liveboard.js` — renderer updated:
+   - `getEffectiveTimelinePolicy(ft)` helper: reads config, resolves shared vs separate policy for DEP or ARR, returns `{ mode, tokenMinutes }`
+   - `_resolvedFullSpan(m)` helper: extracts the canonical full-span logic (used by DEP/ARR in "full" mode and by LOC/OVR unchanged)
+   - `getDayTimelineDisplayRange(m)` refactored: DEP/ARR now delegate to `getEffectiveTimelinePolicy()`, LOC/OVR continue to call `_resolvedFullSpan()` unmodified
+
+**LOC/OVR unchanged:** confirmed — `getDayTimelineDisplayRange()` LOC and OVR path is `return _resolvedFullSpan(m)` which is the same logic as before.
+
+**Default behavior preserved:** with all defaults, `timelineArrDepShared: true`, `timelineSharedMode: "token"`, `timelineSharedTokenMinutes: 10` → DEP/ARR render exactly as in Ticket 3 (10-minute token windows).
+
+**Settings persistence:** uses existing `updateConfig` → `saveConfig` → localStorage pipeline. New keys sit alongside existing timeline keys. Default fallback in `getEffectiveTimelinePolicy` is "token / 10 min" for any missing/invalid stored value.
+
+**Manual verification scenarios prepared for Stuart:**
+1. Default state after load/reset: shared checked, token selected, 10 min → current Ticket 3 behavior preserved
+2. Shared + token = 10 min: DEP forward 10 min from ATD/ETD; ARR backward 10 min to ATA/ETA
+3. Shared + full duration: both DEP and ARR show full-span bars (canonical resolved span)
+4. Uncheck shared → split view: DEP token / ARR full duration (or reverse, or different minute values)
+5. Save + reload: settings persist; UI restores correctly; radio buttons restored
+6. Discard: snapshot restore re-applies radio states and re-triggers syncTimelineUi
+7. LOC and OVR strips: unchanged behavior in all modes
+8. Invalid token duration (e.g. 0 or empty): validation rejects, shows toast, settings not saved
+
+**NO-DRIFT confirmations:**
+- Stored timing fields unchanged
+- Activate / Complete semantics unchanged
+- Sprint 10 timing normalization model unchanged
+- Ticket 1, Ticket 2, Ticket 3 semantics unchanged
+- Live Board daily counters unchanged
+- Monthly Return / Dashboard / Insights unchanged
+- WTC logic unchanged
+- History / counter logic unchanged
+- Booking reconciliation logic unchanged
+- LOC / OVR Timeline rendering unchanged
+
+**Known caveats:**
+- Token duration validation range is 1–120 minutes (consistent with auto-activation minute range). Values outside this range are rejected with a toast and the save is aborted.
+- The `minWidthPercent = 2` floor in `renderTimelineTracks` applies regardless of mode; narrow token windows may render slightly wider than specified on wide screens.
+- Full-duration mode for DEP uses the canonical resolved start (ETD/ATD) through end (ATA/ETA or duration fallback) — same as the pre-Ticket-3 behavior. This is intentional.
+
+---
+
 ### 9.2 What the next architect/chat should assume
 
 Assume the following as baseline truths unless Stuart reports otherwise from manual testing:
@@ -967,7 +1047,8 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
 * Ticket 1 (post-10.1) features are landed: DEP right-side time is now inline-editable (double-click opens edit for ATA/ETA); OVR right-side time (ALFT/ELFT) is now inline-editable; ARR auto-activation (and manual activation) is status-only — no longer fabricates ATD
 * Ticket 2 (post-10.1) features are landed: Activate guards existing ATD for DEP/LOC/OVR; Complete is type-aware (DEP no ATA, LOC/ARR/OVR stamp ATA=now only if absent); BM EGOW Unit code validation enforced in all 6 save paths (new DEP/ARR/OVR save+complete, new LOC save+complete, edit save+complete)
-* Ticket 3 (post-10.1) features are landed: day Timeline DEP bars now render as 10-minute forward windows from ATD/ETD anchor; ARR bars render as 10-minute backward windows ending at ATA/ETA anchor; LOC/OVR rendering unchanged; `DAY_TIMELINE_FIXED_WINDOWS` constant and `getDayTimelineDisplayRange()` helper added to `ui_liveboard.js`; no timing model changes
+* Ticket 3 (post-10.1) features are landed: day Timeline DEP bars now render as 10-minute forward windows from ATD/ETD anchor; ARR bars render as 10-minute backward windows ending at ATA/ETA anchor; LOC/OVR rendering unchanged; `getDayTimelineDisplayRange()` helper added to `ui_liveboard.js`; no timing model changes
+* Ticket 3a (post-10.1) features are landed: ARR/DEP Timeline display policy is now Admin-configurable (token vs full-duration, token duration minutes, shared vs separate for ARR/DEP); 7 new config keys in `datamodel.js` defaults; new Admin panel in `index.html`; `getEffectiveTimelinePolicy()` + `_resolvedFullSpan()` helpers added to `ui_liveboard.js`; all wired through `app.js` with full save/load/discard/dirty-tracking support
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 

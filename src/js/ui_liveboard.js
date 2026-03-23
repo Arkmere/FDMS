@@ -6917,22 +6917,66 @@ function getDefaultFlightDuration(flightType) {
 }
 
 /**
- * Fixed-window durations for DEP/ARR bars on the day Timeline.
- * DEP: forward window starting at departure anchor (ATD || ETD).
- * ARR: backward window ending at arrival anchor (ATA || ETA).
- * Named as separate keys to allow independent tuning in a later ticket.
+ * Resolve the effective display policy for DEP or ARR on the day Timeline.
+ * Reads from the saved config, honouring the shared/separate setting.
+ *
+ * Returns { mode, tokenMinutes } where:
+ *   mode         — "token" | "full"
+ *   tokenMinutes — positive integer (only meaningful when mode === "token")
  */
-const DAY_TIMELINE_FIXED_WINDOWS = {
-  depMinutes: 10,
-  arrMinutes: 10,
-};
+function getEffectiveTimelinePolicy(ft) {
+  const cfg = getConfig();
+  const shared = cfg.timelineArrDepShared !== false;
+  if (shared) {
+    return {
+      mode: cfg.timelineSharedMode === 'full' ? 'full' : 'token',
+      tokenMinutes: (Number.isFinite(cfg.timelineSharedTokenMinutes) && cfg.timelineSharedTokenMinutes > 0)
+        ? cfg.timelineSharedTokenMinutes : 10,
+    };
+  }
+  if (ft === 'DEP') {
+    return {
+      mode: cfg.timelineDepMode === 'full' ? 'full' : 'token',
+      tokenMinutes: (Number.isFinite(cfg.timelineDepTokenMinutes) && cfg.timelineDepTokenMinutes > 0)
+        ? cfg.timelineDepTokenMinutes : 10,
+    };
+  }
+  // ARR
+  return {
+    mode: cfg.timelineArrMode === 'full' ? 'full' : 'token',
+    tokenMinutes: (Number.isFinite(cfg.timelineArrTokenMinutes) && cfg.timelineArrTokenMinutes > 0)
+      ? cfg.timelineArrTokenMinutes : 10,
+  };
+}
+
+/**
+ * Shared helper: canonical full-duration span for any movement type.
+ * Uses existing resolved start/end + duration-based fallback.
+ * Used by DEP/ARR when mode === "full", and always by LOC/OVR.
+ */
+function _resolvedFullSpan(m) {
+  const startTimeStr = getMovementStartTime(m);
+  if (!startTimeStr) return null;
+  const startMinutes = timeToMinutes(startTimeStr);
+  if (!Number.isFinite(startMinutes)) return null;
+  const endTimeStr = getMovementEndTime(m);
+  let endMinutes = timeToMinutes(endTimeStr);
+  if (!Number.isFinite(endMinutes)) {
+    const { minutes } = getDurationSource(m);
+    endMinutes = startMinutes + minutes;
+  }
+  if (endMinutes < startMinutes) endMinutes += 24 * 60;
+  return { startMinutes, endMinutes };
+}
 
 /**
  * Resolve the display span (startMinutes, endMinutes since midnight) for a
  * movement on the day Timeline.
  *
- * DEP — forward fixed window from departure anchor (ATD || ETD).
- * ARR — backward fixed window ending at arrival anchor (ATA || ETA).
+ * DEP — forward token window from departure anchor (ATD || ETD), or full span
+ *        per saved config (getEffectiveTimelinePolicy).
+ * ARR — backward token window ending at arrival anchor (ATA || ETA), or full
+ *        span per saved config.
  * LOC — unchanged: full span via canonical resolved start/end.
  * OVR — unchanged: full span via canonical resolved start/end.
  *
@@ -6943,44 +6987,35 @@ function getDayTimelineDisplayRange(m) {
   const ft = (m.flightType || '').toUpperCase();
 
   if (ft === 'DEP') {
+    const policy = getEffectiveTimelinePolicy('DEP');
+    if (policy.mode === 'full') return _resolvedFullSpan(m);
+    // Token mode: forward window from departure anchor
     const anchor = getATD(m) || getETD(m);
     if (!anchor) return null;
     const anchorMinutes = timeToMinutes(anchor);
     if (!Number.isFinite(anchorMinutes)) return null;
     return {
       startMinutes: anchorMinutes,
-      endMinutes: anchorMinutes + DAY_TIMELINE_FIXED_WINDOWS.depMinutes,
+      endMinutes: anchorMinutes + policy.tokenMinutes,
     };
   }
 
   if (ft === 'ARR') {
+    const policy = getEffectiveTimelinePolicy('ARR');
+    if (policy.mode === 'full') return _resolvedFullSpan(m);
+    // Token mode: backward window ending at arrival anchor
     const anchor = getATA(m) || getETA(m);
     if (!anchor) return null;
     const anchorMinutes = timeToMinutes(anchor);
     if (!Number.isFinite(anchorMinutes)) return null;
     return {
-      startMinutes: anchorMinutes - DAY_TIMELINE_FIXED_WINDOWS.arrMinutes,
+      startMinutes: anchorMinutes - policy.tokenMinutes,
       endMinutes: anchorMinutes,
     };
   }
 
-  // LOC and OVR: use canonical resolved start/end — unchanged behavior.
-  const startTimeStr = getMovementStartTime(m);
-  if (!startTimeStr) return null;
-  const startMinutes = timeToMinutes(startTimeStr);
-  if (!Number.isFinite(startMinutes)) return null;
-
-  const endTimeStr = getMovementEndTime(m);
-  let endMinutes = timeToMinutes(endTimeStr);
-  if (!Number.isFinite(endMinutes)) {
-    const { minutes } = getDurationSource(m);
-    endMinutes = startMinutes + minutes;
-  }
-  if (endMinutes < startMinutes) {
-    endMinutes += 24 * 60;
-  }
-
-  return { startMinutes, endMinutes };
+  // LOC and OVR: full canonical span — unchanged behavior.
+  return _resolvedFullSpan(m);
 }
 
 /**

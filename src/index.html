@@ -1212,6 +1212,88 @@
                     </div>
                   </div>
                 </div>
+                <div class="panel">
+                  <h3>ARR / DEP Timeline Display</h3>
+                  <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Controls how ARR and DEP movements appear as bars on the day Timeline. Token display time shows a short handling window anchored to the movement's departure or arrival time. Full flight duration shows the complete estimated span. Changes require Save.
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 14px;">
+
+                    <!-- Shared checkbox -->
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configTimelineArrDepShared" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Use same timeline display settings for ARR and DEP</span>
+                      </label>
+                    </div>
+
+                    <!-- Shared settings block (visible when checkbox is checked) -->
+                    <div id="tlSharedBlock" style="padding-left: 8px; border-left: 3px solid #ddd;">
+                      <div style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">Display mode</div>
+                      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                          <input type="radio" name="tlSharedMode" id="tlSharedModeToken" value="token" checked>
+                          Token display time
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                          <input type="radio" name="tlSharedMode" id="tlSharedModeFull" value="full">
+                          Full flight duration
+                        </label>
+                      </div>
+                      <div id="tlSharedTokenRow" style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px;">Token duration (minutes)</label>
+                        <input type="number" id="configTimelineSharedTokenMinutes" value="10" min="1" max="120"
+                               style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
+                      </div>
+                    </div>
+
+                    <!-- Split settings block (visible when checkbox is unchecked) -->
+                    <div id="tlSplitBlock" style="display: none; padding-left: 8px; border-left: 3px solid #ddd;">
+
+                      <!-- Departures -->
+                      <div style="margin-bottom: 14px;">
+                        <div style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">Departure timeline display</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                            <input type="radio" name="tlDepMode" id="tlDepModeToken" value="token" checked>
+                            Token display time
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                            <input type="radio" name="tlDepMode" id="tlDepModeFull" value="full">
+                            Full flight duration
+                          </label>
+                        </div>
+                        <div id="tlDepTokenRow" style="display: flex; align-items: center; gap: 8px;">
+                          <label style="font-size: 12px;">Departure token duration (minutes)</label>
+                          <input type="number" id="configTimelineDepTokenMinutes" value="10" min="1" max="120"
+                                 style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
+                        </div>
+                      </div>
+
+                      <!-- Arrivals -->
+                      <div>
+                        <div style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">Arrival timeline display</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                            <input type="radio" name="tlArrMode" id="tlArrModeToken" value="token" checked>
+                            Token display time
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
+                            <input type="radio" name="tlArrMode" id="tlArrModeFull" value="full">
+                            Full flight duration
+                          </label>
+                        </div>
+                        <div id="tlArrTokenRow" style="display: flex; align-items: center; gap: 8px;">
+                          <label style="font-size: 12px;">Arrival token duration (minutes)</label>
+                          <input type="number" id="configTimelineArrTokenMinutes" value="10" min="1" max="120"
+                                 style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- ── SECTION 8: Booking Profiles (immediate save) ── -->
