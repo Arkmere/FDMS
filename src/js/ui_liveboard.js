@@ -6727,7 +6727,10 @@ export function renderHistoryBoard() {
     }
     if (ft === "OVR") {
       depDisplay = getACT(m) || getECT(m) || "-";
-      arrDisplay = "-";
+      // arr-side: ALFT (arrActual) or ELFT (arrPlanned)
+      const alft = m.arrActual && String(m.arrActual).trim() ? String(m.arrActual).trim() : null;
+      const elft = m.arrPlanned && String(m.arrPlanned).trim() ? String(m.arrPlanned).trim() : null;
+      arrDisplay = alft || elft || "-";
     }
 
     tr.dataset.id = String(m.id);
