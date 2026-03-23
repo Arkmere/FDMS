@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 1 (post-10.1) — DEP/OVR secondary-time inline edit binding; ARR auto-activation ATD fabrication fix
+Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 2 (post-10.1) — Activate/Complete semantics by movement type; BM EGOW Unit validation
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -830,6 +830,48 @@ Fix (`ui_liveboard.js`, `transitionToActive`):
 
 ---
 
+### 8.20 Ticket 2 (post-Sprint 10.1) — Activate/Complete semantics; BM validation
+
+**Outcome:** complete
+
+**Parts implemented:**
+
+**A. Activate semantics — `transitionToActive` (`ui_liveboard.js`)**
+
+- Added guard to DEP/LOC/OVR ATD stamping: `depActual` is only set if not already present. If the operator entered an ATD/ACT before clicking Active (e.g. via the edit modal), the manually-entered value is preserved.
+- ARR remains status-only (Ticket 1). Combined condition: `ft !== 'ARR' && !(movement.depActual && String(movement.depActual).trim())`.
+
+**B/C. Complete semantics — `transitionToCompleted` (`ui_liveboard.js`)**
+
+Rewrote with type-aware logic:
+- **DEP**: no `arrActual` is generated. DEP completion has no arrival-side actual concept.
+- **LOC**: stamps `arrActual = now` only if `arrActual` not already present.
+- **ARR**: stamps `arrActual = now` only if `arrActual` not already present.
+- **OVR**: stamps `arrActual` (ALFT) `= now` only if `arrActual` not already present.
+
+Rule used: `hasArrActual = !!(movement.arrActual && String(movement.arrActual).trim())` — existing field presence is sufficient; no new provenance subsystem needed.
+
+**D. BM EGOW Unit validation (`ui_liveboard.js`)**
+
+Added `if (egowCode === 'BM') { /* require unitCode */ }` immediately after each EGOW code validation block. Applied to all six save paths:
+1. New DEP/ARR/OVR form — save (`newUnitCode`)
+2. New DEP/ARR/OVR form — Save & Complete (`newUnitCode`)
+3. New LOC form — save (`newLocUnitCode`)
+4. New LOC form — Save & Complete (`newLocUnitCode`)
+5. Edit form — Save Changes (`editUnitCode`) — note: this handler previously had no EGOW validation at all; EGOW + BM validation added together
+6. Edit form — Save & Complete (`editUnitCode`)
+
+Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass through unchanged.
+
+**NO-DRIFT confirmations:**
+- Event-based Live Board daily stats model unchanged
+- Nominal counts unchanged
+- OVR separate-counter unchanged
+- Booking reconciliation policy unchanged
+- Timing normalization unchanged
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -837,8 +879,8 @@ Fix (`ui_liveboard.js`, `transitionToActive`):
 As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, and Ticket 1 (inline edit + ARR activation fix) are all landed
-* Ticket 1 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, and Ticket 2 are all landed
+* Ticket 2 (post-10.1) is the latest completed work
 
 ### 9.2 What the next architect/chat should assume
 
@@ -853,6 +895,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Sprint 10 features are landed: single resolved timing model (`getDurationSource`, `resolvedStartTime`, `resolvedEndTime`, `recalculateTimingModel` in datamodel.js); Timeline ARR bar start fixed to ETD/ATD; ARR modal sync direction corrected; inline edits now recalculate dependent timing; `transitionToActive` recalculates ETA from ATD
 * Sprint 10.1 features are landed: DEP arr-side (ETA/ATA) now shown on strips; OVR arr-side (ELFT/ALFT) now shown on strips; boot-time migration recalculates stale ATD-based ETAs in pre-existing ACTIVE strips; edit modal ATD change triggers recalculation; per-type estimated-times config flags (`showDepEstimatedTimesOnStrip`, `showArrEstimatedTimesOnStrip`, `showLocEstimatedTimesOnStrip`, `showOvrEstimatedTimesOnStrip`) replace the legacy global flag
 * Ticket 1 (post-10.1) features are landed: DEP right-side time is now inline-editable (double-click opens edit for ATA/ETA); OVR right-side time (ALFT/ELFT) is now inline-editable; ARR auto-activation (and manual activation) is status-only — no longer fabricates ATD
+* Ticket 2 (post-10.1) features are landed: Activate guards existing ATD for DEP/LOC/OVR; Complete is type-aware (DEP no ATA, LOC/ARR/OVR stamp ATA=now only if absent); BM EGOW Unit code validation enforced in all 6 save paths (new DEP/ARR/OVR save+complete, new LOC save+complete, edit save+complete)
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
