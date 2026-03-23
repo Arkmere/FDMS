@@ -47,6 +47,14 @@ const defaultConfig = {
   timelineEnabled: true,             // Show timeline on Live Board
   timelineStartHour: 6,              // Timeline start hour (UTC)
   timelineEndHour: 22,               // Timeline end hour (UTC)
+  // ARR/DEP Timeline display policy (Ticket 3a)
+  timelineArrDepShared: true,           // true = share one display policy for both ARR and DEP
+  timelineSharedMode: "token",          // Shared display mode: "token" | "full"
+  timelineSharedTokenMinutes: 10,       // Shared token window duration (minutes)
+  timelineDepMode: "token",             // DEP display mode when separate: "token" | "full"
+  timelineDepTokenMinutes: 10,          // DEP token window minutes when not shared
+  timelineArrMode: "token",             // ARR display mode when separate: "token" | "full"
+  timelineArrTokenMinutes: 10,          // ARR token window minutes when not shared
   // Reciprocal strip creation settings
   depToArrOffsetMinutes: 180,        // DEP→ARR: Arrival time = ETD/ATD + this (default 3 hours)
   arrToDepOffsetMinutes: 30,         // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)
