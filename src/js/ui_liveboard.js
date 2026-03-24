@@ -6332,15 +6332,60 @@ function transitionToActive(id) {
 }
 
 /**
+ * Returns the field name for the completion-side actual time owned by each movement type.
+ *
+ * LOC: arrActual (ATA — wheels-stop at destination)
+ * ARR: arrActual (ATA — wheels-stop at aerodrome)
+ * OVR: arrActual (ALFT — actual leave-frequency time)
+ * DEP: null      (DEP completion carries no arrival-side actual concept)
+ *
+ * This is the only field that Complete may stamp, and only when it is absent.
+ * Keeping the mapping here makes it easy to extend if a future type ever diverges.
+ */
+function completionActualField(ft) {
+  switch ((ft || '').toUpperCase()) {
+    case 'LOC':
+    case 'ARR':
+    case 'OVR': return 'arrActual';
+    default:    return null; // DEP: no completion-side actual
+  }
+}
+
+/**
+ * Returns true when the completion-side actual for a movement is genuinely absent.
+ *
+ * Estimated/planned times (arrPlanned / ELFT) are never treated as actuals.
+ * Both system-stamped actuals and manually-entered actuals are treated as "present"
+ * and will cause this function to return false, protecting them from overwrite.
+ *
+ * Complete may only stamp the time returned by completionActualField() when this
+ * function returns true.
+ */
+function completionActualIsAbsent(movement) {
+  const field = completionActualField((movement?.flightType || '').toUpperCase());
+  if (!field) return false; // DEP: never stamp
+  const val = movement?.[field];
+  return !(val && String(val).trim());
+}
+
+/**
  * Transition an ACTIVE movement to COMPLETED.
  *
- * Completion-side actual time stamping rules:
- *   DEP  — no arrival-side actual is generated (DEP completion has no ATA concept)
- *   LOC  — stamp arrActual = now only if arrActual not already present
- *   ARR  — stamp arrActual = now only if arrActual not already present
- *   OVR  — stamp arrActual (ALFT) = now only if arrActual not already present
+ * Completion-side actual stamping rule (applies to all types):
+ *   Stamp the completion-side actual (see completionActualField) only when it is
+ *   genuinely absent at completion time.
  *
- * In all cases, a manually entered actual time is preserved.
+ *   Preserved in all cases:
+ *     - system-stamped actuals (e.g. ATD set by Activate)
+ *     - manually-entered or manually-edited actuals
+ *
+ *   Never substituted:
+ *     - estimated times (arrPlanned) — these are not actuals
+ *
+ *   DEP:  no completion-side actual is ever generated.
+ *   ARR:  arrActual (ATA) stamped only if absent. ATD is never fabricated here.
+ *   LOC:  arrActual (ATA) stamped only if absent. depActual (ATD) is not modified.
+ *   OVR:  arrActual (ALFT) stamped only if absent.
  */
 function transitionToCompleted(id) {
   const now = new Date();
@@ -6349,16 +6394,14 @@ function transitionToCompleted(id) {
   const currentTime = `${hours}:${minutes}`;
 
   const movement = getMovements().find(m => m.id === id);
-  const ft = (movement?.flightType || '').toUpperCase();
-
   const completionUpdates = { status: "COMPLETED" };
 
-  // Stamp arrival-side actual only for non-DEP types and only when not already recorded
-  if (ft !== 'DEP') {
-    const hasArrActual = !!(movement?.arrActual && String(movement.arrActual).trim());
-    if (!hasArrActual) {
-      completionUpdates.arrActual = currentTime;
-    }
+  // Stamp the completion-side actual only when genuinely absent.
+  // Existing actuals — whether system-stamped or operator-entered — are preserved unchanged.
+  // Estimated times (arrPlanned) are never substituted as completion actuals.
+  if (completionActualIsAbsent(movement)) {
+    const field = completionActualField((movement?.flightType || '').toUpperCase());
+    if (field) completionUpdates[field] = currentTime;
   }
 
   updateMovement(id, completionUpdates);

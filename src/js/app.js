@@ -902,7 +902,7 @@ function initAdminPanelHandlers() {
   };
 
   // Sync the ARR/DEP Timeline display UI to reflect the shared/separate checkbox
-  // and enable/disable token duration fields based on selected radio mode.
+  // and enable/disable fixed display time fields based on selected radio mode.
   function syncTimelineUi() {
     const shared = configTimelineArrDepShared ? configTimelineArrDepShared.checked : true;
     const tlSharedBlock = document.getElementById('tlSharedBlock');
@@ -910,7 +910,7 @@ function initAdminPanelHandlers() {
     if (tlSharedBlock) tlSharedBlock.style.display = shared ? '' : 'none';
     if (tlSplitBlock)  tlSplitBlock.style.display  = shared ? 'none' : '';
 
-    // Shared token row
+    // Shared fixed display time row
     const tlSharedModeToken = document.getElementById('tlSharedModeToken');
     const tlSharedTokenRow  = document.getElementById('tlSharedTokenRow');
     if (configTimelineSharedTokenMinutes && tlSharedTokenRow) {
@@ -919,7 +919,7 @@ function initAdminPanelHandlers() {
       tlSharedTokenRow.style.opacity = active ? '' : '0.5';
     }
 
-    // DEP token row
+    // DEP fixed display time row
     const tlDepModeToken = document.getElementById('tlDepModeToken');
     const tlDepTokenRow  = document.getElementById('tlDepTokenRow');
     if (configTimelineDepTokenMinutes && tlDepTokenRow) {
@@ -928,7 +928,7 @@ function initAdminPanelHandlers() {
       tlDepTokenRow.style.opacity = active ? '' : '0.5';
     }
 
-    // ARR token row
+    // ARR fixed display time row
     const tlArrModeToken = document.getElementById('tlArrModeToken');
     const tlArrTokenRow  = document.getElementById('tlArrTokenRow');
     if (configTimelineArrTokenMinutes && tlArrTokenRow) {
