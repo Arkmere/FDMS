@@ -496,6 +496,9 @@ function ensureInitialised() {
       if (m.outcomeTime === undefined)           { m.outcomeTime           = '';       needsSave = true; }
       // Sprint 9: PIC field — uses existing captain; no migration needed but ensure defined
       if (m.captain === undefined) { m.captain = ''; needsSave = true; }
+      // Ticket 4: exact WTC timestamp companion — HH:MM:SS set by Active button alongside
+      // the rounded operational depActual. Absent for old records; treated as "no exact time".
+      if (m.depActualExact === undefined) { m.depActualExact = ''; needsSave = true; }
       // Sprint 10.1: recalculate derived ETA for ACTIVE DEP/LOC/OVR strips where ATD exists
       // but arrPlanned may be stale (ETD-based). Apply canonical timing model forward from ATD.
       if (m.status === 'ACTIVE') {

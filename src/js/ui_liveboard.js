@@ -2571,6 +2571,12 @@ export function renderLiveBoard() {
       ? `<span class="wtc-alert">${escapeHtml(m.wtc || "—")}</span>`
       : escapeHtml(m.wtc || "—");
 
+    // WTC exact-time display — shown alongside WTC only when WTC alert threshold is met
+    // and an exact Active-button timestamp is available. Secondary/subordinate to main times.
+    const wtcExactHtml = (hasWtcAlert && m.depActualExact)
+      ? ` <span class="wtc-exact-time" title="Exact WTC timing anchor">${escapeHtml(m.depActualExact)}</span>`
+      : '';
+
     tr.innerHTML = `
       <td><div class="status-strip" style="background-color: ${indicatorColor};" title="${escapeHtml(indicatorTitle)}"></div></td>
       <td>
@@ -2583,7 +2589,7 @@ export function renderLiveBoard() {
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-reg">${escapeHtml(m.registration || "—")}</span>${m.type ? ` · <span class="js-edit-type" title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
-        <div class="cell-muted">WTC: <span class="js-edit-wtc">${wtcDisplay}</span></div>
+        <div class="cell-muted">WTC: <span class="js-edit-wtc">${wtcDisplay}</span>${wtcExactHtml}</div>
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-dep-ad"${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
@@ -6278,15 +6284,38 @@ function openReciprocalStripModal(m, targetType) {
 }
 
 /**
+ * Round a Date to the nearest operational minute for Active-button stamping.
+ * Rule: 00–29 seconds → round down (keep HH:MM); 30–59 seconds → round up (+1 min).
+ * Returns HH:MM string (UTC wall-clock, matching the rest of the time model).
+ */
+function roundActiveStampToMinute(date) {
+  const d = new Date(date.getTime());
+  if (d.getSeconds() >= 30) {
+    d.setMinutes(d.getMinutes() + 1);
+  }
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Return the exact second-bearing timestamp for WTC timing logic.
+ * Returns HH:MM:SS string (UTC wall-clock).
+ * Stored separately from the rounded operational actual so WTC calculations
+ * are not degraded by minute-level rounding.
+ */
+function getExactActiveTimestamp(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+}
+
+/**
  * Transition a PLANNED movement to ACTIVE
- * Sets ATD/ACT to current time
+ * Sets ATD/ACT to current time (rounded to nearest minute for operational display)
+ * Retains exact second-bearing timestamp in depActualExact for WTC logic
  * Auto-updates DOF to today if flight was planned for future date
  */
 function transitionToActive(id) {
   const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const currentTime = `${hours}:${minutes}`;
+  const currentTime = roundActiveStampToMinute(now);   // operational rounded display
+  const exactTime = getExactActiveTimestamp(now);       // exact WTC anchor
 
   // Get today's date in YYYY-MM-DD format
   const todayStr = getTodayDateString();
@@ -6301,9 +6330,12 @@ function transitionToActive(id) {
   // press) does not constitute evidence of an actual departure event.
   // DEP/LOC/OVR: stamp depActual = now only if not already present.
   // (Preserve manual ATD/ACT if the operator entered it before clicking Active.)
+  // depActualExact stores the exact second-bearing timestamp alongside the rounded
+  // operational actual so that WTC spacing logic is not degraded by rounding.
   const updates = { status: "ACTIVE" };
   if (ft !== 'ARR' && !(movement?.depActual && String(movement.depActual).trim())) {
-    updates.depActual = currentTime;
+    updates.depActual = currentTime;         // rounded to nearest minute for operational display
+    updates.depActualExact = exactTime;      // exact HH:MM:SS for WTC timing anchor
   }
 
   // If DOF is in the future, update it to today
