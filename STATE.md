@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-24 (Europe/London) — Latest completed sprint: Ticket 2b (post-10.1) — LOC/ARR/OVR Complete semantic refinement + Timeline wording cleanup
+Last updated: 2026-03-24 (Europe/London) — Latest completed sprint: Ticket 4 (post-10.1) — Active-button minute rounding + WTC exact-time retention and display
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -125,11 +125,12 @@ These two systems are intentionally different. See the comment block at the top 
 Stored canonical time fields are:
 
 * `depPlanned`
-* `depActual`
+* `depActual` — operational actual, rounded to nearest minute when stamped by Active button
 * `arrPlanned`
 * `arrActual`
+* `depActualExact` — exact second-bearing WTC anchor (HH:MM:SS), set alongside `depActual` by Active press for DEP/LOC/OVR; absent/empty for ARR and for records predating Ticket 4
 
-These are stored as UTC `HH:MM` strings.
+These are stored as UTC strings (`HH:MM` for the four canonical fields; `HH:MM:SS` for `depActualExact`).
 UI display may show them in UTC or Local depending on current display mode and configured offset.
 
 ### 2.3 Booking/strip link invariants
@@ -876,11 +877,11 @@ Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass th
 
 ### 9.1 What is true now
 
-As of 2026-03-23:
+As of 2026-03-24:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, and Ticket 2b are all landed
-* Ticket 2b (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, and Ticket 4 are all landed
+* Ticket 4 (post-10.1) is the latest completed work
 
 ---
 
@@ -1119,6 +1120,103 @@ Internal config keys (`timelineSharedMode: "token"`, etc.) left unchanged — ch
 
 ---
 
+### 8.24 Ticket 4 (post-10.1) — Active-button minute rounding + WTC exact-time retention and display
+
+**Outcome:** complete
+
+**Summary:**
+
+Two related concerns addressed together: (A) rounding the displayed operational actual time when Active is pressed; (B) retaining the exact second-bearing timestamp for WTC logic and displaying it on-strip as a secondary element.
+
+---
+
+**A. Active-button minute rounding (`ui_liveboard.js`)**
+
+Two helper functions added immediately before `transitionToActive`:
+
+`roundActiveStampToMinute(date)` — applies the nearest-minute rule:
+- 00–29 seconds → round down (return HH:MM unchanged)
+- 30–59 seconds → round up (+1 minute, returns HH:MM)
+
+`getExactActiveTimestamp(date)` — returns exact HH:MM:SS for WTC use.
+
+`transitionToActive` updated:
+- `const now = new Date()` call unchanged
+- `currentTime` now assigned via `roundActiveStampToMinute(now)` instead of raw HH:MM format
+- `exactTime` assigned via `getExactActiveTimestamp(now)`
+- When stamping `depActual` (DEP/LOC/OVR, not already present), also stamps `depActualExact = exactTime`
+- ARR guard unchanged — no ATD fabricated; no `depActualExact` set for ARR
+
+**B. Exact-time retention (`datamodel.js` + `ui_liveboard.js`)**
+
+New movement field `depActualExact` (HH:MM:SS string):
+- Set alongside `depActual` by Active press for DEP/LOC/OVR
+- Never set for ARR (ARR Active is status-only)
+- Not set when Active preserves an existing manual `depActual` (guard already present from Ticket 2)
+- `ensureInitialised()` migration: `if (m.depActualExact === undefined) { m.depActualExact = ''; needsSave = true; }` — safe for old records, degrades gracefully to empty
+
+**C. WTC exact-time display (`ui_liveboard.js`, `vectair.css`)**
+
+In the strip renderer, after the `hasWtcAlert` computation:
+- `wtcExactHtml` computed: non-empty only when `hasWtcAlert` is true AND `m.depActualExact` is non-empty
+- Format: `<span class="wtc-exact-time" title="Exact WTC timing anchor">HH:MM:SS</span>`
+- Appended inside the `cell-muted` WTC line, after the WTC category span
+
+New CSS class `.wtc-exact-time`:
+- `font-size: 10px` (smaller than 11px `cell-muted` baseline)
+- `color: var(--va-text-soft)`, `opacity: 0.75`, `margin-left: 4px`, `font-weight: 400`
+- Visually subordinate; does not compete with main strip times or WTC alert badge
+
+**Visibility rule:** exact-time display is tied to the existing `wtcAlertThreshold` mechanism. If the threshold is "off" or the strip's WTC does not meet the threshold, `hasWtcAlert` is false and `wtcExactHtml` is empty — no display. If the movement has no `depActualExact` (old record, ARR, or manual-ATD-before-Active case), no display either.
+
+**Files changed:**
+
+1. `src/js/ui_liveboard.js` — `roundActiveStampToMinute()` and `getExactActiveTimestamp()` helpers added; `transitionToActive()` updated to use rounded display and exact WTC field; strip renderer updated with `wtcExactHtml` computed and injected into WTC cell
+2. `src/js/datamodel.js` — `depActualExact` initialized in `ensureInitialised()` migration block
+3. `src/css/vectair.css` — `.wtc-exact-time` class added after `.wtc-alert`
+
+**NO-DRIFT confirmations:**
+- ARR does not fabricate ATD — unchanged
+- Ticket 2 / 2b Complete semantics unchanged
+- Ticket 3 / 3a Timeline behavior unchanged
+- OVR blank-EOFT create-as-active rule unaffected (create-as-active path goes through `transitionToActive` with normal guard)
+- Event-based Live Board daily stats unchanged (`depActualExact` is not a time field counted by `egowRunwayContribution`)
+- Nominal Monthly Return / Dashboard / Insights unchanged
+- Booking reconciliation unchanged
+- History model unchanged
+- `flightType` unchanged
+- Formation behavior unchanged
+- Inline/modal edit semantics unchanged — editing `depActual` directly does not overwrite `depActualExact` (exact field is only set on Active press, not on manual edits)
+
+**Backward compatibility:**
+- Old records load with `depActualExact = ''` (migration default)
+- Empty `depActualExact` → no WTC exact-time display rendered
+- No manual migration steps required from Stuart
+
+**Manual verification checklist for Stuart:**
+
+Active rounding:
+1. Press Active at a moment where seconds are 00–29 → displayed ATD/ACT rounds down (seconds dropped)
+2. Press Active at a moment where seconds are 30–59 → displayed ATD/ACT rounds up (+1 min, seconds dropped)
+3. Boundary: :29 → rounds down; :30 → rounds up
+
+Movement types:
+1. DEP Active → ATD shown as rounded HH:MM on strip; `depActualExact` stored as HH:MM:SS
+2. LOC Active → ATD shown as rounded HH:MM; `depActualExact` stored
+3. ARR Active → no ATD created; no `depActualExact` set; status transitions to ACTIVE only
+4. OVR Active (including blank-EOFT create-as-active) → ACT shown as rounded HH:MM; `depActualExact` stored
+
+WTC exact-time display:
+1. Strip with WTC ≥ threshold: exact time appears as small muted HH:MM:SS text after WTC badge on the muted WTC line
+2. Strip below threshold (or threshold = off): no exact-time text shown
+3. Old record (no `depActualExact`): no exact-time text shown even if WTC alert active
+
+Persistence:
+1. Reload app with old records → no breakage; `depActualExact` defaults to empty
+2. Activate a new DEP/LOC/OVR → save/reload → exact time persists correctly
+
+---
+
 ### 9.2 What the next architect/chat should assume
 
 Assume the following as baseline truths unless Stuart reports otherwise from manual testing:
@@ -1136,6 +1234,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Ticket 3 (post-10.1) features are landed: day Timeline DEP bars now render as 10-minute forward windows from ATD/ETD anchor; ARR bars render as 10-minute backward windows ending at ATA/ETA anchor; LOC/OVR rendering unchanged; `getDayTimelineDisplayRange()` helper added to `ui_liveboard.js`; no timing model changes
 * Ticket 3a (post-10.1) features are landed: ARR/DEP Timeline display policy is now Admin-configurable (token vs full-duration, token duration minutes, shared vs separate for ARR/DEP); 7 new config keys in `datamodel.js` defaults; new Admin panel in `index.html`; `getEffectiveTimelinePolicy()` + `_resolvedFullSpan()` helpers added to `ui_liveboard.js`; all wired through `app.js` with full save/load/discard/dirty-tracking support
 * Ticket 2b (post-10.1) features are landed: `completionActualField()` and `completionActualIsAbsent()` helpers added to `ui_liveboard.js`; `transitionToCompleted()` refactored to use them making the "stamp only when absent, preserve all actuals" rule explicit; ARR/DEP Timeline Admin panel user-facing wording changed from "Token display time" to "Fixed display time" throughout `index.html`; `syncTimelineUi()` comments updated in `app.js`; internal IDs and config key strings left unchanged for stability
+* Ticket 4 (post-10.1) features are landed: Active-button minute rounding applied to DEP/LOC/OVR (`roundActiveStampToMinute` helper, 00–29 sec round down, 30–59 sec round up); exact WTC anchor retained in `depActualExact` (HH:MM:SS) alongside rounded operational `depActual`; WTC exact-time displayed on-strip as secondary muted HH:MM:SS text when WTC alert threshold is met and exact time is available; `depActualExact` initialized to `''` in `ensureInitialised()` migration for backward compatibility; ARR Active remains status-only with no ATD fabrication
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
