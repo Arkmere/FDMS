@@ -554,12 +554,10 @@ tr.strip.ft-ovr > td {
   font-weight: 700;
 }
 .wtc-exact-time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--va-text-soft);
-  opacity: 0.75;
-  margin-left: 4px;
-  font-weight: 400;
-  white-space: nowrap;
+  font-weight: 500;
+  line-height: 1.4;
 }
 .call-sub {
   font-size: 11px;

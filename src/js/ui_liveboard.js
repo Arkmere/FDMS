@@ -2571,10 +2571,10 @@ export function renderLiveBoard() {
       ? `<span class="wtc-alert">${escapeHtml(m.wtc || "—")}</span>`
       : escapeHtml(m.wtc || "—");
 
-    // WTC exact-time display — shown alongside WTC only when WTC alert threshold is met
-    // and an exact Active-button timestamp is available. Secondary/subordinate to main times.
+    // WTC exact-time display — own line below WTC category, shown only when WTC alert
+    // threshold is met and an exact Active-button timestamp is available.
     const wtcExactHtml = (hasWtcAlert && m.depActualExact)
-      ? ` <span class="wtc-exact-time" title="Exact WTC timing anchor">${escapeHtml(m.depActualExact)}</span>`
+      ? `<div class="wtc-exact-time">${escapeHtml(m.depActualExact)}</div>`
       : '';
 
     tr.innerHTML = `
@@ -2589,7 +2589,8 @@ export function renderLiveBoard() {
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-reg">${escapeHtml(m.registration || "—")}</span>${m.type ? ` · <span class="js-edit-type" title="${escapeHtml(m.popularName || '')}">${escapeHtml(m.type)}</span>` : ""}</div>
-        <div class="cell-muted">WTC: <span class="js-edit-wtc">${wtcDisplay}</span>${wtcExactHtml}</div>
+        <div class="cell-muted">WTC: <span class="js-edit-wtc">${wtcDisplay}</span></div>
+        ${wtcExactHtml}
       </td>
       <td>
         <div class="cell-strong"><span class="js-edit-dep-ad"${m.depName && m.depName !== '' ? ` title="${m.depName}"` : ''}>${escapeHtml(m.depAd)}</span></div>
@@ -6421,9 +6422,7 @@ function completionActualIsAbsent(movement) {
  */
 function transitionToCompleted(id) {
   const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const currentTime = `${hours}:${minutes}`;
+  const currentTime = roundActiveStampToMinute(now); // nearest-minute rule: <30s rounds down, ≥30s rounds up
 
   const movement = getMovements().find(m => m.id === id);
   const completionUpdates = { status: "COMPLETED" };
