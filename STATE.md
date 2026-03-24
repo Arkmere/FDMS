@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-23 (Europe/London) — Latest completed sprint: Ticket 3a (post-10.1) — Expose ARR/DEP Timeline display policy in Admin settings
+Last updated: 2026-03-24 (Europe/London) — Latest completed sprint: Ticket 2b (post-10.1) — LOC/ARR/OVR Complete semantic refinement + Timeline wording cleanup
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -879,8 +879,8 @@ Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass th
 As of 2026-03-23:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, and Ticket 3a are all landed
-* Ticket 3a (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, and Ticket 2b are all landed
+* Ticket 2b (post-10.1) is the latest completed work
 
 ---
 
@@ -1033,6 +1033,92 @@ Extended Admin → History & Timeline → Day View / Timeline Settings with a ne
 
 ---
 
+### 8.23 Ticket 2b (post-10.1) — LOC/ARR/OVR Complete semantic refinement + Timeline wording cleanup
+
+**Outcome:** complete
+
+**Summary:**
+
+Two concerns addressed in one ticket: (A) formalizing the Complete-stamping rule as explicit named helpers; (B) user-facing wording cleanup for the ARR/DEP Timeline settings panel.
+
+---
+
+**A. Complete semantic refinement (`ui_liveboard.js`)**
+
+The behavioral rule was already correct from Ticket 2 (`hasArrActual` check). This ticket formalizes and documents it through explicit named helpers, making the intent unambiguous for future maintenance.
+
+**New helpers added before `transitionToCompleted`:**
+
+`completionActualField(ft)` — maps movement type to its owned completion-side actual field:
+- `LOC` → `arrActual` (ATA)
+- `ARR` → `arrActual` (ATA)
+- `OVR` → `arrActual` (ALFT)
+- `DEP` → `null` (no completion-side actual)
+
+`completionActualIsAbsent(movement)` — returns true only when the completion-side actual is genuinely blank. Distinguishes actuals (arrActual) from estimates (arrPlanned). Both system-stamped and manually-entered actuals return false (i.e., "not absent" → do not overwrite).
+
+**`transitionToCompleted` refactored** to call these helpers:
+- Stamp only when `completionActualIsAbsent(movement)` is true
+- The `field` is resolved via `completionActualField(ft)`
+- The inline comment and JSDoc make the preservation rule explicit
+- DEP: no actual ever generated (completionActualField returns null)
+- ARR: ATA stamped only if absent; ATD is explicitly documented as never fabricated here
+- LOC: ATA stamped only if absent; ATD/depActual not touched
+- OVR: ALFT/arrActual stamped only if absent
+
+**Behavioral verification — all scenarios work correctly:**
+1. LOC: Activate (stamps ATD) → operator edits ATD → Complete → edited ATD preserved; ATA stamped only if absent ✓
+2. LOC: operator manually enters ATA before Complete → Complete preserves ATA ✓
+3. LOC: ETA only (arrPlanned set, arrActual blank) → Complete stamps ATA now ✓
+4. ARR: ETA only → Complete stamps ATA now ✓
+5. ARR: operator enters ATA before Complete → Complete preserves ATA ✓
+6. ARR: Activate (status-only) → Complete → no ATD created at any point ✓
+7. OVR: blank EOFT create-as-active → ACT stamped → operator edits ACT → Complete → edited ACT preserved; ALFT stamped only if absent ✓
+8. OVR: operator enters ALFT before Complete → Complete preserves ALFT ✓
+9. OVR: estimated ELFT only (arrActual blank) → Complete stamps ALFT now ✓
+
+---
+
+**B. Timeline wording cleanup (`src/index.html`, `src/js/app.js`)**
+
+Changed all user-facing "Token" terminology in the ARR/DEP Timeline Display admin panel to "Fixed display time":
+
+- Panel description: "Token display time shows..." → "Fixed display time shows..."
+- Shared radio label: "Token display time" → "Fixed display time"
+- Shared duration label: "Token duration (minutes)" → "Fixed display time (minutes)"
+- DEP radio label: "Token display time" → "Fixed display time"
+- DEP duration label: "Departure token duration (minutes)" → "Departure fixed display time (minutes)"
+- ARR radio label: "Token display time" → "Fixed display time"
+- ARR duration label: "Arrival token duration (minutes)" → "Arrival fixed display time (minutes)"
+- `syncTimelineUi()` inline comments updated from "token row" → "fixed display time row"
+
+Internal IDs (`tlSharedModeToken`, `tlDepModeToken`, `tlArrModeToken`, `configTimelineSharedTokenMinutes`, etc.) left unchanged — renaming them would be cosmetic churn with no functional benefit.
+
+Internal config keys (`timelineSharedMode: "token"`, etc.) left unchanged — changing stored string values would risk breaking existing saved settings.
+
+**No functional regression to Ticket 3a settings behavior.** Save/load/discard still work correctly. Radio states persist. syncTimelineUi() behavior unchanged.
+
+---
+
+**Files changed:**
+1. `src/js/ui_liveboard.js` — `completionActualField()`, `completionActualIsAbsent()` helpers added; `transitionToCompleted()` refactored
+2. `src/index.html` — 7 user-facing label/description text changes
+3. `src/js/app.js` — 3 comment updates in `syncTimelineUi()`
+
+**NO-DRIFT confirmations:**
+- DEP Complete semantics unchanged
+- LOC/ARR/OVR Complete behavior: unchanged; now explicit
+- Activate semantics unchanged
+- ARR does not fabricate ATD — unchanged and documented
+- Booking reconciliation unchanged
+- Counters/reporting unchanged
+- WTC logic unchanged
+- Ticket 3a settings persist and load correctly
+- LOC/OVR Timeline rendering unchanged
+- Formation behavior unchanged
+
+---
+
 ### 9.2 What the next architect/chat should assume
 
 Assume the following as baseline truths unless Stuart reports otherwise from manual testing:
@@ -1049,6 +1135,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Ticket 2 (post-10.1) features are landed: Activate guards existing ATD for DEP/LOC/OVR; Complete is type-aware (DEP no ATA, LOC/ARR/OVR stamp ATA=now only if absent); BM EGOW Unit code validation enforced in all 6 save paths (new DEP/ARR/OVR save+complete, new LOC save+complete, edit save+complete)
 * Ticket 3 (post-10.1) features are landed: day Timeline DEP bars now render as 10-minute forward windows from ATD/ETD anchor; ARR bars render as 10-minute backward windows ending at ATA/ETA anchor; LOC/OVR rendering unchanged; `getDayTimelineDisplayRange()` helper added to `ui_liveboard.js`; no timing model changes
 * Ticket 3a (post-10.1) features are landed: ARR/DEP Timeline display policy is now Admin-configurable (token vs full-duration, token duration minutes, shared vs separate for ARR/DEP); 7 new config keys in `datamodel.js` defaults; new Admin panel in `index.html`; `getEffectiveTimelinePolicy()` + `_resolvedFullSpan()` helpers added to `ui_liveboard.js`; all wired through `app.js` with full save/load/discard/dirty-tracking support
+* Ticket 2b (post-10.1) features are landed: `completionActualField()` and `completionActualIsAbsent()` helpers added to `ui_liveboard.js`; `transitionToCompleted()` refactored to use them making the "stamp only when absent, preserve all actuals" rule explicit; ARR/DEP Timeline Admin panel user-facing wording changed from "Token display time" to "Fixed display time" throughout `index.html`; `syncTimelineUi()` comments updated in `app.js`; internal IDs and config key strings left unchanged for stability
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 

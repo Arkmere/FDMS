@@ -1215,7 +1215,7 @@
                 <div class="panel">
                   <h3>ARR / DEP Timeline Display</h3>
                   <div style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Controls how ARR and DEP movements appear as bars on the day Timeline. Token display time shows a short handling window anchored to the movement's departure or arrival time. Full flight duration shows the complete estimated span. Changes require Save.
+                    Controls how ARR and DEP movements appear as bars on the day Timeline. Fixed display time shows a short handling window anchored to the movement's departure or arrival time. Full flight duration shows the complete estimated span. Changes require Save.
                   </div>
 
                   <div style="display: flex; flex-direction: column; gap: 14px;">
@@ -1234,7 +1234,7 @@
                       <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                           <input type="radio" name="tlSharedMode" id="tlSharedModeToken" value="token" checked>
-                          Token display time
+                          Fixed display time
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                           <input type="radio" name="tlSharedMode" id="tlSharedModeFull" value="full">
@@ -1242,7 +1242,7 @@
                         </label>
                       </div>
                       <div id="tlSharedTokenRow" style="display: flex; align-items: center; gap: 8px;">
-                        <label style="font-size: 12px;">Token duration (minutes)</label>
+                        <label style="font-size: 12px;">Fixed display time (minutes)</label>
                         <input type="number" id="configTimelineSharedTokenMinutes" value="10" min="1" max="120"
                                style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
                       </div>
@@ -1257,7 +1257,7 @@
                         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
                           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                             <input type="radio" name="tlDepMode" id="tlDepModeToken" value="token" checked>
-                            Token display time
+                            Fixed display time
                           </label>
                           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                             <input type="radio" name="tlDepMode" id="tlDepModeFull" value="full">
@@ -1265,7 +1265,7 @@
                           </label>
                         </div>
                         <div id="tlDepTokenRow" style="display: flex; align-items: center; gap: 8px;">
-                          <label style="font-size: 12px;">Departure token duration (minutes)</label>
+                          <label style="font-size: 12px;">Departure fixed display time (minutes)</label>
                           <input type="number" id="configTimelineDepTokenMinutes" value="10" min="1" max="120"
                                  style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
                         </div>
@@ -1277,7 +1277,7 @@
                         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;">
                           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                             <input type="radio" name="tlArrMode" id="tlArrModeToken" value="token" checked>
-                            Token display time
+                            Fixed display time
                           </label>
                           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;">
                             <input type="radio" name="tlArrMode" id="tlArrModeFull" value="full">
@@ -1285,7 +1285,7 @@
                           </label>
                         </div>
                         <div id="tlArrTokenRow" style="display: flex; align-items: center; gap: 8px;">
-                          <label style="font-size: 12px;">Arrival token duration (minutes)</label>
+                          <label style="font-size: 12px;">Arrival fixed display time (minutes)</label>
                           <input type="number" id="configTimelineArrTokenMinutes" value="10" min="1" max="120"
                                  style="width: 60px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px;">
                         </div>
