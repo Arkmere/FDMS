@@ -335,6 +335,107 @@ let _activeInlineSession = null;
 /** True when a rerender was requested while an inline editor was open. */
 let _pendingRerenderWhileInline = false;
 
+// ------------------------------------------------------------------
+// Inline time-mode state
+// Per-strip, per-side toggle: 'estimate' | 'actual'
+// Stored in-memory only (UI session state, not persisted to movement record).
+// Operator-explicit toggles are preserved across re-renders.
+// Non-explicit (default) modes re-derive from actual-field presence on each
+// render, so the strip automatically shows ATD after Active is pressed etc.
+// ------------------------------------------------------------------
+
+/** @type {Map<string, 'estimate'|'actual'>} key = `${movementId}:dep` or `${movementId}:arr` */
+const _inlineTimeModeMap = new Map();
+
+/** Keys that have been explicitly toggled by the operator this session. */
+const _inlineTimeModeExplicit = new Set();
+
+/**
+ * Resolve the active time mode for one side of a strip.
+ * If the operator explicitly toggled this side, preserve their choice.
+ * Otherwise auto-derive from actual-field presence (actual mode when actual exists).
+ * @param {string|number} movementId
+ * @param {'dep'|'arr'} side
+ * @param {boolean} hasActual - whether the relevant actual field is populated
+ * @returns {'estimate'|'actual'}
+ */
+function _resolveInlineTimeMode(movementId, side, hasActual) {
+  const key = `${movementId}:${side}`;
+  if (_inlineTimeModeExplicit.has(key)) {
+    return _inlineTimeModeMap.get(key) || 'estimate';
+  }
+  const mode = hasActual ? 'actual' : 'estimate';
+  _inlineTimeModeMap.set(key, mode);
+  return mode;
+}
+
+/**
+ * Read the current mode for a side (does not re-derive defaults).
+ * @param {string|number} movementId
+ * @param {'dep'|'arr'} side
+ * @returns {'estimate'|'actual'}
+ */
+function _getInlineTimeMode(movementId, side) {
+  return _inlineTimeModeMap.get(`${movementId}:${side}`) || 'estimate';
+}
+
+/**
+ * Set the mode explicitly (operator toggle).
+ * @param {string|number} movementId
+ * @param {'dep'|'arr'} side
+ * @param {'estimate'|'actual'} mode
+ */
+function _setInlineTimeModeExplicit(movementId, side, mode) {
+  const key = `${movementId}:${side}`;
+  _inlineTimeModeMap.set(key, mode);
+  _inlineTimeModeExplicit.add(key);
+}
+
+/**
+ * Return the data-model field name for a time cell based on flight type, side, and mode.
+ * Explicit field-ownership table:
+ *   DEP/LOC dep-side  estimate → depPlanned   actual → depActual
+ *   DEP/LOC arr-side  estimate → arrPlanned   actual → arrActual
+ *   ARR     dep-side  always depActual (ATD from origin – no estimate/actual pair)
+ *   ARR     arr-side  estimate → arrPlanned   actual → arrActual
+ *   OVR     dep-side  estimate → depPlanned   actual → depActual  (EOFT/AOFT)
+ *   OVR     arr-side  estimate → arrPlanned   actual → arrActual  (ELFT/ALFT)
+ * @param {string} ft   - flight type (DEP|LOC|ARR|OVR)
+ * @param {'dep'|'arr'} side
+ * @param {'estimate'|'actual'} mode
+ * @returns {string|null}
+ */
+function _inlineTimeFieldForMode(ft, side, mode) {
+  if (side === 'dep') {
+    if (ft === 'ARR') return 'depActual'; // always ATD
+    return mode === 'actual' ? 'depActual' : 'depPlanned';
+  }
+  if (side === 'arr') {
+    return mode === 'actual' ? 'arrActual' : 'arrPlanned';
+  }
+  return null;
+}
+
+/**
+ * Return the display label for a time cell based on flight type, side, and mode.
+ * @param {string} ft   - flight type (DEP|LOC|ARR|OVR)
+ * @param {'dep'|'arr'} side
+ * @param {'estimate'|'actual'} mode
+ * @returns {string}
+ */
+function _inlineTimeLabelForMode(ft, side, mode) {
+  if (side === 'dep') {
+    if (ft === 'ARR') return 'ATD'; // always ATD for ARR dep-side
+    if (ft === 'OVR') return mode === 'actual' ? 'AOFT' : 'EOFT';
+    return mode === 'actual' ? 'ATD' : 'ETD'; // DEP/LOC
+  }
+  if (side === 'arr') {
+    if (ft === 'OVR') return mode === 'actual' ? 'ALFT' : 'ELFT';
+    return mode === 'actual' ? 'ATA' : 'ETA'; // DEP/LOC/ARR
+  }
+  return '';
+}
+
 /**
  * Read the idle-timeout value from config (floor: 5 s safety net).
  * @returns {number} milliseconds
@@ -471,10 +572,12 @@ function _buildTabOrder(rowEl, movement) {
     { selector: '.js-edit-rules',     inputType: 'text',
       fieldName: () => 'rules',         applicable: true },
     { selector: '.js-edit-dep-time',  inputType: 'time',
-      fieldName: (m) => m.depActual ? 'depActual' : 'depPlanned',
+      fieldName: (m) => ft === 'ARR'
+        ? 'depActual'
+        : _inlineTimeFieldForMode(ft, 'dep', _getInlineTimeMode(m.id, 'dep')),
       applicable: ft === 'DEP' || ft === 'LOC' || ft === 'OVR' },
     { selector: '.js-edit-arr-time',  inputType: 'time',
-      fieldName: (m) => m.arrActual ? 'arrActual' : 'arrPlanned',
+      fieldName: (m) => _inlineTimeFieldForMode(ft, 'arr', _getInlineTimeMode(m.id, 'arr')),
       applicable: ft === 'ARR' || ft === 'LOC' || ft === 'DEP' || ft === 'OVR' },
     // field 11 is NOT inline-editable — skipped
     { selector: '.js-edit-tng',       inputType: 'number',
@@ -2426,66 +2529,44 @@ export function renderLiveBoard() {
     tr.dataset.id = String(m.id);
 
     // Use semantic time fields based on flight type.
-    // Every displayed time is explicitly labeled (ETD/ATD/ETA/ATA).
+    // Every displayed time is explicitly labeled (ETD/ATD/ETA/ATA/EOFT/AOFT/ELFT/ALFT).
+    // The label itself is the mode selector: clicking it toggles between estimate and actual.
     // Estimated times carry class "time-estimated"; actual times carry "time-actual".
     const ft = (m.flightType || "").toUpperCase();
-    const isActive = m.status === "ACTIVE";
     let depDisplay = "-";
     let arrDisplay = "-";
-    let depLabel = "";      // ETD or ATD
-    let arrLabel = "";      // ETA or ATA
+    let depLabel = "";
+    let arrLabel = "";
     let depIsActual = false;
     let arrIsActual = false;
 
-    if (ft === "DEP" || ft === "LOC") {
-      const atd = getATD(m);
-      const etd = getETD(m);
-      if (atd) {
-        depDisplay = atd; depLabel = "ATD"; depIsActual = true;
-      } else if (!isActive && etd) {
-        depDisplay = etd; depLabel = "ETD"; depIsActual = false;
-      } else if (isActive && etd) {
-        depDisplay = etd; depLabel = "ETD"; depIsActual = false;
-      } else {
-        depDisplay = "-"; depLabel = "";
-      }
-    } else if (ft === "ARR" && m.depActual && String(m.depActual).trim()) {
-      // ARR: show depActual (ATD from origin) when populated, even though getATD() returns null for ARR
-      depDisplay = String(m.depActual).trim(); depLabel = "ATD"; depIsActual = true;
+    // Resolve dep-side mode (auto-derives from actual presence unless operator toggled).
+    // ARR dep-side (ATD from origin) has no estimate/actual pair — always shown as ATD when present.
+    const depHasActual = !!(m.depActual && String(m.depActual).trim());
+    const arrHasActual = !!(m.arrActual && String(m.arrActual).trim());
+
+    if (ft === "DEP" || ft === "LOC" || ft === "OVR") {
+      const depMode = _resolveInlineTimeMode(m.id, 'dep', depHasActual);
+      const depField = _inlineTimeFieldForMode(ft, 'dep', depMode);
+      const rawVal = m[depField] && String(m[depField]).trim();
+      depDisplay = rawVal || "-";
+      depLabel = _inlineTimeLabelForMode(ft, 'dep', depMode); // always show — label is the mode selector
+      depIsActual = depMode === 'actual';
+    } else if (ft === "ARR" && depHasActual) {
+      // ARR dep-side: show ATD from origin when populated (no toggle — always depActual)
+      depDisplay = String(m.depActual).trim();
+      depLabel = "ATD";
+      depIsActual = true;
     }
-    if (ft === "DEP") {
-      // arr-side for DEP: ATA (arrActual) or ETA (arrPlanned)
-      const ata = m.arrActual && String(m.arrActual).trim() ? String(m.arrActual).trim() : null;
-      const eta = m.arrPlanned && String(m.arrPlanned).trim() ? String(m.arrPlanned).trim() : null;
-      if (ata) { arrDisplay = ata; arrLabel = "ATA"; arrIsActual = true; }
-      else if (eta) { arrDisplay = eta; arrLabel = "ETA"; arrIsActual = false; }
-    }
-    if (ft === "ARR" || ft === "LOC") {
-      const ata = getATA(m);
-      const eta = getETA(m);
-      if (ata) {
-        arrDisplay = ata; arrLabel = "ATA"; arrIsActual = true;
-      } else if (eta) {
-        arrDisplay = eta; arrLabel = "ETA"; arrIsActual = false;
-      } else {
-        arrDisplay = "-"; arrLabel = "";
-      }
-    }
-    if (ft === "OVR") {
-      const act = getACT(m);
-      const ect = getECT(m);
-      if (act) {
-        depDisplay = act; depLabel = "ACT"; depIsActual = true;
-      } else if (ect) {
-        depDisplay = ect; depLabel = "ECT"; depIsActual = false;
-      } else {
-        depDisplay = "-"; depLabel = "";
-      }
-      // arr-side for OVR: ALFT (arrActual) or ELFT (arrPlanned)
-      const alft = m.arrActual && String(m.arrActual).trim() ? String(m.arrActual).trim() : null;
-      const elft = m.arrPlanned && String(m.arrPlanned).trim() ? String(m.arrPlanned).trim() : null;
-      if (alft) { arrDisplay = alft; arrLabel = "ALFT"; arrIsActual = true; }
-      else if (elft) { arrDisplay = elft; arrLabel = "ELFT"; arrIsActual = false; }
+
+    // arr-side: all types — label always shown so operator can see/toggle mode
+    {
+      const arrMode = _resolveInlineTimeMode(m.id, 'arr', arrHasActual);
+      const arrField = _inlineTimeFieldForMode(ft, 'arr', arrMode);
+      const rawVal = m[arrField] && String(m[arrField]).trim();
+      arrDisplay = rawVal || "-";
+      arrLabel = _inlineTimeLabelForMode(ft, 'arr', arrMode);
+      arrIsActual = arrMode === 'actual';
     }
 
     // Format date (DD/MM/YYYY)
@@ -2603,8 +2684,16 @@ export function renderLiveBoard() {
         // Apply display toggles
         const depShowTime = depIsActual ? depDisplay : (showEstimated ? depDisplay : '-');
         const arrShowTime = arrIsActual ? arrDisplay : (showEstimated ? arrDisplay : '-');
-        const depLabelHtml = (showLabels && depLabel) ? `<span class="time-label">${depLabel}</span>` : '';
-        const arrLabelHtml = (showLabels && arrLabel) ? `<span class="time-label">${arrLabel}</span>` : '';
+        // dep label: toggleable for DEP/LOC/OVR; inert span for ARR dep-side (no estimate/actual pair)
+        const depLabelHtml = (showLabels && depLabel)
+          ? (ft !== 'ARR'
+              ? `<span class="time-label js-time-label-toggle${depIsActual ? ' mode-actual' : ''}" data-id="${m.id}" data-side="dep" title="Click to toggle ${depIsActual ? 'estimate' : 'actual'} mode">${depLabel}</span>`
+              : `<span class="time-label">${depLabel}</span>`)
+          : '';
+        // arr label: always toggleable (all types have estimate/actual arr pair)
+        const arrLabelHtml = (showLabels && arrLabel)
+          ? `<span class="time-label js-time-label-toggle${arrIsActual ? ' mode-actual' : ''}" data-id="${m.id}" data-side="arr" title="Click to toggle ${arrIsActual ? 'estimate' : 'actual'} mode">${arrLabel}</span>`
+          : '';
         const depClass = depLabel ? (depIsActual ? ' time-actual' : ' time-estimated') : '';
         const arrClass = arrLabel ? (arrIsActual ? ' time-actual' : ' time-estimated') : '';
         const depSpan = `<span class="js-edit-dep-time${depClass}">${depLabelHtml}${escapeHtml(depShowTime)}</span>`;
@@ -2943,8 +3032,8 @@ export function renderLiveBoard() {
         depPlanned:    'ETD – Estimated Time of Departure',
         arrActual:     'ATA – Actual Time of Arrival',
         arrPlanned:    'ETA – Estimated Time of Arrival',
-        ect:           'ECT – Estimated Crossing Time',
-        act:           'ACT – Actual Crossing Time',
+        eoft:          'EOFT – Estimated On-Frequency Time',
+        aoft:          'AOFT – Actual On-Frequency Time',
         elft:          'ELFT – Estimated Last Frequency Time',
         alft:          'ALFT – Actual Last Frequency Time',
       };
@@ -2970,31 +3059,44 @@ export function renderLiveBoard() {
     enableInlineEdit(tr.querySelector(".js-edit-fis"),     m.id, "fisCount", "number", null, _tt.fisCount);
     enableInlineEdit(tr.querySelector(".js-edit-remarks"), m.id, "remarks",  "text",   null, _tt.remarks);
 
-    // Time field mapping depends on flight type
-    // Use canonical field names: depActual/depPlanned/arrActual/arrPlanned
+    // Time field binding: mode-driven — field determined by the per-strip per-side
+    // mode toggle, not inferred from actual-field presence.
     const depTimeEl = tr.querySelector(".js-edit-dep-time");
     const arrTimeEl = tr.querySelector(".js-edit-arr-time");
+
     if (ft === "DEP" || ft === "LOC") {
-      const depField = m.depActual ? "depActual" : "depPlanned";
+      const depField = _inlineTimeFieldForMode(ft, 'dep', _getInlineTimeMode(m.id, 'dep'));
       enableInlineEdit(depTimeEl, m.id, depField, "time", null, _tt[depField]);
     }
     if (ft === "ARR") {
-      // ARR dep-time cell: editable for depActual (ATD from origin).
-      // ETA recalculation (ETA = ATD + Duration) is handled by the generic
-      // recalculateTimingModel path in saveEdit — no separate callback needed.
+      // ARR dep-time cell: always editable for depActual (ATD from origin — no estimate/actual pair).
       enableInlineEdit(depTimeEl, m.id, "depActual", "time", null, _tt.depActual);
     }
     if (ft === "ARR" || ft === "LOC" || ft === "DEP") {
-      const arrField = m.arrActual ? "arrActual" : "arrPlanned";
+      const arrField = _inlineTimeFieldForMode(ft, 'arr', _getInlineTimeMode(m.id, 'arr'));
       enableInlineEdit(arrTimeEl, m.id, arrField, "time", null, _tt[arrField]);
     }
     if (ft === "OVR") {
-      const ovrDepField = m.depActual ? "act" : "ect";
-      enableInlineEdit(depTimeEl, m.id, m.depActual ? "depActual" : "depPlanned", "time", null, _tt[ovrDepField]);
-      // OVR arr-side (ALFT/ELFT): bind to arrActual or arrPlanned
-      const ovrArrField = m.arrActual ? "alft" : "elft";
-      enableInlineEdit(arrTimeEl, m.id, m.arrActual ? "arrActual" : "arrPlanned", "time", null, _tt[ovrArrField]);
+      const ovrDepMode = _getInlineTimeMode(m.id, 'dep');
+      const ovrDepField = _inlineTimeFieldForMode('OVR', 'dep', ovrDepMode);
+      enableInlineEdit(depTimeEl, m.id, ovrDepField, "time", null, _tt[ovrDepMode === 'actual' ? 'aoft' : 'eoft']);
+      const ovrArrMode = _getInlineTimeMode(m.id, 'arr');
+      const ovrArrField = _inlineTimeFieldForMode('OVR', 'arr', ovrArrMode);
+      enableInlineEdit(arrTimeEl, m.id, ovrArrField, "time", null, _tt[ovrArrMode === 'actual' ? 'alft' : 'elft']);
     }
+
+    // Time label toggle: clicking the label (ETD/ATD/ETA/ATA/EOFT/AOFT/ELFT/ALFT)
+    // switches estimate vs actual mode for that side.
+    tr.querySelectorAll('.js-time-label-toggle').forEach(labelEl => {
+      labelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sid = labelEl.dataset.id;
+        const side = labelEl.dataset.side;
+        const currentMode = _getInlineTimeMode(sid, side);
+        _setInlineTimeModeExplicit(sid, side, currentMode === 'estimate' ? 'actual' : 'estimate');
+        renderLiveBoard();
+      });
+    });
 
     // Hover sync with timeline bar
     tr.addEventListener('mouseenter', () => {
