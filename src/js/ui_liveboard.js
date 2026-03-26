@@ -34,7 +34,10 @@ import {
   getDurationSource,
   resolvedStartTime,
   resolvedEndTime,
-  recalculateTimingModel
+  recalculateTimingModel,
+  getCancelledSorties,
+  appendCancelledSortie,
+  ensureCancelledSortiesInitialised
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -6550,32 +6553,118 @@ function transitionToCompleted(id) {
 }
 
 /**
- * Transition a movement to CANCELLED
- * Removes the strip from the Live Board and moves it to History
+ * Reason codes for cancellation (Ticket 6).
+ * Stored as the code; displayed as the label.
+ */
+const CANCELLATION_REASON_CODES = [
+  { code: "",      label: "— no reason —" },
+  { code: "OPS",   label: "OPS — operational / tasking change" },
+  { code: "WX",    label: "WX — weather" },
+  { code: "TECH",  label: "TECH — aircraft technical / engineering" },
+  { code: "ATC",   label: "ATC — ATC / airfield / slot / airspace" },
+  { code: "ADMIN", label: "ADMIN — paperwork / authorisation / admin" },
+  { code: "CREW",  label: "CREW — crew / staffing" },
+  { code: "OTHER", label: "OTHER — other" },
+];
+
+/**
+ * Return display label for a stored reason code.
+ * @param {string} code
+ * @returns {string}
+ */
+function cancellationReasonLabel(code) {
+  if (!code) return '';
+  const entry = CANCELLATION_REASON_CODES.find(r => r.code === code);
+  return entry ? entry.label : code;
+}
+
+/**
+ * Transition a movement to CANCELLED.
+ * Opens a modal to optionally capture a reason code and note,
+ * writes one immutable cancelled-sortie log entry, then applies
+ * the existing cancel behaviour (status → CANCELLED, booking sync).
  */
 function transitionToCancelled(id) {
   const movement = getMovements().find(m => m.id === id);
   if (!movement) return;
 
-  // Show confirmation dialog
   const callsign = movement.callsignCode || 'this flight';
-  if (!confirm(`Cancel ${callsign}? This will remove the strip from the Live Board and mark the flight as cancelled.`)) {
-    return;
-  }
+  const ft = (movement.flightType || '').toUpperCase();
+  const route = [movement.depAd, movement.arrAd].filter(Boolean).join(' → ') || '—';
+  const reg = movement.registration || '—';
 
-  updateMovement(id, {
-    status: "CANCELLED"
+  const optionsHtml = CANCELLATION_REASON_CODES.map(r =>
+    `<option value="${escapeHtml(r.code)}">${escapeHtml(r.label)}</option>`
+  ).join('');
+
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">Cancel Strip — ${escapeHtml(callsign)}</div>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="cancel-sortie-identity">
+        <span class="badge badge-type">${escapeHtml(ft)}</span>
+        <span class="cancel-sortie-callsign">${escapeHtml(callsign)}</span>
+        <span class="cancel-sortie-detail">${escapeHtml(reg)} · ${escapeHtml(route)}</span>
+      </div>
+      <p class="cancel-sortie-warning">This will remove the strip from the Live Board and mark the flight as cancelled.</p>
+      <div class="form-group">
+        <label class="control-label" for="cancelReasonCode">Reason (optional)</label>
+        <select id="cancelReasonCode" class="field field-select">
+          ${optionsHtml}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="control-label" for="cancelReasonNote">Note (optional)</label>
+        <textarea id="cancelReasonNote" class="field field-textarea" rows="2" maxlength="300" placeholder="Free text note…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger js-confirm-cancel" type="button">Confirm Cancel</button>
+      <button class="btn btn-secondary js-close-modal" type="button">Back</button>
+    </div>
+  `);
+
+  const root = byId("modalRoot");
+  const confirmBtn = root && root.querySelector(".js-confirm-cancel");
+
+  safeOn(confirmBtn, "click", () => {
+    const reasonCode = (root.querySelector("#cancelReasonCode") || {}).value || '';
+    const reasonNote = ((root.querySelector("#cancelReasonNote") || {}).value || '').trim();
+
+    // Take immutable snapshot of movement as it exists at cancellation time.
+    const snapshot = JSON.parse(JSON.stringify(movement));
+
+    const logEntry = {
+      id: `cancel_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      sourceMovementId: movement.id,
+      cancelledAt: new Date().toISOString(),
+      cancellationReasonCode: reasonCode,
+      cancellationReasonText: reasonNote,
+      snapshot,
+      bookingSnapshot: movement.bookingId ? { bookingId: movement.bookingId } : null,
+      createdFromVersion: 1,
+    };
+
+    appendCancelledSortie(logEntry);
+
+    // Existing cancel behaviour — unchanged.
+    updateMovement(id, { status: "CANCELLED" });
+    cascadeFormationStatus(id, "CANCELLED");
+    onMovementStatusChanged(movement, 'CANCELLED');
+
+    closeActiveModal();
+
+    showToast(`${callsign} cancelled`, 'info');
+    renderLiveBoard();
+    renderHistoryBoard();
+    renderCancelledSortiesLog();
+    if (window.updateDailyStats) window.updateDailyStats();
   });
-  // Cascade formation elements to CANCELLED
-  cascadeFormationStatus(id, "CANCELLED");
-
-  // Sync booking status
-  onMovementStatusChanged(movement, 'CANCELLED');
-
-  showToast(`${callsign} cancelled`, 'info');
-  renderLiveBoard();
-  renderHistoryBoard();
-  if (window.updateDailyStats) window.updateDailyStats();
 }
 
 /**
@@ -7058,6 +7147,129 @@ export function initHistoryBoard() {
   });
 
   renderHistoryBoard();
+}
+
+/* ----------------------------------------
+   Cancelled Sorties Log viewer
+   Read-only audit panel (Ticket 6)
+---------------------------------------- */
+
+/** Currently expanded cancelled-sortie row id (for snapshot detail toggle) */
+let _cancelLogExpandedId = null;
+
+/**
+ * Render the Cancelled Sorties Log panel.
+ * Inserts rows into #cancelledSortiesBody.
+ */
+export function renderCancelledSortiesLog() {
+  const tbody = byId("cancelledSortiesBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+  const entries = getCancelledSorties();
+
+  // Most-recent first
+  const sorted = entries.slice().sort((a, b) => {
+    const ta = a.cancelledAt || '';
+    const tb = b.cancelledAt || '';
+    return tb.localeCompare(ta);
+  });
+
+  if (sorted.length === 0) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `
+      <td colspan="10" style="padding:8px; font-size:12px; color:#777;">
+        No cancelled sorties in this log.
+      </td>
+    `;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  for (const entry of sorted) {
+    const s = entry.snapshot || {};
+    const ft = (s.flightType || '').toUpperCase();
+    const callsign = escapeHtml(s.callsignCode || '—');
+    const reg = escapeHtml(s.registration || '—');
+    const type = escapeHtml(s.type || '—');
+    const depAd = escapeHtml(s.depAd || '—');
+    const arrAd = escapeHtml(s.arrAd || '—');
+    const statusAtCancel = escapeHtml(s.status || '—');
+    const reasonCode = escapeHtml(entry.cancellationReasonCode || '');
+    const reasonLabel = escapeHtml(cancellationReasonLabel(entry.cancellationReasonCode));
+    const notePreview = escapeHtml((entry.cancellationReasonText || '').slice(0, 60));
+    const cancelledAt = entry.cancelledAt ? escapeHtml(entry.cancelledAt.replace('T', ' ').slice(0, 16)) + 'Z' : '—';
+
+    const isExpanded = _cancelLogExpandedId === entry.id;
+
+    const tr = document.createElement("tr");
+    tr.className = "cancelled-log-row";
+    tr.dataset.id = entry.id;
+
+    tr.innerHTML = `
+      <td><span class="badge badge-type">${escapeHtml(ft)}</span></td>
+      <td style="font-size:11px; white-space:nowrap;">${cancelledAt}</td>
+      <td>${callsign}</td>
+      <td><span style="font-size:12px;">${reg}</span></td>
+      <td><span style="font-size:12px;">${type}</span></td>
+      <td>${depAd}</td>
+      <td>${arrAd}</td>
+      <td><span class="badge badge-cancelled" style="font-size:10px;">${statusAtCancel}</span></td>
+      <td>${reasonCode ? `<span class="badge badge-reason" title="${reasonLabel}">${reasonCode}</span>` : '<span style="color:#999;font-size:11px;">—</span>'}</td>
+      <td style="font-size:11px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${notePreview || '<span style="color:#bbb;">—</span>'}</td>
+      <td><button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle snapshot">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button></td>
+    `;
+
+    const toggleBtn = tr.querySelector(".js-cancel-log-toggle");
+    safeOn(toggleBtn, "click", () => {
+      _cancelLogExpandedId = isExpanded ? null : entry.id;
+      renderCancelledSortiesLog();
+    });
+
+    tbody.appendChild(tr);
+
+    if (isExpanded) {
+      const detailTr = document.createElement("tr");
+      detailTr.className = "cancelled-log-detail-row";
+      const snap = entry.snapshot || {};
+      const note = escapeHtml(entry.cancellationReasonText || '');
+      const bookingId = entry.bookingSnapshot ? escapeHtml(String(entry.bookingSnapshot.bookingId)) : '—';
+
+      detailTr.innerHTML = `
+        <td colspan="11" class="cancelled-log-detail-cell">
+          <div class="cancelled-log-detail">
+            <div class="cancelled-log-detail-section">
+              <strong>Cancellation</strong>
+              <div>Logged at: ${escapeHtml(entry.cancelledAt || '—')}</div>
+              <div>Reason: ${reasonCode ? `${reasonCode} — ${reasonLabel}` : '<em>none</em>'}</div>
+              <div>Note: ${note || '<em>none</em>'}</div>
+              <div>Booking ID at cancel: ${bookingId}</div>
+            </div>
+            <div class="cancelled-log-detail-section">
+              <strong>Strip snapshot</strong>
+              <div>Callsign: ${escapeHtml(snap.callsignCode || '—')} / ${escapeHtml(snap.callsignVoice || '—')}</div>
+              <div>Reg: ${escapeHtml(snap.registration || '—')} · Type: ${escapeHtml(snap.type || '—')} · WTC: ${escapeHtml(snap.wtc || '—')}</div>
+              <div>Route: ${escapeHtml(snap.depAd || '—')} → ${escapeHtml(snap.arrAd || '—')}</div>
+              <div>DOF: ${escapeHtml(snap.dof || '—')} · Rules: ${escapeHtml(snap.rules || '—')}</div>
+              <div>ETD: ${escapeHtml(snap.depPlanned || '—')} · ATD: ${escapeHtml(snap.depActual || '—')} · ETA: ${escapeHtml(snap.arrPlanned || '—')} · ATA: ${escapeHtml(snap.arrActual || '—')}</div>
+              <div>Status at cancel: ${escapeHtml(snap.status || '—')}</div>
+              <div>Remarks: ${escapeHtml(snap.remarks || '—')}</div>
+            </div>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(detailTr);
+    }
+  }
+}
+
+/**
+ * Initialise the Cancelled Sorties Log panel.
+ * Wires the panel heading toggle and initial render.
+ */
+export function initCancelledSortiesLog() {
+  ensureCancelledSortiesInitialised();
+  renderCancelledSortiesLog();
 }
 
 /* -----------------------------

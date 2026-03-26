@@ -11,7 +11,8 @@ import {
   initAdminPanel,
   initTimeline,
   renderTimeline,
-  updateTimelineNowLine
+  updateTimelineNowLine,
+  initCancelledSortiesLog
 } from "./ui_liveboard.js";
 
 import {
@@ -1438,6 +1439,7 @@ async function bootstrap() {
     initTimeline();
     initLiveboardCounters();
     initHistoryBoard();
+    initCancelledSortiesLog();
     initHistoryExport();
     initVkbLookup();
     initAdminPanel();

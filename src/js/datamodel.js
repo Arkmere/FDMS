@@ -1811,3 +1811,72 @@ export function decrementGenericOverflights() {
   setGenericOverflightsCount(newCount);
   return newCount;
 }
+
+/* ----------------------------------------
+   Cancelled Sorties Log
+   Immutable audit trail for cancelled strips
+   (Ticket 6)
+---------------------------------------- */
+
+const CANCELLED_SORTIES_KEY = "vectair_fdms_cancelled_sorties_v1";
+
+/**
+ * Initialise cancelled sorties store if absent or corrupt.
+ * Safe to call on every app load.
+ */
+export function ensureCancelledSortiesInitialised() {
+  try {
+    const raw = localStorage.getItem(CANCELLED_SORTIES_KEY);
+    if (raw === null) {
+      localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn('[FDMS] Cancelled sorties store corrupt — resetting to []');
+      localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+    }
+  } catch (e) {
+    console.warn('[FDMS] Cancelled sorties store repair:', e);
+    localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify([]));
+  }
+}
+
+/**
+ * Get the full cancelled sorties log.
+ * @returns {Array<Object>}
+ */
+export function getCancelledSorties() {
+  ensureCancelledSortiesInitialised();
+  try {
+    const raw = localStorage.getItem(CANCELLED_SORTIES_KEY);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Save the full cancelled sorties list (overwrites).
+ * @param {Array<Object>} list
+ */
+export function saveCancelledSorties(list) {
+  localStorage.setItem(CANCELLED_SORTIES_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+}
+
+/**
+ * Append a single cancelled sortie entry to the log.
+ * Guards against duplicate entries for the same sourceMovementId.
+ * @param {Object} entry
+ */
+export function appendCancelledSortie(entry) {
+  const list = getCancelledSorties();
+  // Guard: do not create a duplicate log entry for the same source movement.
+  if (entry.sourceMovementId !== undefined && entry.sourceMovementId !== null &&
+      list.some(e => e.sourceMovementId === entry.sourceMovementId)) {
+    return;
+  }
+  list.push(entry);
+  saveCancelledSorties(list);
+}

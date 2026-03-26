@@ -505,6 +505,34 @@
               </table>
             </div>
           </div>
+
+          <!-- CANCELLED SORTIES LOG (Ticket 6) -->
+          <div class="panel cancelled-log-panel" id="cancelledSortiesPanel">
+            <div class="panel-header">
+              Cancelled Sorties Log
+              <span style="font-size:11px; font-weight:400; opacity:0.75; margin-left:4px;">— immutable audit trail</span>
+            </div>
+            <div class="table-container">
+              <table id="cancelledSortiesTable">
+                <thead>
+                  <tr>
+                    <th style="width:40px;">Type</th>
+                    <th>Cancelled At (UTC)</th>
+                    <th>Callsign</th>
+                    <th>Reg</th>
+                    <th>A/C Type</th>
+                    <th>Dep</th>
+                    <th>Arr</th>
+                    <th>Status at Cancel</th>
+                    <th>Reason</th>
+                    <th>Note</th>
+                    <th style="width:70px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="cancelledSortiesBody"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- REPORTS -->
