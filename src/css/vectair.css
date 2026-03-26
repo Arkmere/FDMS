@@ -2992,6 +2992,22 @@ tr.strip.ft-ovr > td {
   user-select: none;
 }
 
+/* Toggleable time mode label — estimate ↔ actual selector */
+.time-label.js-time-label-toggle {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: opacity 0.1s, background 0.1s;
+}
+.time-label.js-time-label-toggle:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+/* Active (actual) mode: slightly brighter so the operator can see the current mode */
+.time-label.js-time-label-toggle.mode-actual {
+  opacity: 0.85;
+}
+
 /* Actual times: normal weight, slightly warmer */
 .time-actual {
   color: var(--va-text-main);

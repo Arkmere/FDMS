@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-24 (Europe/London) — Latest completed sprint: Ticket 4a (post-10.1) — Complete rounding alignment + WTC exact-time display polish
+Last updated: 2026-03-26 (Europe/London) — Latest completed sprint: Ticket 5 (post-10.1) — Inline time mode toggle (estimate ↔ actual label selector)
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -873,15 +873,159 @@ Error message: "EGOW Unit code is required for BM flights". Non-BM codes pass th
 
 ---
 
+### 8.26 Ticket 5 (post-10.1) — Inline time mode toggle: estimate ↔ actual label selector
+
+**Outcome:** complete
+
+**Summary:**
+
+Replaced the implicit "if actual exists bind to actual; else bind to planned" inline edit routing with an explicit operator-controlled mode toggle. Each inline time slot now has two modes — estimate and actual — and the displayed label is the clickable selector between them.
+
+**Root cause of prior bug:**
+
+The old binding used `m.depActual ? "depActual" : "depPlanned"` (and equivalent for arr-side). When the operator entered a time in the inline field it was silently routed to planned when no actual existed yet — even if the operator intended to record an actual. Then pressing Complete would stamp a fresh system time because `arrActual` (the completion field) was blank. This made manually-entered completion times disappear.
+
+---
+
+**A. Mode state added to `ui_liveboard.js`**
+
+Two module-level collections introduced:
+
+- `_inlineTimeModeMap` (`Map<string, 'estimate'|'actual'>`) — key `"${movementId}:dep"` or `"${movementId}:arr"`
+- `_inlineTimeModeExplicit` (`Set<string>`) — tracks keys where the operator explicitly toggled (vs auto-defaulted)
+
+Three helpers:
+- `_resolveInlineTimeMode(movementId, side, hasActual)` — if operator toggled, preserves their choice; otherwise auto-derives from actual-field presence (actual mode when actual exists, estimate otherwise). Called once per strip per render to set the mode.
+- `_getInlineTimeMode(movementId, side)` — read current mode without re-deriving
+- `_setInlineTimeModeExplicit(movementId, side, mode)` — used by click handler; marks the entry as explicitly set
+
+Two pure mapping helpers:
+- `_inlineTimeFieldForMode(ft, side, mode)` — returns the data-model field name; encodes the full ownership table:
+  - DEP/LOC dep-side: estimate→depPlanned, actual→depActual
+  - DEP/LOC/ARR arr-side: estimate→arrPlanned, actual→arrActual
+  - ARR dep-side: always depActual (no estimate/actual pair — ATD from origin)
+  - OVR dep-side (EOFT/AOFT): estimate→depPlanned, actual→depActual
+  - OVR arr-side (ELFT/ALFT): estimate→arrPlanned, actual→arrActual
+- `_inlineTimeLabelForMode(ft, side, mode)` — returns the display label string (ETD/ATD, ETA/ATA, EOFT/AOFT, ELFT/ALFT, ATD for ARR dep-side)
+
+**B. `renderLiveBoard()` — time display logic replaced**
+
+Old code: multiple `if (actual) ... else if (estimate) ...` blocks for each type.
+
+New code: single pass using `_resolveInlineTimeMode` and `_inlineTimeFieldForMode`:
+- dep-side (DEP/LOC/OVR): resolve mode → fetch field → read value from movement → set label via `_inlineTimeLabelForMode`
+- ARR dep-side: unchanged display logic (always depActual when present, else blank)
+- arr-side (all types): same pattern — always shows label (so operator can see mode even when field is blank)
+
+Labels are always rendered when the side is applicable (even when value is blank/dash) so the operator can see the current mode and toggle it.
+
+**C. `renderLiveBoard()` — label HTML changed to toggleable spans**
+
+`depLabelHtml` and `arrLabelHtml` now emit `<span class="time-label js-time-label-toggle [mode-actual]" data-id="..." data-side="...">` for togglable sides. ARR dep-side remains an inert `<span class="time-label">` (no toggle).
+
+Label title attribute shows toggle hint: "Click to toggle estimate/actual mode".
+
+**D. Click handler wired after row build**
+
+After the inline-edit bindings block, `tr.querySelectorAll('.js-time-label-toggle')` attaches a click listener to each toggleable label:
+- reads current mode via `_getInlineTimeMode`
+- flips it via `_setInlineTimeModeExplicit` (marks as explicitly set)
+- calls `renderLiveBoard()` to re-render with updated label and re-bound inline edits
+
+**E. Inline edit binding replaced with mode-aware logic**
+
+Old inferred bindings like `m.depActual ? "depActual" : "depPlanned"` replaced with explicit calls to `_inlineTimeFieldForMode(ft, side, _getInlineTimeMode(m.id, side))`.
+
+All four blocks (DEP/LOC dep-side, ARR dep-side, DEP/ARR/LOC arr-side, OVR both sides) now read from the mode map rather than inferring from field presence.
+
+**F. `_buildTabOrder` updated**
+
+The `fieldName` lambdas for dep-time and arr-time slots now call `_inlineTimeFieldForMode` with `_getInlineTimeMode` — the same resolution as the binding block. Tab-order navigation advances to the correct estimate or actual field per the current mode.
+
+**G. OVR label terminology updated**
+
+OVR dep-side (previously "ECT" / "ACT") now uses "EOFT" / "AOFT" (Estimated/Actual On-Frequency Time) as specified. The `_tt` (tooltip) object updated:
+- `ect: 'ECT – Estimated Crossing Time'` → `eoft: 'EOFT – Estimated On-Frequency Time'`
+- `act: 'ACT – Actual Crossing Time'` → `aoft: 'AOFT – Actual On-Frequency Time'`
+
+ELFT/ALFT keys unchanged.
+
+**H. CSS — `vectair.css`**
+
+New rules added immediately after `.time-label`:
+- `.time-label.js-time-label-toggle` — `cursor: pointer`, `border-radius: 2px`, `transition` for smooth hover
+- `.time-label.js-time-label-toggle:hover` — `opacity: 1`, `text-decoration: underline dotted`
+- `.time-label.js-time-label-toggle.mode-actual` — `opacity: 0.85` (slightly brighter when in actual mode)
+
+**Files changed:**
+
+1. `src/js/ui_liveboard.js` — mode state map + helpers; `_buildTabOrder` fieldName lambdas; `renderLiveBoard()` time display logic; label HTML generation; inline edit binding; label click handlers; `_tt` OVR keys updated
+2. `src/css/vectair.css` — toggleable label styles added after `.time-label` block
+
+**NO-DRIFT confirmations:**
+
+- Complete stamps `arrActual` only when absent — unchanged (Ticket 2 / 2b `completionActualIsAbsent` logic intact)
+- Active guards existing ATD — unchanged (Ticket 2 guard intact)
+- ARR does not fabricate ATD — unchanged
+- Ticket 4 / 4a Active/Complete rounding — unchanged
+- WTC exact-time display — unchanged
+- OVR blank-EOFT create-as-active path — unchanged (goes through `transitionToActive` which sets `depActual`; on next render mode auto-resolves to `actual` since `depActual` now exists)
+- Timeline rendering — unchanged
+- Booking reconciliation — unchanged
+- Counters / reporting — unchanged
+- Formation behavior — unchanged
+- `depActualExact` field and migration — unchanged
+
+**Mode persistence model:**
+
+Mode is UI session state only — not stored in the movement record. On each render:
+1. If the operator explicitly toggled a side this session → their choice is preserved
+2. If no explicit toggle → mode auto-derives from actual-field presence (actual mode when actual exists)
+
+This means: after Active stamps ATD, the dep-side label auto-updates to ATD on re-render without the operator having to manually toggle. After Complete stamps ATA, the arr-side label auto-updates to ATA. Operator toggles survive re-renders (until session reload).
+
+**Manual verification checklist for Stuart:**
+
+LOC:
+1. Blank LOC strip: arr-side label shows "ETA"; double-click → edits arrPlanned; ETA present on strip
+2. Click "ETA" label → label switches to "ATA"; double-click → now edits arrActual
+3. Enter ATA inline, press Complete → ATA preserved (not overwritten by system time)
+4. Toggle back to ETA → shows arrPlanned value; toggle to ATA → shows arrActual value
+
+ARR:
+1. ARR arr-side label shows "ETA" initially; double-click → edits arrPlanned
+2. Click "ETA" → switches to "ATA"; double-click → edits arrActual
+3. Enter ATA inline in actual mode, press Complete → ATA preserved
+4. ARR dep-side shows ATD (inert, no toggle) when origin depActual is populated
+
+OVR:
+1. EOFT label shown for start-side (estimate mode); double-click → edits depPlanned
+2. Click "EOFT" → switches to "AOFT"; double-click → edits depActual
+3. ELFT label shown for end-side (estimate mode); double-click → edits arrPlanned
+4. Click "ELFT" → switches to "ALFT"; double-click → edits arrActual
+5. Enter ALFT inline, press Complete → ALFT preserved
+
+DEP/LOC dep-side:
+1. ETD shown initially; click → ATD; double-click in ATD mode → edits depActual
+2. After Active is pressed: dep-side auto-shows ATD label (mode auto-resolves to actual since depActual now exists)
+
+Regression:
+1. Active rounding still works
+2. Complete rounding still works when actual is blank
+3. WTC exact-time still renders correctly
+4. OVR blank-EOFT create-as-active still works (after Active stamps depActual, mode auto-updates to AOFT)
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-24:
+As of 2026-03-26:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, and Ticket 4a are all landed
-* Ticket 4a (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, and Ticket 5 are all landed
+* Ticket 5 (post-10.1) is the latest completed work
 
 ---
 
@@ -1309,6 +1453,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Ticket 2b (post-10.1) features are landed: `completionActualField()` and `completionActualIsAbsent()` helpers added to `ui_liveboard.js`; `transitionToCompleted()` refactored to use them making the "stamp only when absent, preserve all actuals" rule explicit; ARR/DEP Timeline Admin panel user-facing wording changed from "Token display time" to "Fixed display time" throughout `index.html`; `syncTimelineUi()` comments updated in `app.js`; internal IDs and config key strings left unchanged for stability
 * Ticket 4 (post-10.1) features are landed: Active-button minute rounding applied to DEP/LOC/OVR (`roundActiveStampToMinute` helper, 00–29 sec round down, 30–59 sec round up); exact WTC anchor retained in `depActualExact` (HH:MM:SS) alongside rounded operational `depActual`; WTC exact-time displayed on-strip when WTC alert threshold is met and exact time is available; `depActualExact` initialized to `''` in `ensureInitialised()` migration for backward compatibility; ARR Active remains status-only with no ATD fabrication
 * Ticket 4a (post-10.1) features are landed: `transitionToCompleted()` now uses `roundActiveStampToMinute` so Complete auto-stamps obey the same nearest-minute rule as Active; WTC exact-time moved from inline sub-element to own third-line block `<div class="wtc-exact-time">` below the WTC category line — displays just the time with no label; `.wtc-exact-time` CSS updated (11px, weight 500, full opacity, block layout)
+* Ticket 5 (post-10.1) features are landed: inline time labels (ETD/ATD/ETA/ATA/EOFT/AOFT/ELFT/ALFT) are now clickable mode selectors; clicking toggles between estimate and actual for that side; inline edit writes to the explicitly selected field — no inference from actual-field presence; mode is UI session state (auto-derives from actual presence by default, preserved across re-renders when explicitly toggled); `_inlineTimeModeMap`, `_inlineTimeModeExplicit`, `_resolveInlineTimeMode`, `_getInlineTimeMode`, `_setInlineTimeModeExplicit`, `_inlineTimeFieldForMode`, `_inlineTimeLabelForMode` added to `ui_liveboard.js`; OVR dep-side labels changed from ECT/ACT to EOFT/AOFT; label toggle CSS affordance added to `vectair.css`
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
