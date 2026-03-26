@@ -681,7 +681,55 @@ tr.strip.ft-ovr > td {
 }
 
 /* -------------------------------------------------------
-   Cancelled Sorties Log panel (Ticket 6)
+   History subtab navigation (Ticket 6a)
+------------------------------------------------------- */
+.history-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-subtab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--va-border-dark, #ccc);
+  padding: 0 4px;
+  margin-bottom: 0;
+  background: var(--va-panel-bg, #f7f7f7);
+  flex-shrink: 0;
+}
+
+.history-subtab-btn {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  color: #555;
+  transition: color 0.15s, border-bottom-color 0.15s;
+  white-space: nowrap;
+}
+
+.history-subtab-btn:hover:not(.active) {
+  color: #222;
+  background: rgba(0,0,0,0.04);
+}
+
+.history-subtab-btn.active {
+  color: var(--va-accent-brown, #6d4c30);
+  border-bottom-color: var(--va-accent-brown, #6d4c30);
+  font-weight: 600;
+}
+
+.history-subpage {
+  padding-top: 4px;
+}
+
+/* -------------------------------------------------------
+   Cancelled Sorties Log panel (Ticket 6 / 6a)
 ------------------------------------------------------- */
 .cancelled-log-panel {
   margin-top: 16px;

@@ -6922,10 +6922,8 @@ export function renderHistoryBoard() {
   }
   // "all" means no filter
 
-  // Get completed and cancelled movements
-  let movements = getMovements().filter(m =>
-    m.status === "COMPLETED" || m.status === "CANCELLED"
-  );
+  // Get completed movements only (Ticket 6a: CANCELLED moved to dedicated Cancelled Sorties subpage)
+  let movements = getMovements().filter(m => m.status === "COMPLETED");
 
   // Apply time period filter
   if (cutoffTime) {
@@ -6973,7 +6971,7 @@ export function renderHistoryBoard() {
     const empty = document.createElement("tr");
     empty.innerHTML = `
       <td colspan="8" style="padding:8px; font-size:12px; color:#777;">
-        No completed or cancelled movements in this session.
+        No completed movements in this period.
       </td>
     `;
     tbody.appendChild(empty);
@@ -7150,15 +7148,51 @@ export function initHistoryBoard() {
 }
 
 /* ----------------------------------------
-   Cancelled Sorties Log viewer
-   Read-only audit panel (Ticket 6)
+   Cancelled Sorties Log viewer (Ticket 6 / 6a)
+   Dedicated subpage: sort, filter, export
 ---------------------------------------- */
 
 /** Currently expanded cancelled-sortie row id (for snapshot detail toggle) */
 let _cancelLogExpandedId = null;
 
+/** Active sort column for cancelled sorties table */
+let _cancelLogSortColumn = 'cancelledAt';
+/** Active sort direction for cancelled sorties table */
+let _cancelLogSortDirection = 'desc';
+/** Active text filter for cancelled sorties table */
+let _cancelLogFilter = '';
+
 /**
- * Render the Cancelled Sorties Log panel.
+ * Sort a cancelled sorties entries array by the given column.
+ * @param {Array} entries
+ * @param {string} col
+ * @param {'asc'|'desc'} dir
+ * @returns {Array}
+ */
+function sortCancelledSorties(entries, col, dir) {
+  return entries.slice().sort((a, b) => {
+    const sa = a.snapshot || {};
+    const sb = b.snapshot || {};
+    let va = '', vb = '';
+    switch (col) {
+      case 'cancelledAt': va = a.cancelledAt || ''; vb = b.cancelledAt || ''; break;
+      case 'callsign':    va = (sa.callsignCode || '').toLowerCase(); vb = (sb.callsignCode || '').toLowerCase(); break;
+      case 'flightType':  va = (sa.flightType || '').toUpperCase(); vb = (sb.flightType || '').toUpperCase(); break;
+      case 'reg':         va = (sa.registration || '').toLowerCase(); vb = (sb.registration || '').toLowerCase(); break;
+      case 'type':        va = (sa.type || '').toLowerCase(); vb = (sb.type || '').toLowerCase(); break;
+      case 'depAd':       va = (sa.depAd || '').toLowerCase(); vb = (sb.depAd || '').toLowerCase(); break;
+      case 'arrAd':       va = (sa.arrAd || '').toLowerCase(); vb = (sb.arrAd || '').toLowerCase(); break;
+      case 'reason':      va = (a.cancellationReasonCode || '').toLowerCase(); vb = (b.cancellationReasonCode || '').toLowerCase(); break;
+      default:            va = a.cancelledAt || ''; vb = b.cancelledAt || '';
+    }
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+/**
+ * Render the Cancelled Sorties Log table.
+ * Applies current sort column, direction, and text filter.
  * Inserts rows into #cancelledSortiesBody.
  */
 export function renderCancelledSortiesLog() {
@@ -7166,20 +7200,46 @@ export function renderCancelledSortiesLog() {
   if (!tbody) return;
 
   tbody.innerHTML = "";
-  const entries = getCancelledSorties();
 
-  // Most-recent first
-  const sorted = entries.slice().sort((a, b) => {
-    const ta = a.cancelledAt || '';
-    const tb = b.cancelledAt || '';
-    return tb.localeCompare(ta);
-  });
+  let entries = getCancelledSorties();
+
+  // Apply text filter
+  const filterTerm = _cancelLogFilter.trim().toLowerCase();
+  if (filterTerm) {
+    entries = entries.filter(e => {
+      const s = e.snapshot || {};
+      return (
+        (s.callsignCode || '').toLowerCase().includes(filterTerm) ||
+        (s.registration || '').toLowerCase().includes(filterTerm) ||
+        (s.type || '').toLowerCase().includes(filterTerm) ||
+        (s.depAd || '').toLowerCase().includes(filterTerm) ||
+        (s.arrAd || '').toLowerCase().includes(filterTerm) ||
+        (e.cancellationReasonCode || '').toLowerCase().includes(filterTerm) ||
+        cancellationReasonLabel(e.cancellationReasonCode).toLowerCase().includes(filterTerm) ||
+        (e.cancellationReasonText || '').toLowerCase().includes(filterTerm)
+      );
+    });
+  }
+
+  // Apply sort
+  const sorted = sortCancelledSorties(entries, _cancelLogSortColumn, _cancelLogSortDirection);
+
+  // Update sort indicators on thead
+  const table = byId("cancelledSortiesTable");
+  if (table) {
+    table.querySelectorAll("thead th[data-sort]").forEach(th => {
+      th.textContent = th.textContent.replace(/ ▲| ▼/g, '');
+      if (th.dataset.sort === _cancelLogSortColumn) {
+        th.textContent += _cancelLogSortDirection === 'asc' ? ' ▲' : ' ▼';
+      }
+    });
+  }
 
   if (sorted.length === 0) {
     const empty = document.createElement("tr");
     empty.innerHTML = `
-      <td colspan="10" style="padding:8px; font-size:12px; color:#777;">
-        No cancelled sorties in this log.
+      <td colspan="11" style="padding:8px; font-size:12px; color:#777;">
+        ${filterTerm ? 'No cancelled sorties match this filter.' : 'No cancelled sorties in this log.'}
       </td>
     `;
     tbody.appendChild(empty);
@@ -7216,7 +7276,7 @@ export function renderCancelledSortiesLog() {
       <td>${arrAd}</td>
       <td><span class="badge badge-cancelled" style="font-size:10px;">${statusAtCancel}</span></td>
       <td>${reasonCode ? `<span class="badge badge-reason" title="${reasonLabel}">${reasonCode}</span>` : '<span style="color:#999;font-size:11px;">—</span>'}</td>
-      <td style="font-size:11px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${notePreview || '<span style="color:#bbb;">—</span>'}</td>
+      <td style="font-size:11px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(entry.cancellationReasonText || '')}">${notePreview || '<span style="color:#bbb;">—</span>'}</td>
       <td><button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle snapshot">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button></td>
     `;
 
@@ -7264,11 +7324,140 @@ export function renderCancelledSortiesLog() {
 }
 
 /**
- * Initialise the Cancelled Sorties Log panel.
- * Wires the panel heading toggle and initial render.
+ * Export the cancelled sorties log to CSV.
+ * Includes full audit fields plus a practical snapshot subset.
+ */
+function exportCancelledSortiesCSV() {
+  const entries = getCancelledSorties();
+
+  if (entries.length === 0) {
+    showToast("No cancelled sorties to export", 'warning');
+    return;
+  }
+
+  const escapeCSV = (value) => {
+    const str = String(value ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const headers = [
+    "Log ID",
+    "Source Movement ID",
+    "Cancelled At (UTC)",
+    "Reason Code",
+    "Reason Text",
+    "Booking ID at Cancel",
+    "Flight Type",
+    "Callsign",
+    "Registration",
+    "A/C Type",
+    "WTC",
+    "Dep AD",
+    "Arr AD",
+    "DOF",
+    "Rules",
+    "ETD",
+    "ATD",
+    "ETA",
+    "ATA",
+    "Status at Cancel",
+    "EGOW Code",
+    "Unit Code",
+    "POB",
+    "Remarks"
+  ];
+
+  const rows = entries.map(e => {
+    const s = e.snapshot || {};
+    return [
+      e.id || '',
+      e.sourceMovementId ?? '',
+      e.cancelledAt || '',
+      e.cancellationReasonCode || '',
+      e.cancellationReasonText || '',
+      e.bookingSnapshot ? (e.bookingSnapshot.bookingId ?? '') : '',
+      s.flightType || '',
+      s.callsignCode || '',
+      s.registration || '',
+      s.type || '',
+      s.wtc || '',
+      s.depAd || '',
+      s.arrAd || '',
+      s.dof || '',
+      s.rules || '',
+      s.depPlanned || '',
+      s.depActual || '',
+      s.arrPlanned || '',
+      s.arrActual || '',
+      s.status || '',
+      s.egowCode || '',
+      s.unitCode || '',
+      s.pob ?? '',
+      s.remarks || ''
+    ];
+  });
+
+  const csv = [
+    headers.join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fdms-cancelled-sorties-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  showToast(`Exported ${entries.length} cancelled sorties to CSV`, 'success');
+}
+
+/**
+ * Initialise the Cancelled Sorties Log page.
+ * Wires sort headers, text filter, and export button.
+ * Called from app.js boot sequence.
  */
 export function initCancelledSortiesLog() {
   ensureCancelledSortiesInitialised();
+
+  // Wire sort headers
+  const table = byId("cancelledSortiesTable");
+  if (table) {
+    table.querySelectorAll("thead th[data-sort]").forEach(th => {
+      th.style.cursor = "pointer";
+      th.addEventListener("click", () => {
+        const col = th.dataset.sort;
+        if (_cancelLogSortColumn === col) {
+          _cancelLogSortDirection = _cancelLogSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          _cancelLogSortColumn = col;
+          _cancelLogSortDirection = col === 'cancelledAt' ? 'desc' : 'asc';
+        }
+        renderCancelledSortiesLog();
+      });
+    });
+  }
+
+  // Wire text filter input
+  const filterInput = byId("cancelledSortiesFilter");
+  if (filterInput) {
+    filterInput.addEventListener("input", () => {
+      _cancelLogFilter = filterInput.value;
+      _cancelLogExpandedId = null; // collapse any open row on filter change
+      renderCancelledSortiesLog();
+    });
+  }
+
+  // Wire export button
+  const exportBtn = byId("btnExportCancelledCsv");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportCancelledSortiesCSV);
+  }
+
   renderCancelledSortiesLog();
 }
 
@@ -7818,12 +8007,12 @@ export function renderReportsSummary() {
  * Includes all relevant fields
  */
 function exportHistoryCSV() {
-  const movements = getMovements().filter(m =>
-    m.status === "COMPLETED" || m.status === "CANCELLED"
-  );
+  // Ticket 6a: Movement History exports COMPLETED only.
+  // Cancelled sorties are exported separately from the Cancelled Sorties page.
+  const movements = getMovements().filter(m => m.status === "COMPLETED");
 
   if (movements.length === 0) {
-    showToast("No history movements to export", 'warning');
+    showToast("No completed movements to export", 'warning');
     return;
   }
 
@@ -7899,11 +8088,11 @@ function exportHistoryCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `fdms-history-${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `fdms-movement-history-${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 
-  showToast(`Exported ${movements.length} movements to CSV`, 'success');
+  showToast(`Exported ${movements.length} completed movements to CSV`, 'success');
 }
 
 /**

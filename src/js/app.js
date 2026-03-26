@@ -528,6 +528,27 @@ function adminConfirm(message, onConfirm, detailsHtml = '', confirmEnabled = tru
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(); });
 }
 
+/**
+ * Initialise History subtab switching (Ticket 6a).
+ * Two subpages: Movement History (default) and Cancelled Sorties.
+ */
+function initHistorySubtabs() {
+  const bar = document.getElementById('historySubtabBar');
+  if (!bar) return;
+
+  const btns = bar.querySelectorAll('.history-subtab-btn');
+  const subpages = document.querySelectorAll('.history-subpage');
+
+  function showSubpage(subpageId) {
+    btns.forEach(b => b.classList.toggle('active', b.dataset.subpage === subpageId));
+    subpages.forEach(p => p.classList.toggle('hidden', p.id !== subpageId));
+  }
+
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => showSubpage(btn.dataset.subpage));
+  });
+}
+
 function initAdminPanelHandlers() {
   // ── Section navigation ─────────────────────────────────────────
   const navBtns = document.querySelectorAll('.admin-nav-btn');
@@ -1441,6 +1462,7 @@ async function bootstrap() {
     initHistoryBoard();
     initCancelledSortiesLog();
     initHistoryExport();
+    initHistorySubtabs();
     initVkbLookup();
     initAdminPanel();
     initAdminPanelHandlers();

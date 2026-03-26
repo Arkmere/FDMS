@@ -469,70 +469,93 @@
 
         <!-- HISTORY -->
         <section id="tab-history" class="tab-panel hidden">
-          <div class="page-title">History</div>
-          <div class="page-subtitle">Completed and cancelled movements (session).</div>
+          <div class="history-shell">
 
-          <div class="panel">
-            <div class="history-actions">
-              <label class="control-label">Time Period:</label>
-              <select id="historyTimePeriod" class="control-select">
-                <option value="today">Today</option>
-                <option value="24h" selected>Last 24 Hours</option>
-                <option value="48h">Last 48 Hours</option>
-                <option value="7d">Last 7 Days</option>
-                <option value="all">All Time</option>
-              </select>
-              <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
-                Export History as CSV
-              </button>
-            </div>
+            <!-- Subtab navigation -->
+            <nav class="history-subtab-bar" id="historySubtabBar">
+              <button class="history-subtab-btn active" data-subpage="hist-subpage-movements">Movement History</button>
+              <button class="history-subtab-btn" data-subpage="hist-subpage-cancelled">Cancelled Sorties</button>
+            </nav>
 
-            <div class="table-container">
-              <table id="historyTable">
-                <thead>
-                  <tr>
-                    <th style="width: 14px"></th>
-                    <th data-sort="callsign">Callsign</th>
-                    <th data-sort="regtype">Reg / Type / WTC</th>
-                    <th data-sort="route">Route</th>
-                    <th data-sort="time">Times</th>
-                    <th data-sort="activity">Activity</th>
-                    <th data-sort="status">Status</th>
-                    <th style="width: 80px;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="historyBody"></tbody>
-              </table>
-            </div>
-          </div>
+            <!-- Subpage: Movement History -->
+            <div class="history-subpage" id="hist-subpage-movements">
+              <div class="page-title">Movement History</div>
+              <div class="page-subtitle">Completed movements.</div>
 
-          <!-- CANCELLED SORTIES LOG (Ticket 6) -->
-          <div class="panel cancelled-log-panel" id="cancelledSortiesPanel">
-            <div class="panel-header">
-              Cancelled Sorties Log
-              <span style="font-size:11px; font-weight:400; opacity:0.75; margin-left:4px;">— immutable audit trail</span>
-            </div>
-            <div class="table-container">
-              <table id="cancelledSortiesTable">
-                <thead>
-                  <tr>
-                    <th style="width:40px;">Type</th>
-                    <th>Cancelled At (UTC)</th>
-                    <th>Callsign</th>
-                    <th>Reg</th>
-                    <th>A/C Type</th>
-                    <th>Dep</th>
-                    <th>Arr</th>
-                    <th>Status at Cancel</th>
-                    <th>Reason</th>
-                    <th>Note</th>
-                    <th style="width:70px;"></th>
-                  </tr>
-                </thead>
-                <tbody id="cancelledSortiesBody"></tbody>
-              </table>
-            </div>
-          </div>
+              <div class="panel">
+                <div class="history-actions">
+                  <label class="control-label">Time Period:</label>
+                  <select id="historyTimePeriod" class="control-select">
+                    <option value="today">Today</option>
+                    <option value="24h" selected>Last 24 Hours</option>
+                    <option value="48h">Last 48 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="all">All Time</option>
+                  </select>
+                  <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
+                    Export as CSV
+                  </button>
+                </div>
+
+                <div class="table-container">
+                  <table id="historyTable">
+                    <thead>
+                      <tr>
+                        <th style="width: 14px"></th>
+                        <th data-sort="callsign">Callsign</th>
+                        <th data-sort="regtype">Reg / Type / WTC</th>
+                        <th data-sort="route">Route</th>
+                        <th data-sort="time">Times</th>
+                        <th data-sort="activity">Activity</th>
+                        <th data-sort="status">Status</th>
+                        <th style="width: 80px;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div><!-- /hist-subpage-movements -->
+
+            <!-- Subpage: Cancelled Sorties -->
+            <div class="history-subpage hidden" id="hist-subpage-cancelled">
+              <div class="page-title">Cancelled Sorties</div>
+              <div class="page-subtitle">Immutable audit log of cancelled strips.</div>
+
+              <div class="panel">
+                <div class="history-actions">
+                  <label class="control-label">Filter:</label>
+                  <input type="text" id="cancelledSortiesFilter" class="control-input"
+                    placeholder="Callsign, reg, type, reason…" style="width:200px;" autocomplete="off" />
+                  <button class="btn btn-secondary" id="btnExportCancelledCsv" type="button">
+                    Export as CSV
+                  </button>
+                </div>
+
+                <div class="table-container">
+                  <table id="cancelledSortiesTable">
+                    <thead>
+                      <tr>
+                        <th style="width:40px;" data-sort="flightType">Type</th>
+                        <th data-sort="cancelledAt">Cancelled At (UTC)</th>
+                        <th data-sort="callsign">Callsign</th>
+                        <th data-sort="reg">Reg</th>
+                        <th data-sort="type">A/C Type</th>
+                        <th data-sort="depAd">Dep</th>
+                        <th data-sort="arrAd">Arr</th>
+                        <th>Status at Cancel</th>
+                        <th data-sort="reason">Reason</th>
+                        <th>Note</th>
+                        <th style="width:70px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="cancelledSortiesBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div><!-- /hist-subpage-cancelled -->
+
+          </div><!-- /history-shell -->
         </section>
 
         <!-- REPORTS -->

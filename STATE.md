@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-26 (Europe/London) — Latest completed sprint: Ticket 6 (post-10.1) — Cancelled sorties log + optional cancellation reason
+Last updated: 2026-03-26 (Europe/London) — Latest completed sprint: Ticket 6a (post-10.1) — Cancelled Sorties Log UX / History IA refinement
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1196,6 +1196,92 @@ Cancelled Sorties Log panel:
 
 ---
 
+### 8.28 Ticket 6a (post-10.1) — Cancelled Sorties Log UX / History IA refinement
+
+**Outcome:** complete
+
+**Summary:**
+
+Refactored the History tab into two distinct subpages — Movement History and Cancelled Sorties — using a horizontal subtab bar. Movement History now shows only COMPLETED movements. Cancelled Sorties is a dedicated destination that shows the Ticket 6 audit log with sort, filter, and export. The Ticket 6 inline panel is replaced by the dedicated subpage.
+
+---
+
+**A. History tab IA restructure — `src/index.html`**
+
+`#tab-history` now wraps a `<div class="history-shell">` with:
+
+1. `<nav class="history-subtab-bar" id="historySubtabBar">` — two buttons:
+   - `hist-subpage-movements` (default active)
+   - `hist-subpage-cancelled`
+
+2. `<div class="history-subpage" id="hist-subpage-movements">` — contains existing history toolbar and `#historyTable` / `#historyBody`
+
+3. `<div class="history-subpage hidden" id="hist-subpage-cancelled">` — contains text filter input (`#cancelledSortiesFilter`), Export button (`#btnExportCancelledCsv`), and `#cancelledSortiesTable` / `#cancelledSortiesBody` with `data-sort` headers
+
+The Ticket 6 inline panel (`#cancelledSortiesPanel`) is removed from HTML.
+
+---
+
+**B. Movement History — COMPLETED-only (`ui_liveboard.js`)**
+
+`renderHistoryBoard()` filter: `COMPLETED || CANCELLED` → `COMPLETED` only.
+
+`exportHistoryCSV()`: filter also `COMPLETED` only; filename `fdms-movement-history-*.csv`; updated toast and empty message.
+
+---
+
+**C. Cancelled Sorties page — sort, filter, export (`ui_liveboard.js`)**
+
+Module-level state: `_cancelLogSortColumn` (default `cancelledAt`), `_cancelLogSortDirection` (default `desc`), `_cancelLogFilter` (default `''`).
+
+`sortCancelledSorties(entries, col, dir)` — string sort on: `cancelledAt`, `callsign`, `flightType`, `reg`, `type`, `depAd`, `arrAd`, `reason`.
+
+`renderCancelledSortiesLog()` extended: applies text filter (OR search across callsign/reg/type/dep/arr/reasonCode/reasonLabel/note); applies sort; updates `▲`/`▼` thead indicators; contextual empty message; note cell `title` attribute for full text on hover.
+
+`exportCancelledSortiesCSV()`: 24-column CSV (full log, not filtered — auditability); filename `fdms-cancelled-sorties-*.csv`.
+
+`initCancelledSortiesLog()` extended: wires sort headers, filter input, export button.
+
+---
+
+**D. Subtab switching — `src/js/app.js`**
+
+`initHistorySubtabs()`: queries `.history-subtab-btn` / `.history-subpage`; toggles `.active` / `.hidden` on click. Default state from HTML attributes. Called after `initHistoryExport()` in boot sequence.
+
+---
+
+**E. CSS — `src/css/vectair.css`**
+
+`.history-shell`, `.history-subtab-bar`, `.history-subtab-btn`, `.history-subtab-btn.active`, `.history-subtab-btn:hover`, `.history-subpage` added. Uses accent-brown color to match admin nav active state.
+
+---
+
+**Files changed:**
+
+1. `src/index.html` — History tab restructured; Ticket 6 inline panel removed; `data-sort` attrs on Cancelled Sorties thead
+2. `src/js/ui_liveboard.js` — COMPLETED-only filter/export in history; sort/filter/export for cancelled sorties log
+3. `src/js/app.js` — `initHistorySubtabs()` added and called
+4. `src/css/vectair.css` — history subtab bar styles
+
+**NO-DRIFT confirmations:**
+
+- Ticket 6 audit log semantics unchanged (immutable snapshot, duplicate guard, one entry per movement)
+- `transitionToCancelled`, `appendCancelledSortie`, `getCancelledSorties`, `saveCancelledSorties` unchanged
+- Live Board daily stats unchanged
+- Monthly Return / Dashboard / Insights unchanged
+- Hard delete writes no cancelled-log entry — unchanged
+- Booking reconciliation unchanged
+- ARR no-ATD fabrication unchanged
+- Inline time mode / Active / Complete / timing cluster unchanged
+
+**Deferred / out of scope:**
+
+- Date/time-period filter on Cancelled Sorties (text filter only in this ticket)
+- Cancellation analytics / reason breakdown — not in v1 scope
+- Undo/restore from cancelled log — not implemented
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -1203,8 +1289,8 @@ Cancelled Sorties Log panel:
 As of 2026-03-26:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, and Ticket 6 are all landed
-* Ticket 6 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, and Ticket 6a are all landed
+* Ticket 6a (post-10.1) is the latest completed work
 
 ---
 
@@ -1634,6 +1720,7 @@ Assume the following as baseline truths unless Stuart reports otherwise from man
 * Ticket 4a (post-10.1) features are landed: `transitionToCompleted()` now uses `roundActiveStampToMinute` so Complete auto-stamps obey the same nearest-minute rule as Active; WTC exact-time moved from inline sub-element to own third-line block `<div class="wtc-exact-time">` below the WTC category line — displays just the time with no label; `.wtc-exact-time` CSS updated (11px, weight 500, full opacity, block layout)
 * Ticket 5 (post-10.1) features are landed: inline time labels (ETD/ATD/ETA/ATA/EOFT/AOFT/ELFT/ALFT) are now clickable mode selectors; clicking toggles between estimate and actual for that side; inline edit writes to the explicitly selected field — no inference from actual-field presence; mode is UI session state (auto-derives from actual presence by default, preserved across re-renders when explicitly toggled); `_inlineTimeModeMap`, `_inlineTimeModeExplicit`, `_resolveInlineTimeMode`, `_getInlineTimeMode`, `_setInlineTimeModeExplicit`, `_inlineTimeFieldForMode`, `_inlineTimeLabelForMode` added to `ui_liveboard.js`; OVR dep-side labels changed from ECT/ACT to EOFT/AOFT; label toggle CSS affordance added to `vectair.css`
 * Ticket 6 (post-10.1) features are landed: immutable cancelled sorties log backed by `vectair_fdms_cancelled_sorties_v1` localStorage key; `transitionToCancelled()` replaced with modal-based flow capturing optional reason code + note; `appendCancelledSortie()` with duplicate guard; read-only Cancelled Sorties Log panel in History tab with snapshot detail expand; `CANCELLATION_REASON_CODES` taxonomy (OPS/WX/TECH/ATC/ADMIN/CREW/OTHER); existing cancel behaviour (status, cascade, booking sync) preserved unchanged; hard delete creates no log entry; daily stats / reporting / timing model unchanged
+* Ticket 6a (post-10.1) features are landed: History tab split into two subtabs — Movement History (COMPLETED only) and Cancelled Sorties; horizontal `.history-subtab-bar` with accent-brown active state; `initHistorySubtabs()` in `app.js`; Movement History export is now COMPLETED-only; Cancelled Sorties page has text filter, column sort (8 columns), and dedicated CSV export (24-column full-log, not filtered); `sortCancelledSorties()`, `exportCancelledSortiesCSV()` added; Ticket 6 inline panel removed from HTML
 * reporting.js intentionally uses nominal counting; Live Board uses event-based counting — this split is documented and must not be merged silently
 * any next sprint should build on this baseline, not reopen already-settled invariants without explicit cause
 
