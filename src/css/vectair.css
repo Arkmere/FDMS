@@ -728,6 +728,10 @@ tr.strip.ft-ovr > td {
   padding-top: 4px;
 }
 
+.history-subpage.hidden {
+  display: none;
+}
+
 /* -------------------------------------------------------
    Cancelled Sorties Log panel (Ticket 6 / 6a)
 ------------------------------------------------------- */
