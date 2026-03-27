@@ -37,7 +37,14 @@ import {
   recalculateTimingModel,
   getCancelledSorties,
   appendCancelledSortie,
-  ensureCancelledSortiesInitialised
+  ensureCancelledSortiesInitialised,
+  getDeletedStrips,
+  saveDeletedStrips,
+  appendDeletedStrip,
+  purgeExpiredDeletedStrips,
+  insertRestoredMovement,
+  ensureDeletedStripsInitialised,
+  DELETED_STRIPS_RETENTION_HOURS
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -6670,19 +6677,37 @@ function transitionToCancelled(id) {
 }
 
 /**
- * Permanently delete a strip (hard delete).
- * Removes the movement from storage entirely.
- * If linked to a booking, clears the booking linkage.
+ * Soft-delete a strip: move it to the Deleted Strips retention store.
+ * Strip disappears from ordinary operational views immediately.
+ * Recoverable via Deleted Strips tab until retention window expires (24 h).
+ *
+ * Booking linkage: if the strip was linked to a booking, the booking's
+ * linkedStripId is cleared (booking is not automatically restored on strip
+ * restore — operator re-links if needed).
  */
 function performDeleteStrip(movement) {
   if (!movement) return;
 
   const callsign = movement.callsignCode || 'this flight';
-  if (!confirm(`Delete strip ${callsign} (#${movement.id})? This cannot be undone.`)) {
+  if (!confirm(`Delete strip ${callsign} (#${movement.id})?\nThe strip will be held in Deleted Strips for ${DELETED_STRIPS_RETENTION_HOURS} hours and can be restored before expiry.`)) {
     return;
   }
 
-  // If linked to a booking, clear the booking's linkedStripId
+  const deletedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + DELETED_STRIPS_RETENTION_HOURS * 60 * 60 * 1000).toISOString();
+
+  // Build deleted-strip log entry with full snapshot
+  const logEntry = {
+    id: `del_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    sourceMovementId: movement.id,
+    deletedAt,
+    expiresAt,
+    snapshot: JSON.parse(JSON.stringify(movement)),
+  };
+
+  appendDeletedStrip(logEntry);
+
+  // Clear booking's linkedStripId if present
   if (movement.bookingId) {
     const booking = getBookingById(movement.bookingId);
     if (booking && booking.linkedStripId === movement.id) {
@@ -6690,12 +6715,14 @@ function performDeleteStrip(movement) {
     }
   }
 
-  // Permanently remove from storage
+  // Remove from active movements store
   deleteMovement(movement.id);
 
-  showToast(`${callsign} deleted`, 'info');
+  showToast(`${callsign} moved to Deleted Strips (recoverable for ${DELETED_STRIPS_RETENTION_HOURS}h)`, 'info');
   renderLiveBoard();
   renderHistoryBoard();
+  renderCancelledSortiesLog(); // update if a CANCELLED strip was deleted
+  renderDeletedStripsLog();
   if (window.updateDailyStats) window.updateDailyStats();
   if (window.updateFisCounters) window.updateFisCounters();
 }
@@ -7163,6 +7190,9 @@ let _cancelLogSortColumn = 'cancelledAt';
 let _cancelLogSortDirection = 'desc';
 /** Active text filter for cancelled sorties table */
 let _cancelLogFilter = '';
+
+/** Currently expanded deleted-strip row id (for detail toggle) */
+let _deletedStripsExpandedId = null;
 
 /**
  * Sort a cancelled sorties entries array by the given column.
@@ -7785,6 +7815,275 @@ export function initCancelledSortiesLog() {
   }
 
   renderCancelledSortiesLog();
+}
+
+/* ----------------------------------------
+   Deleted Strips Log (Ticket 6a.3)
+   Soft-delete retention store UI
+---------------------------------------- */
+
+/**
+ * Format a remaining-time string from now until expiresAt.
+ * Returns "Xh Ym" if future, "Expired" if past.
+ */
+function _formatExpiresIn(expiresAt) {
+  if (!expiresAt) return 'Expired';
+  const diffMs = new Date(expiresAt).getTime() - Date.now();
+  if (diffMs <= 0) return 'Expired';
+  const diffMins = Math.floor(diffMs / 60000);
+  const h = Math.floor(diffMins / 60);
+  const m = diffMins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/**
+ * Restore a soft-deleted strip from the retention store.
+ *
+ * Target status by original snapshot status:
+ *   PLANNED / ACTIVE → PLANNED with offset-aware start-side time recalculation
+ *   CANCELLED        → CANCELLED (reappears in Cancelled Sorties current-state view)
+ *   COMPLETED        → COMPLETED (reappears in Movement History)
+ *
+ * Booking re-linkage: NOT automatic. bookingId is preserved in the restored
+ * movement so the operator can see it, but the booking's linkedStripId is not
+ * automatically re-set (it was cleared on deletion). Operator re-links manually
+ * or via next reconciliation cycle if desired.
+ */
+function restoreDeletedStrip(entry) {
+  if (!entry || !entry.snapshot) {
+    showToast("Cannot restore — entry is missing snapshot", 'error');
+    return;
+  }
+
+  const now = Date.now();
+  if (entry.expiresAt && new Date(entry.expiresAt).getTime() <= now) {
+    showToast("Cannot restore — retention window has expired", 'error');
+    return;
+  }
+
+  const snap = entry.snapshot;
+  const ft = (snap.flightType || '').toUpperCase();
+  const originalStatus = (snap.status || '').toUpperCase();
+
+  // Build the movement to restore
+  let restoredSnapshot = JSON.parse(JSON.stringify(snap));
+
+  if (originalStatus === 'PLANNED' || originalStatus === 'ACTIVE') {
+    // Restore to PLANNED with offset-aware start-side time recalculation
+    restoredSnapshot.status = 'PLANNED';
+    const cfg = getConfig();
+    let offsetMinutes, originalPlanned, startFieldLabel;
+
+    if (ft === 'DEP') {
+      offsetMinutes = cfg.depOffsetMinutes ?? 10;
+      originalPlanned = snap.depPlanned || null;
+      startFieldLabel = 'ETD';
+    } else if (ft === 'ARR') {
+      offsetMinutes = cfg.arrOffsetMinutes ?? 90;
+      originalPlanned = snap.arrPlanned || null;
+      startFieldLabel = 'ETA';
+    } else if (ft === 'LOC') {
+      offsetMinutes = cfg.locOffsetMinutes ?? 10;
+      originalPlanned = snap.depPlanned || null;
+      startFieldLabel = 'ETD';
+    } else if (ft === 'OVR') {
+      offsetMinutes = cfg.ovrOffsetMinutes ?? 0;
+      originalPlanned = snap.depPlanned || null;
+      startFieldLabel = 'EOFT';
+    } else {
+      offsetMinutes = 10;
+      originalPlanned = snap.depPlanned || null;
+      startFieldLabel = 'ETD';
+    }
+
+    const newStartTime = originalPlanned
+      ? _computeReinstateStartTime(originalPlanned, offsetMinutes)
+      : _now_plus_minutes(offsetMinutes);
+
+    if (ft === 'ARR') {
+      restoredSnapshot.arrPlanned = newStartTime;
+    } else {
+      restoredSnapshot.depPlanned = newStartTime;
+    }
+
+    const ok = insertRestoredMovement(restoredSnapshot);
+    if (!ok) {
+      showToast("Cannot restore — movement ID conflict (already in use)", 'error');
+      return;
+    }
+
+    // Recalculate end-side derived time for pure PLANNED state (no actuals)
+    const hasActuals = !!(snap.depActual || snap.arrActual);
+    if (!hasActuals) {
+      const freshM = getMovements().find(mv => mv.id === restoredSnapshot.id);
+      if (freshM) {
+        const changedField = ft === 'ARR' ? 'arrPlanned' : 'depPlanned';
+        const timingPatch = recalculateTimingModel(freshM, changedField);
+        if (Object.keys(timingPatch).length > 0 && !timingPatch._weakPrediction) {
+          const { _weakPrediction, ...cleanPatch } = timingPatch; // eslint-disable-line no-unused-vars
+          updateMovement(restoredSnapshot.id, cleanPatch);
+        }
+      }
+    }
+
+    showToast(`${snap.callsignCode || ft} restored to PLANNED (${startFieldLabel}: ${newStartTime})`, 'success');
+  } else {
+    // CANCELLED, COMPLETED, or other — restore with original status intact
+    const ok = insertRestoredMovement(restoredSnapshot);
+    if (!ok) {
+      showToast("Cannot restore — movement ID conflict (already in use)", 'error');
+      return;
+    }
+    showToast(`${snap.callsignCode || ft} restored (status: ${originalStatus})`, 'success');
+  }
+
+  // Remove from deleted strips store
+  const list = getDeletedStrips();
+  saveDeletedStrips(list.filter(e => e.id !== entry.id));
+
+  renderLiveBoard();
+  renderHistoryBoard();
+  renderCancelledSortiesLog();
+  renderDeletedStripsLog();
+  if (window.updateDailyStats) window.updateDailyStats();
+}
+
+/**
+ * Render the Deleted Strips retention table.
+ * Purges expired entries first, then renders remaining live entries.
+ */
+export function renderDeletedStripsLog() {
+  const tbody = byId("deletedStripsBody");
+  if (!tbody) return;
+
+  // Purge expired entries before rendering
+  purgeExpiredDeletedStrips();
+
+  tbody.innerHTML = "";
+
+  const entries = getDeletedStrips();
+  // Newest deletions first
+  const sorted = [...entries].sort((a, b) => {
+    const ta = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+    const tb = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  if (sorted.length === 0) {
+    const empty = document.createElement("tr");
+    empty.innerHTML = `<td colspan="9" style="padding:8px; font-size:12px; color:#777;">No deleted strips in retention window.</td>`;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  const menuItemStyle = 'display:block; width:100%; padding:8px 12px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; white-space:nowrap;';
+  const menuItemHover = 'onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'"';
+
+  for (const entry of sorted) {
+    const s = entry.snapshot || {};
+    const ft = escapeHtml((s.flightType || '').toUpperCase());
+    const callsign = escapeHtml(s.callsignCode || '—');
+    const reg = escapeHtml(s.registration || '—');
+    const acType = escapeHtml(s.type || '—');
+    const depAd = escapeHtml(s.depAd || '—');
+    const arrAd = escapeHtml(s.arrAd || '—');
+    const statusAtDel = escapeHtml(s.status || '—');
+
+    const deletedAtStr = entry.deletedAt
+      ? escapeHtml(entry.deletedAt.replace('T', ' ').slice(0, 16)) + 'Z'
+      : '—';
+
+    const now = Date.now();
+    const expired = entry.expiresAt && new Date(entry.expiresAt).getTime() <= now;
+    const expiresInStr = _formatExpiresIn(entry.expiresAt);
+    const restoreDisabled = expired ? 'disabled title="Retention window expired"' : '';
+
+    const isExpanded = _deletedStripsExpandedId === entry.id;
+
+    const tr = document.createElement("tr");
+    tr.className = "deleted-strip-row";
+    tr.dataset.id = entry.id;
+
+    tr.innerHTML = `
+      <td><span class="badge badge-type">${ft}</span></td>
+      <td style="font-size:11px; white-space:nowrap;">${deletedAtStr}</td>
+      <td style="font-size:11px; white-space:nowrap; color:${expired ? '#c00' : '#666'};">${expiresInStr}</td>
+      <td>${callsign}</td>
+      <td><span style="font-size:12px;">${reg}</span></td>
+      <td><span style="font-size:12px;">${acType}</span></td>
+      <td>${depAd}</td>
+      <td>${arrAd}</td>
+      <td><span class="badge badge-cancelled" style="font-size:10px;">${statusAtDel}</span></td>
+      <td>
+        <div style="display:flex; flex-direction:column; gap:2px; align-items:flex-end;">
+          <button class="small-btn js-deleted-strip-restore" type="button" style="color:#2a7a2a;" ${restoreDisabled}>Restore ↩</button>
+          <button class="small-btn js-deleted-strip-toggle" type="button" aria-label="Toggle detail">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button>
+        </div>
+      </td>
+    `;
+
+    // Restore button
+    const restoreBtn = tr.querySelector(".js-deleted-strip-restore");
+    safeOn(restoreBtn, "click", () => {
+      restoreDeletedStrip(entry);
+    });
+
+    // Detail toggle
+    const toggleBtn = tr.querySelector(".js-deleted-strip-toggle");
+    safeOn(toggleBtn, "click", () => {
+      _deletedStripsExpandedId = isExpanded ? null : entry.id;
+      renderDeletedStripsLog();
+    });
+
+    tbody.appendChild(tr);
+
+    if (isExpanded) {
+      const detailTr = document.createElement("tr");
+      detailTr.className = "deleted-strip-detail-row";
+
+      const expiresAtStr = entry.expiresAt
+        ? escapeHtml(entry.expiresAt.replace('T', ' ').slice(0, 16)) + 'Z'
+        : '—';
+
+      detailTr.innerHTML = `
+        <td colspan="10" class="cancelled-log-detail-cell">
+          <div class="cancelled-log-detail">
+            <div class="cancelled-log-detail-section">
+              <strong>Deletion record</strong>
+              <div>Deleted at: ${escapeHtml(entry.deletedAt || '—')}</div>
+              <div>Expires at: ${expiresAtStr}${expired ? ' <em style="color:#c00;">(expired)</em>' : ''}</div>
+              <div>Expires in: ${expiresInStr}</div>
+              <div>Log entry ID: ${escapeHtml(entry.id || '—')}</div>
+              <div>Source movement ID: ${escapeHtml(String(entry.sourceMovementId ?? '—'))}</div>
+            </div>
+            <div class="cancelled-log-detail-section">
+              <strong>Strip snapshot at deletion</strong>
+              <div style="font-size:10px; color:#999; margin-bottom:3px;">State at time of deletion</div>
+              <div>Callsign: ${escapeHtml(s.callsignCode || '—')} / ${escapeHtml(s.callsignVoice || '—')}</div>
+              <div>Reg: ${escapeHtml(s.registration || '—')} · Type: ${escapeHtml(s.type || '—')} · WTC: ${escapeHtml(s.wtc || '—')}</div>
+              <div>Route: ${escapeHtml(s.depAd || '—')} → ${escapeHtml(s.arrAd || '—')}</div>
+              <div>DOF: ${escapeHtml(s.dof || '—')} · Rules: ${escapeHtml(s.rules || '—')}</div>
+              <div>ETD: ${escapeHtml(s.depPlanned || '—')} · ATD: ${escapeHtml(s.depActual || '—')} · ETA: ${escapeHtml(s.arrPlanned || '—')} · ATA: ${escapeHtml(s.arrActual || '—')}</div>
+              <div>Status at deletion: ${escapeHtml(s.status || '—')}</div>
+              <div>Remarks: ${escapeHtml(s.remarks || '—')}</div>
+            </div>
+          </div>
+        </td>
+      `;
+
+      tbody.appendChild(detailTr);
+    }
+  }
+}
+
+/**
+ * Initialise the Deleted Strips Log page.
+ * Runs initial purge, then renders. Called from app.js boot sequence.
+ */
+export function initDeletedStripsLog() {
+  ensureDeletedStripsInitialised();
+  purgeExpiredDeletedStrips();
+  renderDeletedStripsLog();
 }
 
 /* -----------------------------

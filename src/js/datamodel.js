@@ -1881,3 +1881,105 @@ export function appendCancelledSortie(entry) {
   list.push(entry);
   saveCancelledSorties(list);
 }
+
+/* ----------------------------------------
+   Deleted Strips Log
+   Soft-delete retention store (Ticket 6a.3)
+   Retention default: 24 hours.
+   Future configurability: deferred — hardcoded constant below.
+---------------------------------------- */
+
+export const DELETED_STRIPS_RETENTION_HOURS = 24;
+const DELETED_STRIPS_KEY = "vectair_fdms_deleted_strips_v1";
+
+export function ensureDeletedStripsInitialised() {
+  try {
+    const raw = localStorage.getItem(DELETED_STRIPS_KEY);
+    if (raw === null) {
+      localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn('[FDMS] Deleted strips store corrupt — resetting to []');
+      localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+    }
+  } catch (e) {
+    console.warn('[FDMS] Deleted strips store repair:', e);
+    localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify([]));
+  }
+}
+
+export function getDeletedStrips() {
+  ensureDeletedStripsInitialised();
+  try {
+    const raw = localStorage.getItem(DELETED_STRIPS_KEY);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveDeletedStrips(list) {
+  localStorage.setItem(DELETED_STRIPS_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+}
+
+/**
+ * Append a single deleted-strip entry to the retention store.
+ * @param {Object} entry
+ */
+export function appendDeletedStrip(entry) {
+  const list = getDeletedStrips();
+  list.push(entry);
+  saveDeletedStrips(list);
+}
+
+/**
+ * Purge all entries whose expiresAt has passed.
+ * Safe to call on every render/load.
+ * @returns {number} count of entries purged
+ */
+export function purgeExpiredDeletedStrips() {
+  const list = getDeletedStrips();
+  const now = Date.now();
+  const live = list.filter(e => {
+    if (!e.expiresAt) return false; // no expiry = treat as expired
+    return new Date(e.expiresAt).getTime() > now;
+  });
+  const purged = list.length - live.length;
+  if (purged > 0) saveDeletedStrips(live);
+  return purged;
+}
+
+/**
+ * Re-insert a movement snapshot back into the active movements store.
+ * Used to restore a soft-deleted strip.
+ * If the original ID is already in use (rare), logs a warning and returns false.
+ * @param {Object} snapshot - full movement snapshot (with .id)
+ * @returns {boolean} true if inserted
+ */
+export function insertRestoredMovement(snapshot) {
+  ensureInitialised();
+  if (!snapshot || snapshot.id === undefined || snapshot.id === null) return false;
+  // Guard: don't insert if ID already in use
+  if (movements.some(m => m.id === snapshot.id)) {
+    console.warn('[FDMS] insertRestoredMovement: ID', snapshot.id, 'already in use — skipping');
+    return false;
+  }
+  const now = new Date().toISOString();
+  const restored = {
+    ...snapshot,
+    updatedAtUtc: now,
+    updatedBy: 'local user (restored)',
+  };
+  if (!restored.changeLog) restored.changeLog = [];
+  restored.changeLog.push({ timestamp: now, user: 'local user', action: 'restored from deleted strips', changes: {} });
+  movements.push(restored);
+  // Keep nextId ahead of any restored IDs
+  if (typeof restored.id === 'number' && restored.id >= nextId) {
+    nextId = restored.id + 1;
+  }
+  saveToStorage();
+  return true;
+}

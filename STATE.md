@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.2 (post-10.1) — Reinstate cancelled strips with offset-aware timing
+Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.3 (post-10.1) — Deleted Strips retention tab + soft-delete lifecycle
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1423,6 +1423,94 @@ The cancelled-sorties log entry with `reinstated: true` is retained for full aud
 
 ---
 
+### 8.31 Ticket 6a.3 (post-10.1) — Deleted Strips retention tab + soft-delete lifecycle
+
+**Outcome:** complete
+
+**Summary of changes:**
+
+Deletion is no longer an immediate unrecoverable hard-delete. Strips are instead moved to a **Deleted Strips** retention store and remain recoverable for a configurable retention window before being automatically purged.
+
+**Retention period chosen: 24 hours**
+
+Implemented as a hardcoded constant `DELETED_STRIPS_RETENTION_HOURS = 24` in `datamodel.js`. Admin configurability is deferred — adding a config field for retention hours is clean but is scope for a future settings ticket, not this one. Constant is clearly named and easy to find when configurability is needed.
+
+**Information architecture:**
+
+History section now has three sibling subtabs:
+1. **Movement History** (default) — COMPLETED movements
+2. **Cancelled Sorties** — current-state cancelled strips (Ticket 6)
+3. **Deleted Strips** — soft-deleted strips within retention window
+
+**Soft-delete model:**
+
+When a strip is deleted from any section (Live Board or History):
+1. A full deep-copy snapshot is saved to the `vectair_fdms_deleted_strips_v1` localStorage store with `deletedAt` and `expiresAt` (deletedAt + 24h) timestamps.
+2. Booking's `linkedStripId` is cleared (same as original hard-delete).
+3. The movement is hard-deleted from the active movements store.
+4. Strip disappears from all ordinary operational views immediately.
+
+The Deleted Strips page shows deletion timestamp, "Expires In" countdown, and a Restore button. Expired-time entries show "Expired" in red.
+
+**Exclusion from ordinary reports:**
+
+Once soft-deleted, the movement is removed from `getMovements()` immediately. All current-state counts (Live Board stats, Monthly Return, Dashboard, Insights) use `getMovements()` — they are unaffected by the deleted-strips store. The deleted-strips store is a completely separate data layer.
+
+**Restore semantics:**
+
+Restore target depends on the original status at deletion:
+
+| Status at delete | Restore target | Timing recalculation |
+|---|---|---|
+| PLANNED or ACTIVE | PLANNED | Offset-aware rule: `max(originalPlanned, now + typeOffset)` — same policy as Ticket 6a.2 |
+| CANCELLED | CANCELLED | None — strip reappears in Cancelled Sorties current-state view |
+| COMPLETED | COMPLETED | None — strip reappears in Movement History |
+
+Booking re-linkage on restore: **NOT automatic**. The movement is restored with its original `bookingId` value visible, but the booking's `linkedStripId` is not automatically re-set (it was cleared on deletion). Operator re-links manually if needed. Documented as a known limitation.
+
+**Purge behavior:**
+
+`purgeExpiredDeletedStrips()` is called:
+- On app load (in `initDeletedStripsLog`)
+- Before each `renderDeletedStripsLog` call
+- When the Deleted Strips subtab is clicked
+
+This ensures no expired entries are ever displayed or accidentally restored.
+
+**Final purge:** entries are removed from the store entirely when `purgeExpiredDeletedStrips()` runs after their `expiresAt`. No data about purged strips is retained in ordinary storage.
+
+**New `datamodel.js` exports:**
+- `DELETED_STRIPS_RETENTION_HOURS` — constant (24)
+- `ensureDeletedStripsInitialised()` — safe idempotent init
+- `getDeletedStrips()` / `saveDeletedStrips(list)` — store access
+- `appendDeletedStrip(entry)` — add to retention store
+- `purgeExpiredDeletedStrips()` — remove expired, returns count
+- `insertRestoredMovement(snapshot)` — re-insert movement with original ID; guards against ID collision (logs warning, returns false if ID already in use)
+
+**Files changed:**
+
+- `src/js/datamodel.js` — deleted strips store layer
+- `src/js/ui_liveboard.js` — `performDeleteStrip` replaced with soft-delete; `renderDeletedStripsLog`, `restoreDeletedStrip`, `initDeletedStripsLog` added; `renderDeletedStripsLog` called after delete from all paths
+- `src/index.html` — third subtab button + subpage div for Deleted Strips
+- `src/js/app.js` — import/call `initDeletedStripsLog`; `renderDeletedStripsLog` called on Deleted Strips tab activation; subtab comment updated
+
+**No-drift confirmations:**
+
+- Live Board stats: unchanged — event-based, EGOW-realised.
+- Monthly Return / Dashboard / Insights: unchanged — nominal from `getMovements()` only.
+- Cancelled Sorties lifecycle: unchanged — if a CANCELLED strip is soft-deleted, its cancelled-sorties log entry persists showing "Source strip no longer exists"; on restore, it reappears correctly.
+- Timing/inline-time cluster: unchanged.
+- Ticket 5 timing semantics: untouched.
+- Booking reconciliation: booking linkage cleared on delete as before; not auto-restored on restore (documented limitation).
+
+**Known limitations / deferred:**
+
+- Admin-configurable retention period — deferred to future settings ticket.
+- Booking re-linkage on restore — not automatic; operator re-links manually.
+- Manual purge-now action — omitted (not clearly safe without confirmation flow; deferred).
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -1430,8 +1518,8 @@ The cancelled-sorties log entry with `reinstated: true` is retained for full aud
 As of 2026-03-27:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, Ticket 6a.1, and Ticket 6a.2 are all landed
-* Ticket 6a.2 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, Ticket 6a.1, Ticket 6a.2, and Ticket 6a.3 are all landed
+* Ticket 6a.3 (post-10.1) is the latest completed work
 
 ---
 
