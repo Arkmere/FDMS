@@ -1872,9 +1872,10 @@ export function saveCancelledSorties(list) {
  */
 export function appendCancelledSortie(entry) {
   const list = getCancelledSorties();
-  // Guard: do not create a duplicate log entry for the same source movement.
+  // Guard: do not create a duplicate log entry for the same source movement,
+  // UNLESS the existing entry has been reinstated (strip was reinstated then cancelled again).
   if (entry.sourceMovementId !== undefined && entry.sourceMovementId !== null &&
-      list.some(e => e.sourceMovementId === entry.sourceMovementId)) {
+      list.some(e => e.sourceMovementId === entry.sourceMovementId && !e.reinstated)) {
     return;
   }
   list.push(entry);

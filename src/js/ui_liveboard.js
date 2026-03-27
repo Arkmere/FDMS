@@ -7192,6 +7192,161 @@ function sortCancelledSorties(entries, col, dir) {
   });
 }
 
+/* -------------------------------------------------------------------
+   Reinstatement helpers (Ticket 6a.2)
+------------------------------------------------------------------- */
+
+/** Convert HH:MM string to minutes of day. Returns null if invalid. */
+function _hhmm_to_mins(hhmm) {
+  if (!hhmm || typeof hhmm !== 'string') return null;
+  const parts = hhmm.split(':');
+  if (parts.length !== 2) return null;
+  const h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+/** Return current local time plus offsetMinutes as HH:MM. */
+function _now_plus_minutes(offsetMinutes) {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + (offsetMinutes || 0));
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+/**
+ * Compute reinstated planned start-side time.
+ * Rule: max(originalPlanned, now + offsetMinutes)
+ *  — if now+offset is still before originalPlanned → keep originalPlanned
+ *  — otherwise (within or past window) → use now+offset
+ * Confirmed examples (DEP offset +10):
+ *   reinstated 1045, ETD 1100 → 1055 < 1100 → keep 1100
+ *   reinstated 1055, ETD 1100 → 1105 > 1100 → use 1105
+ *   reinstated 1127, ETD 1100 → 1137 > 1100 → use 1137
+ */
+function _computeReinstateStartTime(originalPlanned, offsetMinutes) {
+  const nowPlusOffset = _now_plus_minutes(offsetMinutes);
+  const origMins = _hhmm_to_mins(originalPlanned);
+  const nowPlusMins = _hhmm_to_mins(nowPlusOffset);
+  if (origMins !== null && nowPlusMins !== null && nowPlusMins < origMins) {
+    return originalPlanned;
+  }
+  return nowPlusOffset;
+}
+
+/**
+ * Reinstate a cancelled strip back to the flying programme.
+ *
+ * Target status: PLANNED.
+ * Planned start-side time recalculated per offset-aware rule (type-specific).
+ * All other strip details preserved.
+ * Formation elements that are currently CANCELLED are cascaded back to PLANNED.
+ * Log entry is marked reinstated=true (audit retained; excluded from current-state view).
+ *
+ * OVR offset note: uses config.ovrOffsetMinutes (default 0) with depPlanned (EOFT).
+ * Booking status is NOT automatically restored — booking remains at its
+ * current state; operator manages booking record separately.
+ *
+ * @param {Object} entry - cancelled sortie log entry
+ */
+function reinstateFromCancelledLog(entry) {
+  const allMovements = getMovements();
+  const m = allMovements.find(mv => mv.id === entry.sourceMovementId);
+  if (!m) {
+    showToast("Cannot reinstate — source strip no longer exists", 'error');
+    return;
+  }
+
+  const cfg = getConfig();
+  const ft = (m.flightType || '').toUpperCase();
+  const snap = entry.snapshot || {};
+
+  // Determine type-specific offset and original planned start-side field.
+  // Original is taken from the snapshot (immutable pre-cancellation state).
+  let offsetMinutes;
+  let originalPlanned;
+  let startFieldLabel;
+
+  if (ft === 'DEP') {
+    offsetMinutes = cfg.depOffsetMinutes ?? 10;
+    originalPlanned = snap.depPlanned || null;
+    startFieldLabel = 'ETD';
+  } else if (ft === 'ARR') {
+    offsetMinutes = cfg.arrOffsetMinutes ?? 90;
+    originalPlanned = snap.arrPlanned || null;
+    startFieldLabel = 'ETA';
+  } else if (ft === 'LOC') {
+    offsetMinutes = cfg.locOffsetMinutes ?? 10;
+    originalPlanned = snap.depPlanned || null;
+    startFieldLabel = 'ETD';
+  } else if (ft === 'OVR') {
+    // OVR: depPlanned = EOFT (start of frequency time). Uses ovrOffsetMinutes (default 0).
+    offsetMinutes = cfg.ovrOffsetMinutes ?? 0;
+    originalPlanned = snap.depPlanned || null;
+    startFieldLabel = 'EOFT';
+  } else {
+    offsetMinutes = 10;
+    originalPlanned = snap.depPlanned || null;
+    startFieldLabel = 'ETD';
+  }
+
+  const newStartTime = originalPlanned
+    ? _computeReinstateStartTime(originalPlanned, offsetMinutes)
+    : _now_plus_minutes(offsetMinutes);
+
+  // Build patch: status → PLANNED, update planned start-side field only.
+  const patch = { status: 'PLANNED' };
+  if (ft === 'ARR') {
+    patch.arrPlanned = newStartTime;
+  } else {
+    patch.depPlanned = newStartTime;
+  }
+
+  // Cascade formation elements: restore any CANCELLED elements back to PLANNED.
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    patch.formation = {
+      ...m.formation,
+      elements: m.formation.elements.map(el =>
+        el.status === 'CANCELLED' ? { ...el, status: 'PLANNED' } : el
+      )
+    };
+  }
+
+  updateMovement(m.id, patch);
+
+  // Recalculate end-side derived time, but only when no actuals are present
+  // (pure PLANNED state). If actuals exist, preserve them; operator edits if needed.
+  const hasActuals = !!(m.depActual || m.arrActual);
+  if (!hasActuals) {
+    const freshM = getMovements().find(mv => mv.id === m.id);
+    if (freshM) {
+      const changedField = ft === 'ARR' ? 'arrPlanned' : 'depPlanned';
+      const timingPatch = recalculateTimingModel(freshM, changedField);
+      if (Object.keys(timingPatch).length > 0 && !timingPatch._weakPrediction) {
+        const { _weakPrediction, ...cleanPatch } = timingPatch; // eslint-disable-line no-unused-vars
+        updateMovement(m.id, cleanPatch);
+      }
+    }
+  }
+
+  // Mark log entry as reinstated (mutable top-level; snapshot untouched).
+  const list = getCancelledSorties();
+  const idx = list.findIndex(e => e.id === entry.id);
+  if (idx >= 0) {
+    list[idx].reinstated = true;
+    list[idx].reinstatedAt = new Date().toISOString();
+    list[idx].reinstatedNewStartTime = newStartTime;
+    saveCancelledSorties(list);
+  }
+
+  renderLiveBoard();
+  renderHistoryBoard();
+  renderCancelledSortiesLog();
+  if (window.updateDailyStats) window.updateDailyStats();
+
+  const callsignLabel = m.callsignCode || ft;
+  showToast(`${callsignLabel} reinstated to PLANNED (${startFieldLabel}: ${newStartTime})`, 'success');
+}
+
 /**
  * Update the mutable cancellation reason/note on a log entry.
  * Does NOT touch the immutable snapshot field.
@@ -7281,6 +7436,12 @@ export function renderCancelledSortiesLog() {
   // Fetch current movements once for O(n) display resolution
   const allMovements = getMovements();
 
+  // Exclude reinstated entries from the current-state view.
+  // Reinstated entries are retained in the store for audit purposes but
+  // no longer represent currently-cancelled sorties.
+  const reinstatedCount = entries.filter(e => e.reinstated).length;
+  entries = entries.filter(e => !e.reinstated);
+
   // Apply text filter — searches both current movement fields and snapshot
   const filterTerm = _cancelLogFilter.trim().toLowerCase();
   if (filterTerm) {
@@ -7320,6 +7481,7 @@ export function renderCancelledSortiesLog() {
     empty.innerHTML = `
       <td colspan="11" style="padding:8px; font-size:12px; color:#777;">
         ${filterTerm ? 'No cancelled sorties match this filter.' : 'No cancelled sorties in this log.'}
+        ${!filterTerm && reinstatedCount > 0 ? `<span style="color:#999;"> (${reinstatedCount} reinstated ${reinstatedCount === 1 ? 'entry' : 'entries'} archived)</span>` : ''}
       </td>
     `;
     tbody.appendChild(empty);
@@ -7351,6 +7513,7 @@ export function renderCancelledSortiesLog() {
 
     const isExpanded = _cancelLogExpandedId === entry.id;
     const editStripDisabled = currentMovement ? '' : 'disabled title="Source strip no longer exists"';
+    const reinstateDisabled = currentMovement ? '' : 'disabled title="Source strip no longer exists"';
 
     const tr = document.createElement("tr");
     tr.className = "cancelled-log-row";
@@ -7374,6 +7537,7 @@ export function renderCancelledSortiesLog() {
             <div class="js-cancel-log-edit-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:9999; min-width:130px; margin-top:2px;">
               <button class="js-cancel-log-edit-strip" type="button" style="${menuItemStyle}" ${editStripDisabled} ${menuItemHover}>Edit Strip</button>
               <button class="js-cancel-log-edit-reason" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Reason</button>
+              <button class="js-cancel-log-reinstate" type="button" style="${menuItemStyle} color:#2a7a2a;" ${reinstateDisabled} ${menuItemHover}>Reinstate ↩</button>
             </div>
           </div>
           <button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle detail">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button>
@@ -7407,6 +7571,14 @@ export function renderCancelledSortiesLog() {
       e.stopPropagation();
       closeDropdownPortal();
       openEditCancellationReasonModal(entry);
+    });
+
+    // Reinstate
+    const reinstateBtn = tr.querySelector(".js-cancel-log-reinstate");
+    safeOn(reinstateBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      reinstateFromCancelledLog(entry);
     });
 
     // Detail toggle
@@ -7498,6 +7670,9 @@ function exportCancelledSortiesCSV() {
     "Reason Code",
     "Reason Text",
     "Booking ID at Cancel",
+    "Reinstated",
+    "Reinstated At (UTC)",
+    "Reinstated New Start Time",
     "Flight Type",
     "Callsign",
     "Registration",
@@ -7527,6 +7702,9 @@ function exportCancelledSortiesCSV() {
       e.cancellationReasonCode || '',
       e.cancellationReasonText || '',
       e.bookingSnapshot ? (e.bookingSnapshot.bookingId ?? '') : '',
+      e.reinstated ? 'YES' : 'NO',
+      e.reinstatedAt || '',
+      e.reinstatedNewStartTime || '',
       s.flightType || '',
       s.callsignCode || '',
       s.registration || '',
