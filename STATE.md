@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.1 (post-10.1) — Cancelled Sorties full editability
+Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.2 (post-10.1) — Reinstate cancelled strips with offset-aware timing
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1343,6 +1343,86 @@ Both the `.js-save-edit` and `.js-save-complete-edit` handlers now call `renderC
 
 ---
 
+### 8.30 Ticket 6a.2 (post-10.1) — Reinstate cancelled strips with offset-aware timing
+
+**Outcome:** complete
+
+**Chosen reinstatement target state: PLANNED**
+
+Reinstated strips return to `PLANNED` status on the Live Board. `ACTIVE` was considered but rejected: the strip must re-enter the operational planning queue and be deliberately activated by the operator. This preserves normal workflow discipline and avoids fabricating an activation event.
+
+**Summary of changes:**
+
+A **Reinstate ↩** action is added to the Edit ▾ dropdown on each Cancelled Sorties row (disabled if source movement has been hard-deleted). On reinstatement:
+
+1. The movement's `status` is set to `PLANNED`.
+2. The planned start-side time is recalculated per the offset-aware rule (see below).
+3. Formation elements with `CANCELLED` status are cascaded back to `PLANNED`.
+4. The cancelled-sorties log entry is marked `reinstated: true` / `reinstatedAt` / `reinstatedNewStartTime` (all mutable top-level fields; snapshot remains immutable).
+5. The reinstated entry is immediately excluded from the current-state Cancelled Sorties view (audit record retained in store for CSV export).
+6. Live Board, History, and Cancelled Sorties panels re-render.
+
+**Offset-aware reinstatement time rule:**
+
+```
+rule: newStartTime = max(originalPlanned, now + typeOffset)
+```
+
+Where `originalPlanned` is taken from the immutable snapshot (pre-cancellation value), and `typeOffset` is the type-specific configured offset:
+
+| Type | Start-side field | Config offset | Field label |
+|------|-----------------|---------------|-------------|
+| DEP  | `depPlanned`    | `depOffsetMinutes` (default 10) | ETD |
+| ARR  | `arrPlanned`    | `arrOffsetMinutes` (default 90) | ETA |
+| LOC  | `depPlanned`    | `locOffsetMinutes` (default 10) | ETD |
+| OVR  | `depPlanned`    | `ovrOffsetMinutes` (default **0**) | EOFT |
+
+OVR implementation note: `ovrOffsetMinutes` defaults to `0` in the config, meaning OVR reinstatement defaults to `now` as the new EOFT unless the operator has configured a non-zero OVR offset. This is intentional and consistent — OVR frequency work is typically immediate. Operator should configure `ovrOffsetMinutes` if a preparation buffer is needed.
+
+Confirmed DEP examples (DEP offset +10):
+- reinstated 1045, ETD 1100 → now+10=1055 < 1100 → keep 1100 ✓
+- reinstated 1055, ETD 1100 → now+10=1105 > 1100 → use 1105 ✓
+- reinstated 1127, ETD 1100 → now+10=1137 > 1100 → use 1137 ✓
+
+**End-side timing recalculation:**
+
+After setting the new start-side time, `recalculateTimingModel` is called to update the derived end-side time (e.g. ETA from new ETD + duration), **but only when no actuals are present** (pure PLANNED state). If actuals exist (strip was ACTIVE when cancelled), they are preserved per "strip details preserved" policy, and no downstream recalculation is run.
+
+**Current-state reporting effect:**
+
+Once reinstated, the movement has `status: PLANNED`. It:
+- Appears on the Live Board in PLANNED state
+- Is counted in planning/active statistics by current status
+- Is NOT counted as cancelled in any operational count
+- Is NOT shown in the Cancelled Sorties current-state list
+
+The cancelled-sorties log entry with `reinstated: true` is retained for full audit and is included in CSV exports (with `Reinstated`, `Reinstated At`, `Reinstated New Start Time` columns).
+
+**Preserved audit/lifecycle semantics:**
+
+- Immutable snapshot on the log entry is never touched.
+- Historical cancellation event (time, reason, note, booking snapshot) is preserved.
+- Re-cancellation after reinstatement is supported: the `appendCancelledSortie` duplicate guard now skips entries where `reinstated: true`, allowing a new cancellation log entry for the same source movement.
+
+**Booking status:** Booking record is NOT automatically restored on reinstatement. The booking retains its current state; operator manages booking record separately. This is a deliberate scope boundary — booking lifecycle is governed by the bookings module.
+
+**Files changed:**
+
+- `src/js/datamodel.js` — `appendCancelledSortie` guard updated: allow re-cancellation when existing entry is `reinstated: true`.
+- `src/js/ui_liveboard.js` — new `_hhmm_to_mins`, `_now_plus_minutes`, `_computeReinstateStartTime` helpers; new `reinstateFromCancelledLog(entry)`; `renderCancelledSortiesLog` updated: filter out reinstated entries, show archived count, add Reinstate ↩ dropdown item; CSV export updated with three reinstatement audit columns.
+
+**No-drift confirmations:**
+
+- Live Board stats: unchanged — event-based, EGOW-realised; reinstatement does not synthesise EGOW events.
+- Monthly Return / Dashboard / Insights: unchanged — nominal figures only.
+- Hard delete: unchanged — distinct from cancel/reinstate.
+- Booking reconciliation: unchanged — no booking state modified on reinstatement.
+- Timing/inline-time cluster: unchanged — only the type-appropriate planned start-side field is recalculated.
+- Ticket 5 timing semantics: untouched.
+- Movement History subpage: unchanged — COMPLETED-only filter retained.
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -1350,8 +1430,8 @@ Both the `.js-save-edit` and `.js-save-complete-edit` handlers now call `renderC
 As of 2026-03-27:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, and Ticket 6a.1 are all landed
-* Ticket 6a.1 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, Ticket 6a.1, and Ticket 6a.2 are all landed
+* Ticket 6a.2 (post-10.1) is the latest completed work
 
 ---
 
