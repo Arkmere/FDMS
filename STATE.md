@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-27 (Europe/London) — Current baseline: Ticket 6 lifecycle tranche complete through corrective current-state semantics patch
+Last updated: 2026-03-27 (Europe/London) — Current baseline: Ticket 6b Cancellation / Lifecycle Reporting delivered
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -508,20 +508,77 @@ booking reconciliation policy remains unchanged
 booking is not auto-restored on reinstate / restore
 OVR remains excluded from runway totals
 Movement History remains completed-only
+7b) Ticket 6b — Cancellation / Lifecycle Reporting
+
+Outcome: complete
+
+Delivered:
+
+A dedicated Cancellation Report view inside the Reports tab, consistent with existing Reports IA.
+Date-range filter (start date / end date) with sensible 30-day default on load.
+Summary KPI cards: total cancellations, no-reason-assigned count, most common reason, most cancelled movement type.
+Reason code breakdown table: OPS / WX / TECH / ATC / ADMIN / CREW / OTHER / Unassigned — counts and percentages.
+Movement type breakdown table: DEP / ARR / LOC / OVR — counts and percentages.
+Ranked "most cancelled" tables: Aircraft Type, Registration, Captain/PIC, Departure Aerodrome, Arrival Aerodrome.
+Row-level detail table showing all current-state cancelled records in range.
+Export Cancellations CSV button: row-level export of the cancellation dataset with all key fields.
+
+Files changed:
+
+src/js/reporting.js — added getCancelledSorties import; added computeCancellationReport(), exportCancellationsToCSV(), and exported CANCELLATION_REASON_ORDER / CANCELLATION_REASON_LABELS / FLIGHT_TYPE_ORDER / FLIGHT_TYPE_LABELS constants
+src/js/ui_reports.js — added imports, cancelStartDate/cancelEndDate state (default: last 30 days), wireReportsControls extensions, renderReports panel show/hide logic, renderCancellationReport(), formatISOToDisplay(), handleExportCancellationsCSV()
+src/index.html — added "Cancellation Report" option to reportsViewSelector; added cancellationDatePanel with start/end date inputs; added btnExportCancellationsCSV to export buttons
+src/css/vectair.css — added Cancellation Report section with .cancel-report-header, .cancel-section-title, .cancel-breakdown-table, .cancel-detail-table, .cancel-num-cell, .cancel-date-cell and supporting classes
+
+Data-source decision (documented):
+
+Primary reporting dataset: getMovements() filtered to status === 'CANCELLED'.
+Reinstated rows excluded automatically: they are no longer status=CANCELLED in the movements store.
+Soft-deleted rows excluded automatically: they are not present in getMovements().
+Reason code and reason text: taken from the mutable top-level fields on the getCancelledSorties() log entry — not from the immutable snapshot — so edits made after cancellation are correctly reflected.
+Date field for range filtering: cancelledAt from the log entry (primary); fallback to dof (date of flight) from the current movement record if no log entry or no cancelledAt is present. This is documented in the UI subtitle and in the date panel label.
+Default range: last 30 days (inclusive, computed at load time).
+
+Historical / lifecycle-event analytics:
+
+Not included in Ticket 6b. The report is current-state operational only.
+If historical-event counts from the cancellation log are added later, they must be clearly separated and labeled, per the governing rule in section 5.1.
+
+Ranked tables — fields included and rationale:
+
+Aircraft Type (m.type) — included; generally reliable when registration entered from VKB
+Registration (m.registration) — included; reliable when populated
+Captain / PIC (m.captain) — included with explicit note that reliability depends on operator entry; blanks grouped as "Captain not recorded"
+Departure Aerodrome (m.depAd) — included; generally reliable
+Arrival Aerodrome (m.arrAd) — included; useful for ARR/LOC pattern analysis
+
+No-drift confirmations for Ticket 6b:
+
+timing / inline-time model — unchanged
+Active / Complete semantics — unchanged
+reinstatement logic — unchanged
+soft-delete retention semantics — unchanged
+booking reconciliation behavior — unchanged
+Live Board event-based vs nominal reporting split — unchanged
+History IA / lifecycle rules — unchanged
+Monthly Return / Dashboard / Insights — unchanged
+Cancelled Sorties view / Deleted Strips view — unchanged
+
 8) Known limitations / deliberate boundaries
 
 These are known and intentional unless later promoted into dedicated tickets.
 
-8.1 Cancellation analytics not yet implemented
+8.1 Cancellation analytics — historical lifecycle-event mode not yet implemented
+
+Ticket 6b delivers current-state operational cancellation reporting only.
 
 Not yet implemented:
 
-reason breakdown dashboards
-most-cancelled airframe / pilot / route / unit reporting
-date-range cancellation analytics
-lifecycle event analytics beyond current operational views
+historical lifecycle-event counts from the cancellation log (as opposed to current-state cancelled movements)
+audit dashboard for all lifecycle transitions over time
+date-range analytics based on cancellation-event timestamps only (distinct from current-state model)
 
-This is the next major recommended reporting tranche.
+These are deferred and must remain clearly separated from the current-state totals if implemented.
 
 8.2 Deleted-strip retention configurability
 retention period is hardcoded to 24 hours
@@ -539,17 +596,12 @@ Historical lifecycle data is retained where needed for audit/export, but no dedi
 9) Backlog / deferred items
 9.1 Immediate next recommended tranche
 
-Ticket 6b — Cancellation / lifecycle reporting
+Ticket 6b is now delivered. Next recommended items:
 
-Recommended scope:
-
-cancellation totals by date range
-breakdown by reason code
-breakdown by movement type
-most cancelled airframe / pilot / callsign family / route as appropriate
-exportable lifecycle report tables
-current-state operational reporting as primary view
-optional historical lifecycle-event analytics only if clearly separated
+Ticket 6c — Callsign family grouping in cancellation ranked tables (group callsigns by prefix, e.g. "ASCOT" family)
+Historical lifecycle-event analytics (separate from current-state reporting, clearly labeled)
+Deleted Strips retention configurability (currently hardcoded to 24 hours)
+Booking re-linkage on strip restore
 9.2 Existing deferred backlog from earlier work
 Duplicate → “Create from…” concept
 formation continuation backlog

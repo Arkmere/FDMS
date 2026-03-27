@@ -604,13 +604,15 @@
               <select id="reportsViewSelector" class="field field-select">
                 <option value="official">Official Monthly Return</option>
                 <option value="dashboard">Dashboard KPIs</option>
-                <option value="insights">Insights & Leaderboards</option>
+                <option value="insights">Insights &amp; Leaderboards</option>
+                <option value="cancellation">Cancellation Report</option>
               </select>
             </div>
 
             <div class="reports-export-buttons">
               <button id="btnExportCSV" class="btn btn-secondary" title="Export movements as CSV">Export CSV</button>
               <button id="btnExportXLSX" class="btn btn-primary" title="Export monthly return as Excel">Export XLSX</button>
+              <button id="btnExportCancellationsCSV" class="btn btn-secondary" title="Export cancellation dataset as CSV" style="display:none;">Export Cancellations CSV</button>
             </div>
           </div>
 
@@ -628,6 +630,20 @@
 
               <button id="btnSaveHours" class="btn btn-secondary">Save</button>
               <button id="btnClearHours" class="btn btn-ghost">Clear</button>
+            </div>
+          </div>
+
+          <!-- Cancellation Report Date Range Panel (shown only in Cancellation Report view) -->
+          <div id="cancellationDatePanel" class="panel" style="display: none;">
+            <div class="panel-header">
+              <h3 class="panel-title">Date Range Filter</h3>
+            </div>
+            <div class="hours-input-controls">
+              <label class="control-label">From:</label>
+              <input type="date" id="cancelReportStart" class="field field-input" />
+              <label class="control-label">To:</label>
+              <input type="date" id="cancelReportEnd" class="field field-input" />
+              <span class="cancel-filter-note">Filters on cancellation date (cancelledAt) — fallback: date of flight</span>
             </div>
           </div>
 

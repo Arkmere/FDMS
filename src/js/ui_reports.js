@@ -10,13 +10,36 @@ import {
   computeKPIs,
   computeLeaderboards,
   exportMovementsToCSV,
-  exportMonthlyReturnToXLSX
+  exportMonthlyReturnToXLSX,
+  computeCancellationReport,
+  exportCancellationsToCSV,
+  CANCELLATION_REASON_ORDER,
+  CANCELLATION_REASON_LABELS,
+  FLIGHT_TYPE_ORDER,
+  FLIGHT_TYPE_LABELS,
 } from './reporting.js';
 
 // Current view state
 let currentView = 'official';
 let currentYear = new Date().getUTCFullYear();
 let currentMonth = new Date().getUTCMonth() + 1; // 1-12
+
+// Cancellation report date range state.
+// Default: last 30 days (inclusive).
+// Date field used: cancelledAt from log entry (primary), dof from movement (fallback).
+let cancelStartDate = _defaultCancelStart();
+let cancelEndDate   = _defaultCancelEnd();
+
+function _defaultCancelEnd() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function _defaultCancelStart() {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // ========================================
 // INITIALIZATION
@@ -113,6 +136,34 @@ function wireReportsControls() {
 
   // Load hours for today initially
   loadHoursForSelectedDate();
+
+  // --- Cancellation report controls ---
+
+  // Populate date inputs with defaults
+  const cancelStartInput = document.getElementById('cancelReportStart');
+  const cancelEndInput   = document.getElementById('cancelReportEnd');
+
+  if (cancelStartInput) {
+    cancelStartInput.value = cancelStartDate;
+    cancelStartInput.addEventListener('change', e => {
+      cancelStartDate = e.target.value;
+      if (currentView === 'cancellation') renderReports();
+    });
+  }
+
+  if (cancelEndInput) {
+    cancelEndInput.value = cancelEndDate;
+    cancelEndInput.addEventListener('change', e => {
+      cancelEndDate = e.target.value;
+      if (currentView === 'cancellation') renderReports();
+    });
+  }
+
+  // Export cancellations CSV button
+  const btnExportCancellationsCSV = document.getElementById('btnExportCancellationsCSV');
+  if (btnExportCancellationsCSV) {
+    btnExportCancellationsCSV.addEventListener('click', handleExportCancellationsCSV);
+  }
 }
 
 /**
@@ -227,6 +278,17 @@ function handleExportXLSX() {
 }
 
 /**
+ * Handle Cancellations CSV export
+ */
+function handleExportCancellationsCSV() {
+  const report = computeCancellationReport(cancelStartDate, cancelEndDate);
+  const start  = cancelStartDate || 'all';
+  const end    = cancelEndDate   || 'all';
+  const filename = `cancellations_${start}_to_${end}.csv`;
+  exportCancellationsToCSV(report.rows, filename);
+}
+
+/**
  * Get movements for the current selected period
  */
 function getMovementsForCurrentPeriod() {
@@ -248,11 +310,20 @@ export function renderReports() {
   const container = document.getElementById('reportsContent');
   if (!container) return;
 
-  // Show/hide hours input panel based on view
-  const hoursPanel = document.getElementById('hoursInputPanel');
-  if (hoursPanel) {
-    hoursPanel.style.display = currentView === 'official' ? 'block' : 'none';
-  }
+  // Show/hide panels and export buttons based on view
+  const hoursPanel    = document.getElementById('hoursInputPanel');
+  const cancelPanel   = document.getElementById('cancellationDatePanel');
+  const btnCSV        = document.getElementById('btnExportCSV');
+  const btnXLSX       = document.getElementById('btnExportXLSX');
+  const btnCancelCSV  = document.getElementById('btnExportCancellationsCSV');
+
+  const isCancelView = (currentView === 'cancellation');
+
+  if (hoursPanel)   hoursPanel.style.display   = (currentView === 'official') ? 'block' : 'none';
+  if (cancelPanel)  cancelPanel.style.display   = isCancelView ? 'block' : 'none';
+  if (btnCSV)       btnCSV.style.display        = isCancelView ? 'none' : '';
+  if (btnXLSX)      btnXLSX.style.display       = isCancelView ? 'none' : '';
+  if (btnCancelCSV) btnCancelCSV.style.display  = isCancelView ? '' : 'none';
 
   // Render based on current view
   switch (currentView) {
@@ -264,6 +335,9 @@ export function renderReports() {
       break;
     case 'insights':
       renderInsights(container);
+      break;
+    case 'cancellation':
+      renderCancellationReport(container);
       break;
     default:
       container.innerHTML = '<p>Invalid view selected.</p>';
@@ -582,6 +656,322 @@ function renderLeaderboardTable(items) {
   `;
 
   return html;
+}
+
+// ========================================
+// CANCELLATION REPORT RENDERING (Ticket 6b)
+// ========================================
+
+/**
+ * Render the Cancellation / Lifecycle Report.
+ *
+ * Data source: current-state CANCELLED movements (see computeCancellationReport).
+ * Reinstated and soft-deleted rows are excluded automatically.
+ * Date filtering uses cancelledAt from the log entry (primary) or dof (fallback).
+ */
+function renderCancellationReport(container) {
+  const report = computeCancellationReport(cancelStartDate, cancelEndDate);
+  const { rows, total, noReason, byReason, byFlightType, ranked } = report;
+
+  // --- Format date range label ---
+  function fmtDate(d) { return d || '—'; }
+  const rangeLabel = (cancelStartDate || cancelEndDate)
+    ? `${fmtDate(cancelStartDate)} to ${fmtDate(cancelEndDate)}`
+    : 'All dates';
+
+  // --- Derive KPI summary values ---
+  const noReasonPct = total > 0 ? Math.round((noReason / total) * 100) : 0;
+
+  // Top reason (exclude blank)
+  let topReason = null;
+  let topReasonCount = 0;
+  for (const code of CANCELLATION_REASON_ORDER.filter(c => c !== '')) {
+    if ((byReason[code] || 0) > topReasonCount) {
+      topReasonCount = byReason[code];
+      topReason = code;
+    }
+  }
+  const topReasonLabel = topReason
+    ? `${topReason} — ${topReasonCount}`
+    : (total > 0 ? 'None recorded' : '—');
+
+  // Top flight type
+  let topFT = null;
+  let topFTCount = 0;
+  for (const ft of FLIGHT_TYPE_ORDER) {
+    if ((byFlightType[ft] || 0) > topFTCount) {
+      topFTCount = byFlightType[ft];
+      topFT = ft;
+    }
+  }
+  const topFTLabel = topFT ? `${topFT} — ${topFTCount}` : '—';
+
+  // --- Build HTML ---
+  let html = `
+    <div class="cancel-report-header">
+      <h3>Cancellation Report</h3>
+      <p class="cancel-report-subtitle">
+        Current-state cancelled movements &middot; ${rangeLabel}
+        &middot; <span class="cancel-datasource-note">Date field: cancelledAt (log entry) &rarr; fallback: date of flight</span>
+      </p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Total Cancellations</div>
+        <div class="kpi-value">${total}</div>
+        <div class="kpi-subtitle">Current-state cancelled in range</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">No Reason Assigned</div>
+        <div class="kpi-value">${noReason}</div>
+        <div class="kpi-subtitle">${noReasonPct}% of cancellations undocumented</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Most Common Reason</div>
+        <div class="kpi-value" style="font-size:20px;">${topReasonLabel}</div>
+        <div class="kpi-subtitle">Leading cancellation cause</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Most Cancelled Type</div>
+        <div class="kpi-value" style="font-size:20px;">${topFTLabel}</div>
+        <div class="kpi-subtitle">Movement type most affected</div>
+      </div>
+    </div>
+  `;
+
+  // --- Reason code breakdown ---
+  html += `
+    <h4 class="cancel-section-title">Breakdown by Cancellation Reason</h4>
+    <div class="table-container">
+      <table class="cancel-breakdown-table">
+        <thead>
+          <tr>
+            <th>Reason Code</th>
+            <th>Description</th>
+            <th>Count</th>
+            <th>% of Total</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  for (const code of CANCELLATION_REASON_ORDER) {
+    const count = byReason[code] || 0;
+    const pct   = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
+    const label = CANCELLATION_REASON_LABELS[code] || code;
+    const codeDisplay = code === '' ? '<em>Unassigned</em>' : `<strong>${escapeHtml(code)}</strong>`;
+    const rowClass = code === '' && count > 0 ? ' class="cancel-row-unassigned"' : '';
+    html += `
+      <tr${rowClass}>
+        <td>${codeDisplay}</td>
+        <td>${escapeHtml(label)}</td>
+        <td class="cancel-num-cell">${count}</td>
+        <td class="cancel-num-cell">${pct}%</td>
+      </tr>
+    `;
+  }
+  html += `
+        </tbody>
+        <tfoot>
+          <tr class="cancel-total-row">
+            <td colspan="2"><strong>Total</strong></td>
+            <td class="cancel-num-cell"><strong>${total}</strong></td>
+            <td class="cancel-num-cell"><strong>100%</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+
+  // --- Flight type breakdown ---
+  html += `
+    <h4 class="cancel-section-title">Breakdown by Movement Type</h4>
+    <div class="table-container">
+      <table class="cancel-breakdown-table">
+        <thead>
+          <tr>
+            <th>Movement Type</th>
+            <th>Description</th>
+            <th>Count</th>
+            <th>% of Total</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  for (const ft of FLIGHT_TYPE_ORDER) {
+    const count = byFlightType[ft] || 0;
+    const pct   = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
+    const label = FLIGHT_TYPE_LABELS[ft] || ft;
+    html += `
+      <tr>
+        <td><strong>${escapeHtml(ft)}</strong></td>
+        <td>${escapeHtml(label)}</td>
+        <td class="cancel-num-cell">${count}</td>
+        <td class="cancel-num-cell">${pct}%</td>
+      </tr>
+    `;
+  }
+  if (byFlightType[''] > 0) {
+    const count = byFlightType[''];
+    const pct   = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
+    html += `
+      <tr class="cancel-row-unassigned">
+        <td><em>Unknown</em></td>
+        <td>Type not recorded</td>
+        <td class="cancel-num-cell">${count}</td>
+        <td class="cancel-num-cell">${pct}%</td>
+      </tr>
+    `;
+  }
+  html += `
+        </tbody>
+        <tfoot>
+          <tr class="cancel-total-row">
+            <td colspan="2"><strong>Total</strong></td>
+            <td class="cancel-num-cell"><strong>${total}</strong></td>
+            <td class="cancel-num-cell"><strong>100%</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+
+  // --- Ranked tables helper ---
+  function renderRankedTable(items, nameHeader, maxRows) {
+    if (!items || items.length === 0) {
+      return '<p class="cancel-no-data">No data in selected range.</p>';
+    }
+    const shown = items.slice(0, maxRows || 20);
+    let t = `
+      <div class="table-container">
+        <table class="cancel-breakdown-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>${escapeHtml(nameHeader)}</th>
+              <th>Cancellations</th>
+              <th>% of Total</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    shown.forEach((item, idx) => {
+      const pct  = total > 0 ? (item.count / total * 100).toFixed(1) : '0.0';
+      const rank = item.isUnknown ? '—' : (idx + 1);
+      const rowClass = item.isUnknown ? ' class="cancel-row-unassigned"' : '';
+      t += `
+        <tr${rowClass}>
+          <td class="cancel-num-cell">${rank}</td>
+          <td><${item.isUnknown ? 'em' : 'strong'}>${escapeHtml(item.name)}</${item.isUnknown ? 'em' : 'strong'}></td>
+          <td class="cancel-num-cell">${item.count}</td>
+          <td class="cancel-num-cell">${pct}%</td>
+        </tr>
+      `;
+    });
+    t += `</tbody></table></div>`;
+    return t;
+  }
+
+  // --- Ranked: Aircraft Type ---
+  html += `<h4 class="cancel-section-title">Most Cancelled — Aircraft Type</h4>`;
+  html += renderRankedTable(ranked.byAircraftType, 'Aircraft Type', 20);
+
+  // --- Ranked: Registration ---
+  html += `<h4 class="cancel-section-title">Most Cancelled — Registration</h4>`;
+  html += renderRankedTable(ranked.byRegistration, 'Registration', 20);
+
+  // --- Ranked: Captain / PIC ---
+  html += `
+    <h4 class="cancel-section-title">Most Cancelled — Captain / PIC</h4>
+    <p class="cancel-datasource-note">Only as reliable as operator data entry. Blank entries grouped as "Captain not recorded".</p>
+  `;
+  html += renderRankedTable(ranked.byCaptain, 'Captain / PIC', 20);
+
+  // --- Ranked: Departure Aerodrome ---
+  html += `<h4 class="cancel-section-title">Most Cancelled — Departure Aerodrome</h4>`;
+  html += renderRankedTable(ranked.byDepAd, 'Dep AD', 20);
+
+  // --- Ranked: Arrival Aerodrome ---
+  html += `<h4 class="cancel-section-title">Most Cancelled — Arrival Aerodrome</h4>`;
+  html += renderRankedTable(ranked.byArrAd, 'Arr AD', 20);
+
+  // --- Row-level detail table ---
+  html += `
+    <h4 class="cancel-section-title">Row-Level Detail (${rows.length} cancellations)</h4>
+    <p class="cancel-datasource-note">
+      Current-state fields. Reason reflects current editable value, not locked snapshot.
+      Use Export Cancellations CSV for full machine-readable output.
+    </p>
+  `;
+
+  if (rows.length === 0) {
+    html += '<p class="cancel-no-data">No cancellations found in selected date range.</p>';
+  } else {
+    html += `
+      <div class="table-container" style="overflow-x: auto;">
+        <table class="cancel-detail-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Cancel Date</th>
+              <th>Cancelled At (UTC)</th>
+              <th>Callsign</th>
+              <th>Reg</th>
+              <th>A/C Type</th>
+              <th>Dep</th>
+              <th>Arr</th>
+              <th>DOF</th>
+              <th>Reason</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    for (const r of rows) {
+      const cancelledAtDisplay = r.cancelledAt
+        ? formatISOToDisplay(r.cancelledAt)
+        : (r.cancelDate || '—');
+      const reasonDisplay = r.reasonCode
+        ? escapeHtml(r.reasonCode)
+        : '<em class="cancel-unassigned-label">—</em>';
+      html += `
+        <tr>
+          <td><strong>${escapeHtml(r.flightType || '—')}</strong></td>
+          <td class="cancel-date-cell">${escapeHtml(r.cancelDate || '—')}</td>
+          <td class="cancel-date-cell">${escapeHtml(cancelledAtDisplay)}</td>
+          <td>${escapeHtml(r.callsign || '—')}</td>
+          <td>${escapeHtml(r.registration || '—')}</td>
+          <td>${escapeHtml(r.aircraftType || '—')}</td>
+          <td>${escapeHtml(r.depAd || '—')}</td>
+          <td>${escapeHtml(r.arrAd || '—')}</td>
+          <td class="cancel-date-cell">${escapeHtml(r.dof || '—')}</td>
+          <td>${reasonDisplay}</td>
+          <td class="cancel-note-cell">${escapeHtml(r.reasonText || '')}</td>
+        </tr>
+      `;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+/**
+ * Format an ISO 8601 timestamp for tabular display: "YYYY-MM-DD HH:MM UTC"
+ * @param {string} iso
+ * @returns {string}
+ */
+function formatISOToDisplay(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const date = d.toISOString().substring(0, 10);
+    const time = d.toISOString().substring(11, 16);
+    return `${date} ${time} UTC`;
+  } catch (e) {
+    return iso;
+  }
 }
 
 // ========================================
