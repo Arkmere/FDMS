@@ -475,6 +475,7 @@
             <nav class="history-subtab-bar" id="historySubtabBar">
               <button class="history-subtab-btn active" data-subpage="hist-subpage-movements">Movement History</button>
               <button class="history-subtab-btn" data-subpage="hist-subpage-cancelled">Cancelled Sorties</button>
+              <button class="history-subtab-btn" data-subpage="hist-subpage-deleted">Deleted Strips</button>
             </nav>
 
             <!-- Subpage: Movement History -->
@@ -554,6 +555,34 @@
                 </div>
               </div>
             </div><!-- /hist-subpage-cancelled -->
+
+            <!-- Subpage: Deleted Strips -->
+            <div class="history-subpage hidden" id="hist-subpage-deleted">
+              <div class="page-title">Deleted Strips</div>
+              <div class="page-subtitle">Strips held for recovery. Purged automatically after 24 hours.</div>
+
+              <div class="panel">
+                <div class="table-container">
+                  <table id="deletedStripsTable">
+                    <thead>
+                      <tr>
+                        <th style="width:40px;">Type</th>
+                        <th>Deleted At (UTC)</th>
+                        <th>Expires In</th>
+                        <th>Callsign</th>
+                        <th>Reg</th>
+                        <th>A/C Type</th>
+                        <th>Dep</th>
+                        <th>Arr</th>
+                        <th>Status at Delete</th>
+                        <th style="width:80px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="deletedStripsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div><!-- /hist-subpage-deleted -->
 
           </div><!-- /history-shell -->
         </section>

@@ -12,7 +12,9 @@ import {
   initTimeline,
   renderTimeline,
   updateTimelineNowLine,
-  initCancelledSortiesLog
+  initCancelledSortiesLog,
+  initDeletedStripsLog,
+  renderDeletedStripsLog
 } from "./ui_liveboard.js";
 
 import {
@@ -530,7 +532,7 @@ function adminConfirm(message, onConfirm, detailsHtml = '', confirmEnabled = tru
 
 /**
  * Initialise History subtab switching (Ticket 6a).
- * Two subpages: Movement History (default) and Cancelled Sorties.
+ * Three subpages: Movement History (default), Cancelled Sorties, Deleted Strips.
  */
 function initHistorySubtabs() {
   const bar = document.getElementById('historySubtabBar');
@@ -545,7 +547,13 @@ function initHistorySubtabs() {
   }
 
   btns.forEach(btn => {
-    btn.addEventListener('click', () => showSubpage(btn.dataset.subpage));
+    btn.addEventListener('click', () => {
+      showSubpage(btn.dataset.subpage);
+      // Re-render Deleted Strips on tab activation to purge expired entries
+      if (btn.dataset.subpage === 'hist-subpage-deleted') {
+        renderDeletedStripsLog();
+      }
+    });
   });
 }
 
@@ -1461,6 +1469,7 @@ async function bootstrap() {
     initLiveboardCounters();
     initHistoryBoard();
     initCancelledSortiesLog();
+    initDeletedStripsLog();
     initHistoryExport();
     initHistorySubtabs();
     initVkbLookup();
