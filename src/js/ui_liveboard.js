@@ -7466,13 +7466,32 @@ export function renderCancelledSortiesLog() {
   // Fetch current movements once for O(n) display resolution
   const allMovements = getMovements();
 
-  // Exclude reinstated entries from the current-state view.
-  // Reinstated entries are retained in the store for audit purposes but
-  // no longer represent currently-cancelled sorties.
+  // Current-state filter — two steps:
+  //
+  // Step 1: Exclude reinstated entries. Reinstated entries are audit records
+  // only; the strip is no longer cancelled from an operational standpoint.
   const reinstatedCount = entries.filter(e => e.reinstated).length;
   entries = entries.filter(e => !e.reinstated);
 
-  // Apply text filter — searches both current movement fields and snapshot
+  // Step 2: Exclude entries whose source movement no longer exists in the
+  // active movements store OR whose current status is not CANCELLED.
+  // Cancelled Sorties is a CURRENT-STATE view — a row belongs here only if
+  // the underlying movement currently exists with status CANCELLED.
+  // Soft-deleted strips are no longer in getMovements() and belong exclusively
+  // in Deleted Strips until retention expiry. Snapshot-only orphan rows must
+  // not appear here.
+  const notCurrentlyCancelledCount = entries.filter(e => {
+    const m = allMovements.find(mv => mv.id === e.sourceMovementId);
+    return !m || m.status !== 'CANCELLED';
+  }).length;
+  entries = entries.filter(e => {
+    const m = allMovements.find(mv => mv.id === e.sourceMovementId);
+    return m && m.status === 'CANCELLED';
+  });
+
+  const archivedCount = reinstatedCount + notCurrentlyCancelledCount;
+
+  // Apply text filter — searches current movement fields and snapshot
   const filterTerm = _cancelLogFilter.trim().toLowerCase();
   if (filterTerm) {
     entries = entries.filter(e => {
@@ -7510,8 +7529,8 @@ export function renderCancelledSortiesLog() {
     const empty = document.createElement("tr");
     empty.innerHTML = `
       <td colspan="11" style="padding:8px; font-size:12px; color:#777;">
-        ${filterTerm ? 'No cancelled sorties match this filter.' : 'No cancelled sorties in this log.'}
-        ${!filterTerm && reinstatedCount > 0 ? `<span style="color:#999;"> (${reinstatedCount} reinstated ${reinstatedCount === 1 ? 'entry' : 'entries'} archived)</span>` : ''}
+        ${filterTerm ? 'No cancelled sorties match this filter.' : 'No currently-cancelled sorties.'}
+        ${!filterTerm && archivedCount > 0 ? `<span style="color:#999;"> (${archivedCount} archived log ${archivedCount === 1 ? 'entry' : 'entries'} — reinstated or deleted)</span>` : ''}
       </td>
     `;
     tbody.appendChild(empty);
@@ -7523,16 +7542,16 @@ export function renderCancelledSortiesLog() {
 
   for (const entry of sorted) {
     const s = entry.snapshot || {};
-    // Current movement for display (falls back to snapshot if movement was deleted)
-    const currentMovement = allMovements.find(m => m.id === entry.sourceMovementId) || null;
-    const d = currentMovement || s;
+    // currentMovement is guaranteed non-null by the current-state filter above.
+    const currentMovement = allMovements.find(m => m.id === entry.sourceMovementId);
+    const d = currentMovement;
 
-    const ft = escapeHtml((d.flightType || s.flightType || '').toUpperCase());
-    const callsign = escapeHtml(d.callsignCode || s.callsignCode || '—');
-    const reg = escapeHtml(d.registration || s.registration || '—');
-    const acType = escapeHtml(d.type || s.type || '—');
-    const depAd = escapeHtml(d.depAd || s.depAd || '—');
-    const arrAd = escapeHtml(d.arrAd || s.arrAd || '—');
+    const ft = escapeHtml((d.flightType || '').toUpperCase());
+    const callsign = escapeHtml(d.callsignCode || '—');
+    const reg = escapeHtml(d.registration || '—');
+    const acType = escapeHtml(d.type || '—');
+    const depAd = escapeHtml(d.depAd || '—');
+    const arrAd = escapeHtml(d.arrAd || '—');
     // statusAtCancel always from snapshot — it records the status AT the moment of cancellation
     const statusAtCancel = escapeHtml(s.status || '—');
     // Reason/note from log entry (current-state, mutable)
@@ -7542,8 +7561,6 @@ export function renderCancelledSortiesLog() {
     const cancelledAt = entry.cancelledAt ? escapeHtml(entry.cancelledAt.replace('T', ' ').slice(0, 16)) + 'Z' : '—';
 
     const isExpanded = _cancelLogExpandedId === entry.id;
-    const editStripDisabled = currentMovement ? '' : 'disabled title="Source strip no longer exists"';
-    const reinstateDisabled = currentMovement ? '' : 'disabled title="Source strip no longer exists"';
 
     const tr = document.createElement("tr");
     tr.className = "cancelled-log-row";
@@ -7565,9 +7582,10 @@ export function renderCancelledSortiesLog() {
           <div style="position:relative; display:inline-block; z-index:1;">
             <button class="small-btn js-cancel-log-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
             <div class="js-cancel-log-edit-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:9999; min-width:130px; margin-top:2px;">
-              <button class="js-cancel-log-edit-strip" type="button" style="${menuItemStyle}" ${editStripDisabled} ${menuItemHover}>Edit Strip</button>
+              <button class="js-cancel-log-edit-strip" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Strip</button>
               <button class="js-cancel-log-edit-reason" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Reason</button>
-              <button class="js-cancel-log-reinstate" type="button" style="${menuItemStyle} color:#2a7a2a;" ${reinstateDisabled} ${menuItemHover}>Reinstate ↩</button>
+              <button class="js-cancel-log-reinstate" type="button" style="${menuItemStyle} color:#2a7a2a;" ${menuItemHover}>Reinstate ↩</button>
+              <button class="js-cancel-log-delete" type="button" style="${menuItemStyle} color:#a00;" ${menuItemHover}>Delete</button>
             </div>
           </div>
           <button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle detail">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button>
@@ -7609,6 +7627,14 @@ export function renderCancelledSortiesLog() {
       e.stopPropagation();
       closeDropdownPortal();
       reinstateFromCancelledLog(entry);
+    });
+
+    // Delete — routes through the same soft-delete retention pathway as all other deletes
+    const cancelLogDeleteBtn = tr.querySelector(".js-cancel-log-delete");
+    safeOn(cancelLogDeleteBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      performDeleteStrip(currentMovement);
     });
 
     // Detail toggle

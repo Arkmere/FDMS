@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.3 (post-10.1) — Deleted Strips retention tab + soft-delete lifecycle
+Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Corrective patch — Cancelled Sorties current-state semantics
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1202,7 +1202,7 @@ Cancelled Sorties Log panel:
 
 **Summary:**
 
-Refactored the History tab into two distinct subpages — Movement History and Cancelled Sorties — using a horizontal subtab bar. Movement History now shows only COMPLETED movements. Cancelled Sorties is a dedicated destination that shows the Ticket 6 audit log with sort, filter, and export. The Ticket 6 inline panel is replaced by the dedicated subpage.
+Refactored the History tab into subtab subpages — Movement History (default) and Cancelled Sorties — using a horizontal subtab bar. Movement History now shows only COMPLETED movements. Cancelled Sorties is a **current-state** view: it shows only movements that currently exist with status CANCELLED. The Ticket 6 inline panel is replaced by the dedicated subpage.
 
 ---
 
@@ -1498,7 +1498,7 @@ This ensures no expired entries are ever displayed or accidentally restored.
 
 - Live Board stats: unchanged — event-based, EGOW-realised.
 - Monthly Return / Dashboard / Insights: unchanged — nominal from `getMovements()` only.
-- Cancelled Sorties lifecycle: unchanged — if a CANCELLED strip is soft-deleted, its cancelled-sorties log entry persists showing "Source strip no longer exists"; on restore, it reappears correctly.
+- Cancelled Sorties lifecycle: if a CANCELLED strip is soft-deleted, it leaves Cancelled Sorties immediately (current-state filter excludes it) and appears in Deleted Strips. On restore as CANCELLED, it reappears in Cancelled Sorties. Snapshot-only orphan rows do not show in Cancelled Sorties.
 - Timing/inline-time cluster: unchanged.
 - Ticket 5 timing semantics: untouched.
 - Booking reconciliation: booking linkage cleared on delete as before; not auto-restored on restore (documented limitation).
@@ -1511,6 +1511,46 @@ This ensures no expired entries are ever displayed or accidentally restored.
 
 ---
 
+### 8.32 Corrective patch — Cancelled Sorties current-state semantics
+
+**Outcome:** complete
+
+**Root cause corrected:**
+
+Cancelled Sorties was rendering snapshot-fallback rows for entries whose source movement had been soft-deleted. The snapshot `d = currentMovement || s` fallback caused rows to remain visible in Cancelled Sorties even after the underlying movement was removed from `getMovements()` (via soft-delete). This contradicted the agreed current-state truth model.
+
+**Fixes applied:**
+
+1. **Cancelled Sorties current-state filter** — `renderCancelledSortiesLog` now applies a two-step filter before rendering:
+   - Step 1 (pre-existing): exclude reinstated entries.
+   - Step 2 (new): exclude entries whose `sourceMovementId` does not resolve to an existing movement, or whose resolved movement's `status !== 'CANCELLED'`. This means soft-deleted strips (removed from `getMovements()`) and non-cancelled strips are never shown.
+   - Row loop now uses `const d = currentMovement` directly — snapshot fallback removed; `currentMovement` is guaranteed non-null after the filter.
+   - Empty-state message updated: counts all excluded entries (reinstated + not-currently-cancelled) as `archivedCount`.
+
+2. **Delete action on Cancelled Sorties rows** — "Delete" added to the Edit ▾ dropdown on each Cancelled Sorties row. Calls `performDeleteStrip(currentMovement)` — the same soft-delete retention pathway used everywhere else. Confirmation dialog and 24-hour retention window apply identically.
+
+3. **STATE.md wording corrected** — Ticket 6a summary reworded to describe Cancelled Sorties as a current-state view. Ticket 6a.3 no-drift note updated to reflect correct soft-delete → leave Cancelled Sorties → appear in Deleted Strips semantics.
+
+**No-drift confirmations:**
+
+- Soft-delete store: unchanged.
+- Deleted Strips retention view: unchanged.
+- Edit Strip / Edit Reason / Reinstate actions: unchanged (all buttons retained; disabled states removed since filter guarantees currentMovement non-null).
+- Timing / booking / reporting split: unchanged.
+
+**Authoritative current-state model (settled):**
+
+| Strip is... | Appears in... |
+|---|---|
+| Active (PLANNED/ACTIVE) | Live Board |
+| Completed | Movement History |
+| Currently CANCELLED (movement exists, status=CANCELLED) | Cancelled Sorties |
+| Reinstated (entry.reinstated=true) | Nowhere in operational views (audit only) |
+| Soft-deleted (removed from getMovements()) | Deleted Strips (until expiry/purge) |
+| Purged (past retention expiry) | Nowhere |
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
@@ -1518,8 +1558,8 @@ This ensures no expired entries are ever displayed or accidentally restored.
 As of 2026-03-27:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, Ticket 6a.1, Ticket 6a.2, and Ticket 6a.3 are all landed
-* Ticket 6a.3 (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, Ticket 6a.1, Ticket 6a.2, Ticket 6a.3, and corrective patch (Cancelled Sorties current-state semantics) are all landed
+* Corrective patch (2026-03-27) is the latest completed work
 
 ---
 
