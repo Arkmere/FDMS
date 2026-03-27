@@ -22,7 +22,7 @@
 // This divergence is documented here and in STATE.md and must not be
 // accidentally merged or silently changed in future sprints.
 
-import { getMovements } from './datamodel.js';
+import { getMovements, getCancelledSorties } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';
 
 // ========================================
@@ -973,4 +973,221 @@ function downloadFile(content, filename, mimeType) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+// ========================================
+// CANCELLATION REPORT (Ticket 6b)
+// ========================================
+//
+// PRIMARY DATA SOURCE: current-state CANCELLED movements from getMovements().
+//   - getMovements() filtered to status === 'CANCELLED'
+//   - Cross-referenced with getCancelledSorties() log for cancelledAt, reason code, reason text
+//   - Reinstated rows excluded automatically: they are no longer status=CANCELLED in getMovements()
+//   - Soft-deleted rows excluded automatically: they are not present in getMovements()
+//
+// DATE FIELD CHOICE:
+//   - Primary:  cancelledAt from the matching log entry (ISO 8601 string, date portion used)
+//   - Fallback: dof (date of flight) from the current movement record
+//   - If neither is available the row is included regardless of date bounds (conservative)
+//
+// This function is intentionally separate from the Monthly Return / Dashboard / Insights
+// nominal strip-count model and must not be merged with it.
+
+const CANCELLATION_REASON_ORDER = ['OPS', 'WX', 'TECH', 'ATC', 'ADMIN', 'CREW', 'OTHER', ''];
+const CANCELLATION_REASON_LABELS = {
+  'OPS':   'OPS — operational / tasking change',
+  'WX':    'WX — weather',
+  'TECH':  'TECH — aircraft technical / engineering',
+  'ATC':   'ATC — ATC / airfield / slot / airspace',
+  'ADMIN': 'ADMIN — paperwork / authorisation / admin',
+  'CREW':  'CREW — crew / staffing',
+  'OTHER': 'OTHER — other',
+  '':      'Unassigned',
+};
+
+const FLIGHT_TYPE_ORDER = ['DEP', 'ARR', 'LOC', 'OVR'];
+const FLIGHT_TYPE_LABELS = {
+  'DEP': 'DEP — Departure',
+  'ARR': 'ARR — Arrival',
+  'LOC': 'LOC — Local',
+  'OVR': 'OVR — Overfly',
+};
+
+export { CANCELLATION_REASON_ORDER, CANCELLATION_REASON_LABELS, FLIGHT_TYPE_ORDER, FLIGHT_TYPE_LABELS };
+
+/**
+ * Build the current-state cancellation report dataset.
+ *
+ * @param {string|null} startDate - YYYY-MM-DD lower bound (inclusive), or null
+ * @param {string|null} endDate   - YYYY-MM-DD upper bound (inclusive), or null
+ * @returns {Object} { rows, total, noReason, byReason, byFlightType, ranked, startDate, endDate }
+ */
+export function computeCancellationReport(startDate, endDate) {
+  const allMovements = getMovements();
+  const cancelLog = getCancelledSorties();
+
+  // Current-state CANCELLED movements only.
+  // Reinstated and soft-deleted rows are excluded automatically by this filter.
+  const cancelledMovements = allMovements.filter(m => m.status === 'CANCELLED');
+
+  // Join with the cancellation log to get metadata (reason, cancelledAt).
+  // We look for the active (non-reinstated) log entry for each movement.
+  const rows = cancelledMovements.map(m => {
+    const logEntry = cancelLog.find(e =>
+      e.sourceMovementId === m.id && !e.reinstated
+    ) || null;
+
+    const cancelledAt = logEntry ? (logEntry.cancelledAt || null) : null;
+
+    // Date used for range filtering: prefer cancelledAt from log, fallback to dof.
+    const cancelDate = cancelledAt
+      ? cancelledAt.substring(0, 10)   // extract YYYY-MM-DD from ISO string
+      : (m.dof || null);
+
+    return {
+      logId:            logEntry ? (logEntry.id || '') : '',
+      sourceMovementId: m.id,
+      flightType:       m.flightType || '',
+      status:           m.status,
+      cancelledAt:      cancelledAt || '',
+      cancelDate:       cancelDate  || '',
+      // Reason fields are mutable top-level fields on the log entry (current-state values).
+      // We do NOT use the immutable snapshot reason to keep reporting aligned with edits.
+      reasonCode:       logEntry ? (logEntry.cancellationReasonCode  || '') : '',
+      reasonText:       logEntry ? (logEntry.cancellationReasonText  || '') : '',
+      callsign:         m.callsignCode || m.callsignLabel || '',
+      registration:     m.registration || '',
+      aircraftType:     m.type || '',
+      captain:          m.captain || '',
+      depAd:            m.depAd  || '',
+      arrAd:            m.arrAd  || '',
+      dof:              m.dof    || '',
+      rules:            m.rules  || '',
+      depPlanned:       m.depPlanned || '',
+      arrPlanned:       m.arrPlanned || '',
+    };
+  });
+
+  // Date-range filter.
+  // Rows with no cancelDate are included conservatively (no date to exclude on).
+  const filtered = rows.filter(r => {
+    if (!r.cancelDate) return true;
+    if (startDate && r.cancelDate < startDate) return false;
+    if (endDate   && r.cancelDate > endDate)   return false;
+    return true;
+  });
+
+  const total    = filtered.length;
+  const noReason = filtered.filter(r => !r.reasonCode).length;
+
+  // Counts by reason code.
+  const byReason = {};
+  for (const code of CANCELLATION_REASON_ORDER) {
+    byReason[code] = 0;
+  }
+  for (const r of filtered) {
+    const key = CANCELLATION_REASON_ORDER.includes(r.reasonCode) ? r.reasonCode : '';
+    byReason[key]++;
+  }
+
+  // Counts by flight type.
+  const byFlightType = { DEP: 0, ARR: 0, LOC: 0, OVR: 0, '': 0 };
+  for (const r of filtered) {
+    const key = FLIGHT_TYPE_ORDER.includes(r.flightType) ? r.flightType : '';
+    byFlightType[key]++;
+  }
+
+  // Ranked tables — blank/null values grouped as "unknown" and listed last.
+  function buildRanked(rows, field, unknownLabel) {
+    const counts = {};
+    let unknownCount = 0;
+    for (const r of rows) {
+      const val = r[field] ? r[field].trim() : '';
+      if (!val) {
+        unknownCount++;
+      } else {
+        counts[val] = (counts[val] || 0) + 1;
+      }
+    }
+    const ranked = Object.entries(counts)
+      .map(([name, count]) => ({ name, count, isUnknown: false }))
+      .sort((a, b) => b.count - a.count);
+    if (unknownCount > 0) {
+      ranked.push({ name: unknownLabel, count: unknownCount, isUnknown: true });
+    }
+    return ranked;
+  }
+
+  const ranked = {
+    // Aircraft type — reliable when operators enter registration from VKB
+    byAircraftType: buildRanked(filtered, 'aircraftType', 'Type not recorded'),
+    // Registration — reliable when populated
+    byRegistration: buildRanked(filtered, 'registration', 'Reg not recorded'),
+    // Captain / PIC — only as reliable as the operator's input
+    byCaptain:      buildRanked(filtered, 'captain',      'Captain not recorded'),
+    // Departure aerodrome
+    byDepAd:        buildRanked(filtered, 'depAd',        'Dep AD not recorded'),
+    // Arrival aerodrome (ARR and LOC movements primarily)
+    byArrAd:        buildRanked(filtered, 'arrAd',        'Arr AD not recorded'),
+  };
+
+  return { rows: filtered, total, noReason, byReason, byFlightType, ranked, startDate, endDate };
+}
+
+/**
+ * Export the cancellation report row-level dataset as a CSV file.
+ *
+ * Includes current movement fields and current-state cancellation log metadata.
+ * Does NOT include the immutable snapshot fields to keep the export aligned with
+ * current-state reporting semantics.
+ *
+ * @param {Array}  rows     - Rows from computeCancellationReport().rows
+ * @param {string} filename - Download filename
+ */
+export function exportCancellationsToCSV(rows, filename) {
+  const BOM = '\uFEFF';  // UTF-8 BOM for Excel compatibility
+
+  const headers = [
+    'Log ID', 'Source Movement ID', 'Flight Type', 'Status',
+    'Cancelled At (UTC)', 'Cancel Date', 'Reason Code', 'Reason Text',
+    'Callsign', 'Registration', 'A/C Type', 'Captain',
+    'Dep AD', 'Arr AD', 'DOF', 'Rules', 'ETD (Planned)', 'ETA (Planned)',
+  ];
+
+  function csvEscape(val) {
+    const s = (val == null) ? '' : String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  const lines = [headers.map(csvEscape).join(',')];
+
+  for (const r of rows) {
+    const row = [
+      r.logId,
+      r.sourceMovementId,
+      r.flightType,
+      r.status,
+      r.cancelledAt,
+      r.cancelDate,
+      r.reasonCode,
+      r.reasonText,
+      r.callsign,
+      r.registration,
+      r.aircraftType,
+      r.captain,
+      r.depAd,
+      r.arrAd,
+      r.dof,
+      r.rules,
+      r.depPlanned,
+      r.arrPlanned,
+    ];
+    lines.push(row.map(csvEscape).join(','));
+  }
+
+  const csv = BOM + lines.join('\r\n');
+  downloadFile(csv, filename, 'text/csv;charset=utf-8;');
 }

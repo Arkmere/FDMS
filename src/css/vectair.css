@@ -1879,6 +1879,143 @@ tr.strip.ft-ovr > td {
 }
 
 /* ============================================
+   Cancellation Report (Ticket 6b)
+   ============================================ */
+
+.cancel-report-header {
+  margin-bottom: 16px;
+}
+
+.cancel-report-subtitle {
+  color: #666;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.cancel-datasource-note {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+}
+
+.cancel-filter-note {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  align-self: center;
+}
+
+.cancel-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--va-text-main);
+  margin: 24px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--va-border);
+}
+
+/* Breakdown and ranked tables */
+.cancel-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.cancel-breakdown-table th,
+.cancel-breakdown-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--va-border);
+  text-align: left;
+}
+
+.cancel-breakdown-table th {
+  background: #f5f6f7;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--va-text-soft);
+}
+
+.cancel-breakdown-table tr:hover {
+  background: #f9f9f9;
+}
+
+.cancel-breakdown-table tfoot .cancel-total-row td {
+  border-top: 2px solid var(--va-accent-brown);
+  background: #f0f0f0;
+  font-weight: 700;
+}
+
+/* Unassigned / unknown rows */
+.cancel-row-unassigned td {
+  color: #999;
+}
+
+/* Numeric cells in breakdown/ranked tables */
+.cancel-num-cell {
+  text-align: center;
+  font-family: 'Courier New', monospace;
+}
+
+/* Row-level detail table */
+.cancel-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.cancel-detail-table th,
+.cancel-detail-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--va-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.cancel-detail-table th {
+  background: #f5f6f7;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--va-text-soft);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.cancel-detail-table tr:hover {
+  background: #f9f9f9;
+}
+
+.cancel-date-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cancel-note-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #666;
+}
+
+.cancel-unassigned-label {
+  color: #bbb;
+}
+
+.cancel-no-data {
+  color: #999;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* ============================================
    Timeline Component
    ============================================ */
 .timeline-container {
