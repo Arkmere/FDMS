@@ -5786,6 +5786,7 @@ function openEditMovementModal(m) {
 
     renderLiveBoard();
     renderHistoryBoard();
+    renderCancelledSortiesLog();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
     showToast("Movement updated successfully", 'success');
@@ -5969,6 +5970,7 @@ function openEditMovementModal(m) {
     cascadeFormationStatus(m.id, "COMPLETED");
     renderLiveBoard();
     renderHistoryBoard();
+    renderCancelledSortiesLog();
     if (window.updateDailyStats) window.updateDailyStats();
     if (window.updateFisCounters) window.updateFisCounters();
     const completionMsg = isAbnormal
@@ -7191,9 +7193,83 @@ function sortCancelledSorties(entries, col, dir) {
 }
 
 /**
+ * Update the mutable cancellation reason/note on a log entry.
+ * Does NOT touch the immutable snapshot field.
+ * @param {string} entryId
+ * @param {string} reasonCode
+ * @param {string} reasonText
+ */
+function updateCancelledSortieReason(entryId, reasonCode, reasonText) {
+  const list = getCancelledSorties();
+  const idx = list.findIndex(e => e.id === entryId);
+  if (idx < 0) return;
+  list[idx].cancellationReasonCode = reasonCode;
+  list[idx].cancellationReasonText = reasonText;
+  saveCancelledSorties(list);
+}
+
+/**
+ * Open a focused modal to edit the cancellation reason/note on a log entry.
+ * Updates the mutable top-level fields on the entry; snapshot remains immutable.
+ * @param {Object} entry - cancelled sortie log entry
+ */
+function openEditCancellationReasonModal(entry) {
+  const s = entry.snapshot || {};
+  const callsign = escapeHtml(s.callsignCode || '—');
+
+  const optionsHtml = CANCELLATION_REASON_CODES.map(r =>
+    `<option value="${escapeHtml(r.code)}" ${entry.cancellationReasonCode === r.code ? 'selected' : ''}>${escapeHtml(r.label)}</option>`
+  ).join('');
+
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">Edit Cancellation Reason — ${callsign}</div>
+      <div class="modal-header-buttons">
+        <button class="btn btn-ghost js-minimize-modal" type="button">−</button>
+        <button class="btn btn-ghost js-close-modal" type="button">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px; color:#666; margin:0 0 12px;">
+        Updates the current-state cancellation reason for this log entry.
+        The original strip snapshot at the moment of cancellation is preserved separately.
+      </p>
+      <div class="form-group">
+        <label class="control-label" for="editCancelReasonCode">Reason</label>
+        <select id="editCancelReasonCode" class="field field-select">
+          ${optionsHtml}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="control-label" for="editCancelReasonNote">Note</label>
+        <textarea id="editCancelReasonNote" class="field field-textarea" rows="3" maxlength="300" placeholder="Free text note…">${escapeHtml(entry.cancellationReasonText || '')}</textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary js-save-cancel-reason" type="button">Save Reason</button>
+      <button class="btn btn-secondary js-close-modal" type="button">Cancel</button>
+    </div>
+  `);
+
+  const root = byId("modalRoot");
+  const saveBtn = root && root.querySelector(".js-save-cancel-reason");
+
+  safeOn(saveBtn, "click", () => {
+    const newCode = (root.querySelector("#editCancelReasonCode") || {}).value || '';
+    const newText = ((root.querySelector("#editCancelReasonNote") || {}).value || '').trim();
+    updateCancelledSortieReason(entry.id, newCode, newText);
+    closeActiveModal();
+    renderCancelledSortiesLog();
+    showToast("Cancellation reason updated", 'success');
+  });
+}
+
+/**
  * Render the Cancelled Sorties Log table.
- * Applies current sort column, direction, and text filter.
- * Inserts rows into #cancelledSortiesBody.
+ * Applies current sort, direction, and text filter.
+ * Row display fields use the current movement record where available;
+ * falls back to the immutable snapshot when the source movement is gone.
+ * The snapshot section in the expanded detail always shows historical state.
  */
 export function renderCancelledSortiesLog() {
   const tbody = byId("cancelledSortiesBody");
@@ -7202,18 +7278,22 @@ export function renderCancelledSortiesLog() {
   tbody.innerHTML = "";
 
   let entries = getCancelledSorties();
+  // Fetch current movements once for O(n) display resolution
+  const allMovements = getMovements();
 
-  // Apply text filter
+  // Apply text filter — searches both current movement fields and snapshot
   const filterTerm = _cancelLogFilter.trim().toLowerCase();
   if (filterTerm) {
     entries = entries.filter(e => {
       const s = e.snapshot || {};
+      const cur = allMovements.find(m => m.id === e.sourceMovementId);
+      const d = cur || s;
       return (
-        (s.callsignCode || '').toLowerCase().includes(filterTerm) ||
-        (s.registration || '').toLowerCase().includes(filterTerm) ||
-        (s.type || '').toLowerCase().includes(filterTerm) ||
-        (s.depAd || '').toLowerCase().includes(filterTerm) ||
-        (s.arrAd || '').toLowerCase().includes(filterTerm) ||
+        (d.callsignCode || s.callsignCode || '').toLowerCase().includes(filterTerm) ||
+        (d.registration || s.registration || '').toLowerCase().includes(filterTerm) ||
+        (d.type || s.type || '').toLowerCase().includes(filterTerm) ||
+        (d.depAd || s.depAd || '').toLowerCase().includes(filterTerm) ||
+        (d.arrAd || s.arrAd || '').toLowerCase().includes(filterTerm) ||
         (e.cancellationReasonCode || '').toLowerCase().includes(filterTerm) ||
         cancellationReasonLabel(e.cancellationReasonCode).toLowerCase().includes(filterTerm) ||
         (e.cancellationReasonText || '').toLowerCase().includes(filterTerm)
@@ -7246,40 +7326,90 @@ export function renderCancelledSortiesLog() {
     return;
   }
 
+  const menuItemStyle = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; font-size: 14px; white-space: nowrap;';
+  const menuItemHover = 'onmouseover="this.style.backgroundColor=\'#f0f0f0\'" onmouseout="this.style.backgroundColor=\'transparent\'"';
+
   for (const entry of sorted) {
     const s = entry.snapshot || {};
-    const ft = (s.flightType || '').toUpperCase();
-    const callsign = escapeHtml(s.callsignCode || '—');
-    const reg = escapeHtml(s.registration || '—');
-    const type = escapeHtml(s.type || '—');
-    const depAd = escapeHtml(s.depAd || '—');
-    const arrAd = escapeHtml(s.arrAd || '—');
+    // Current movement for display (falls back to snapshot if movement was deleted)
+    const currentMovement = allMovements.find(m => m.id === entry.sourceMovementId) || null;
+    const d = currentMovement || s;
+
+    const ft = escapeHtml((d.flightType || s.flightType || '').toUpperCase());
+    const callsign = escapeHtml(d.callsignCode || s.callsignCode || '—');
+    const reg = escapeHtml(d.registration || s.registration || '—');
+    const acType = escapeHtml(d.type || s.type || '—');
+    const depAd = escapeHtml(d.depAd || s.depAd || '—');
+    const arrAd = escapeHtml(d.arrAd || s.arrAd || '—');
+    // statusAtCancel always from snapshot — it records the status AT the moment of cancellation
     const statusAtCancel = escapeHtml(s.status || '—');
+    // Reason/note from log entry (current-state, mutable)
     const reasonCode = escapeHtml(entry.cancellationReasonCode || '');
     const reasonLabel = escapeHtml(cancellationReasonLabel(entry.cancellationReasonCode));
     const notePreview = escapeHtml((entry.cancellationReasonText || '').slice(0, 60));
     const cancelledAt = entry.cancelledAt ? escapeHtml(entry.cancelledAt.replace('T', ' ').slice(0, 16)) + 'Z' : '—';
 
     const isExpanded = _cancelLogExpandedId === entry.id;
+    const editStripDisabled = currentMovement ? '' : 'disabled title="Source strip no longer exists"';
 
     const tr = document.createElement("tr");
     tr.className = "cancelled-log-row";
     tr.dataset.id = entry.id;
 
     tr.innerHTML = `
-      <td><span class="badge badge-type">${escapeHtml(ft)}</span></td>
+      <td><span class="badge badge-type">${ft}</span></td>
       <td style="font-size:11px; white-space:nowrap;">${cancelledAt}</td>
       <td>${callsign}</td>
       <td><span style="font-size:12px;">${reg}</span></td>
-      <td><span style="font-size:12px;">${type}</span></td>
+      <td><span style="font-size:12px;">${acType}</span></td>
       <td>${depAd}</td>
       <td>${arrAd}</td>
       <td><span class="badge badge-cancelled" style="font-size:10px;">${statusAtCancel}</span></td>
       <td>${reasonCode ? `<span class="badge badge-reason" title="${reasonLabel}">${reasonCode}</span>` : '<span style="color:#999;font-size:11px;">—</span>'}</td>
       <td style="font-size:11px; color:#666; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(entry.cancellationReasonText || '')}">${notePreview || '<span style="color:#bbb;">—</span>'}</td>
-      <td><button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle snapshot">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button></td>
+      <td>
+        <div style="display:flex; flex-direction:column; gap:2px; align-items:flex-end;">
+          <div style="position:relative; display:inline-block; z-index:1;">
+            <button class="small-btn js-cancel-log-edit-dropdown" type="button" aria-label="Edit menu">Edit ▾</button>
+            <div class="js-cancel-log-edit-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:9999; min-width:130px; margin-top:2px;">
+              <button class="js-cancel-log-edit-strip" type="button" style="${menuItemStyle}" ${editStripDisabled} ${menuItemHover}>Edit Strip</button>
+              <button class="js-cancel-log-edit-reason" type="button" style="${menuItemStyle}" ${menuItemHover}>Edit Reason</button>
+            </div>
+          </div>
+          <button class="small-btn js-cancel-log-toggle" type="button" aria-label="Toggle detail">${isExpanded ? 'Hide ▲' : 'Detail ▾'}</button>
+        </div>
+      </td>
     `;
 
+    // Edit ▾ dropdown (portal-based to escape overflow)
+    const editDropdownBtn = tr.querySelector(".js-cancel-log-edit-dropdown");
+    const editMenu = tr.querySelector(".js-cancel-log-edit-menu");
+    safeOn(editDropdownBtn, "click", (e) => {
+      e.stopPropagation();
+      if (_portalMenu === editMenu) {
+        closeDropdownPortal();
+      } else {
+        openDropdownPortal(editMenu, editDropdownBtn);
+      }
+    });
+
+    // Edit Strip
+    const editStripBtn = tr.querySelector(".js-cancel-log-edit-strip");
+    safeOn(editStripBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      if (currentMovement) openEditMovementModal(currentMovement);
+    });
+
+    // Edit Reason
+    const editReasonBtn = tr.querySelector(".js-cancel-log-edit-reason");
+    safeOn(editReasonBtn, "click", (e) => {
+      e.stopPropagation();
+      closeDropdownPortal();
+      openEditCancellationReasonModal(entry);
+    });
+
+    // Detail toggle
     const toggleBtn = tr.querySelector(".js-cancel-log-toggle");
     safeOn(toggleBtn, "click", () => {
       _cancelLogExpandedId = isExpanded ? null : entry.id;
@@ -7295,18 +7425,36 @@ export function renderCancelledSortiesLog() {
       const note = escapeHtml(entry.cancellationReasonText || '');
       const bookingId = entry.bookingSnapshot ? escapeHtml(String(entry.bookingSnapshot.bookingId)) : '—';
 
+      // Current strip state section (only when source movement still exists)
+      const currentSection = currentMovement ? `
+        <div class="cancelled-log-detail-section">
+          <strong>Current strip state</strong>
+          <div>Callsign: ${escapeHtml(currentMovement.callsignCode || '—')} / ${escapeHtml(currentMovement.callsignVoice || '—')}</div>
+          <div>Reg: ${escapeHtml(currentMovement.registration || '—')} · Type: ${escapeHtml(currentMovement.type || '—')} · WTC: ${escapeHtml(currentMovement.wtc || '—')}</div>
+          <div>Route: ${escapeHtml(currentMovement.depAd || '—')} → ${escapeHtml(currentMovement.arrAd || '—')}</div>
+          <div>DOF: ${escapeHtml(currentMovement.dof || '—')} · Rules: ${escapeHtml(currentMovement.rules || '—')}</div>
+          <div>ETD: ${escapeHtml(currentMovement.depPlanned || '—')} · ATD: ${escapeHtml(currentMovement.depActual || '—')} · ETA: ${escapeHtml(currentMovement.arrPlanned || '—')} · ATA: ${escapeHtml(currentMovement.arrActual || '—')}</div>
+          <div>Remarks: ${escapeHtml(currentMovement.remarks || '—')}</div>
+        </div>` : `
+        <div class="cancelled-log-detail-section" style="color:#999;">
+          <strong>Current strip state</strong>
+          <div><em>Source strip no longer exists (hard deleted)</em></div>
+        </div>`;
+
       detailTr.innerHTML = `
         <td colspan="11" class="cancelled-log-detail-cell">
           <div class="cancelled-log-detail">
             <div class="cancelled-log-detail-section">
-              <strong>Cancellation</strong>
+              <strong>Cancellation record</strong>
               <div>Logged at: ${escapeHtml(entry.cancelledAt || '—')}</div>
               <div>Reason: ${reasonCode ? `${reasonCode} — ${reasonLabel}` : '<em>none</em>'}</div>
               <div>Note: ${note || '<em>none</em>'}</div>
               <div>Booking ID at cancel: ${bookingId}</div>
             </div>
+            ${currentSection}
             <div class="cancelled-log-detail-section">
-              <strong>Strip snapshot</strong>
+              <strong>Snapshot at cancellation</strong>
+              <div style="font-size:10px; color:#999; margin-bottom:3px;">Historical record — not edited</div>
               <div>Callsign: ${escapeHtml(snap.callsignCode || '—')} / ${escapeHtml(snap.callsignVoice || '—')}</div>
               <div>Reg: ${escapeHtml(snap.registration || '—')} · Type: ${escapeHtml(snap.type || '—')} · WTC: ${escapeHtml(snap.wtc || '—')}</div>
               <div>Route: ${escapeHtml(snap.depAd || '—')} → ${escapeHtml(snap.arrAd || '—')}</div>

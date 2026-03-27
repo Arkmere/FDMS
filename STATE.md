@@ -1,6 +1,6 @@
 # STATE.md — Vectair FDMS Lite
 
-Last updated: 2026-03-26 (Europe/London) — Latest completed sprint: Ticket 6a (post-10.1) — Cancelled Sorties Log UX / History IA refinement
+Last updated: 2026-03-27 (Europe/London) — Latest completed sprint: Ticket 6a.1 (post-10.1) — Cancelled Sorties full editability
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1286,15 +1286,72 @@ Root cause: `.hidden` is not a global utility class in this codebase — each co
 
 ---
 
+### 8.29 Ticket 6a.1 (post-10.1) — Cancelled Sorties full editability
+
+**Outcome:** complete
+
+**Summary of changes:**
+
+Full editability for cancelled strips from the Cancelled Sorties page. Each log row now exposes an **Edit ▾** portal-dropdown button with two actions:
+
+- **Edit Strip** — opens the existing `openEditMovementModal()` for the underlying movement record. Disabled (greyed out) if the source movement has been hard-deleted since cancellation. After saving, `renderCancelledSortiesLog()` is called so the row reflects the updated movement state immediately.
+- **Edit Reason** — opens a new focused modal (`openEditCancellationReasonModal`) that edits only the mutable `cancellationReasonCode` and `cancellationReasonText` top-level fields on the log entry. The immutable `snapshot` is not touched.
+
+**Current-state vs historical-snapshot semantics:**
+
+The cancelled-sorties log entry has two distinct layers:
+
+| Layer | Fields | Mutability |
+|---|---|---|
+| Mutable top-level | `cancellationReasonCode`, `cancellationReasonText` | Editable via "Edit Reason" |
+| Immutable snapshot | `entry.snapshot.*` | Never touched after creation |
+
+Row display uses the **current movement record** (`allMovements.find(m => m.id === entry.sourceMovementId)`) for all display fields (callsign, reg, type, depAd, arrAd, etc.), falling back to `entry.snapshot` only if the source movement has been hard-deleted. This ensures edited strips are immediately reflected without having to update the log entry.
+
+The expanded detail panel distinguishes three sections:
+1. **Cancellation record** — log metadata: cancellation time, reason code/text, log entry ID, source movement ID.
+2. **Current strip state** — live fields from the current movement record (or "Movement record deleted" if absent).
+3. **Snapshot at cancellation** — the immutable deep-copy taken at the moment of cancellation, labelled "Historical record — not edited".
+
+**New helper: `updateCancelledSortieReason(entryId, reasonCode, reasonText)`**
+
+Mutates only `cancellationReasonCode` and `cancellationReasonText` on a log entry by ID. Reads the full list, finds by `entry.id`, updates the two mutable fields, writes back. The `snapshot` sub-object is never touched.
+
+**`openEditMovementModal()` save-handler integration:**
+
+Both the `.js-save-edit` and `.js-save-complete-edit` handlers now call `renderCancelledSortiesLog()` after `renderHistoryBoard()`, so any strip edit (partial or complete) is immediately reflected in the Cancelled Sorties view.
+
+**Files changed:**
+
+- `src/js/ui_liveboard.js` — new `updateCancelledSortieReason()`, new `openEditCancellationReasonModal()`, full replacement of `renderCancelledSortiesLog()` (current-state display, Edit ▾ portal dropdown, three-section detail expand); both save handlers in `openEditMovementModal` updated.
+
+**No-drift confirmations:**
+
+- Live Board stats: unchanged — event-based, EGOW-realised.
+- Monthly Return / Dashboard / Insights: unchanged — nominal figures only.
+- Hard delete: unchanged — distinct from cancel, no interaction.
+- Booking reconciliation: unchanged.
+- Timing/inline-time cluster: unchanged.
+- Movement History subpage: unchanged — COMPLETED-only filter retained.
+- Immutable snapshot contract: preserved — `entry.snapshot` is never written after initial `appendCancelledSortie`.
+
+**Known limitations / not in scope:**
+
+- Cancellation analytics / reason breakdown — not in v1 scope.
+- Undo/restore from cancelled log — not implemented.
+- Bulk edit of cancellation reasons — not in scope.
+
+---
+
 ## 9) Current status summary
 
 ### 9.1 What is true now
 
-As of 2026-03-26:
+As of 2026-03-27:
 
 * FDMS Lite remains on the approved desktop-local v1 path
-* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, and Ticket 6a are all landed
-* Ticket 6a (post-10.1) is the latest completed work
+* Live Board, booking sync, admin, formations, timing/duration, reconciliation surfacing, Sprint 9, Post-Sprint-9 correction pass, Sprint 10, Sprint 10.1, Ticket 1, Ticket 2, Ticket 3, Ticket 3a, Ticket 2b, Ticket 4, Ticket 4a, Ticket 5, Ticket 6, Ticket 6a, and Ticket 6a.1 are all landed
+* Ticket 6a.1 (post-10.1) is the latest completed work
 
 ---
 
