@@ -1280,6 +1280,10 @@ Module-level state: `_cancelLogSortColumn` (default `cancelledAt`), `_cancelLogS
 - Cancellation analytics / reason breakdown — not in v1 scope
 - Undo/restore from cancelled log — not implemented
 
+**Corrective patch (Ticket 6a-fix):**
+
+Root cause: `.hidden` is not a global utility class in this codebase — each component scopes its own `.X.hidden { display: none; }` rule (`.tab-panel.hidden`, `.admin-section.hidden`, etc.). `.history-subpage.hidden` was missing this scoped rule, so both subpages remained visible despite the JS correctly toggling the class. Fix: one CSS rule added — `.history-subpage.hidden { display: none; }` in `vectair.css`. No JS, HTML, or data-model changes required.
+
 ---
 
 ## 9) Current status summary
