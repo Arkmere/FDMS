@@ -1,6 +1,6 @@
-# STATE.md — Vectair FDMS Lite
+# STATE.md — Vectair Flite
 
-Last updated: 2026-03-27 (Europe/London) — Current baseline: Ticket 6b Cancellation / Lifecycle Reporting delivered
+Last updated: 2026-03-28 (Europe/London) — Current baseline: Ticket 6b Cancellation / Lifecycle Reporting delivered; roadmap reclassified for V1 / V2 / rolling updates
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -8,18 +8,40 @@ This file is the shared source of truth for the Manager–Worker workflow:
 - **Solutions Architect & QA Lead:** ChatGPT
 - **Production Engineer:** Claude Code
 
-This ledger exists to prevent drift, preserve continuity across chats/sessions, and provide an audit-ready summary of what FDMS Lite is, how it behaves, what has been completed, what is deliberately deferred, and what the next recommended tranche should be.
+This ledger exists to prevent drift, preserve continuity across chats/sessions, and provide an audit-ready summary of what **Vectair Flite** is, how it behaves, what has been completed, what is deliberately deferred, what is in V1 scope, what is in V2 scope, and what the next recommended workstreams should be.
 
 ---
 
-## 0) Delivery model / runtime model (NO DRIFT)
+## Naming transition (NO DRIFT)
+
+The product is now branded **Vectair Flite** (“Flite”).
+
+Earlier development material may still refer to the same application as:
+
+- **FDMS**
+- **FDMS Lite**
+- **Vectair FDMS**
+
+These older terms refer to the same product unless explicitly stated otherwise. Going forward, use **Vectair Flite** or **Flite** wherever possible.
+
+Reason for the spelling:
+
+- **Flite** is a deliberate contraction of **FDMS + light**
+- it preserves the aviation theme
+- it reduces confusion with the literal airborne activity implied by “Flight”
+
+Do not casually revert to the old product naming in new tickets, documentation, or summaries.
+
+---
+
+## 0) Delivery model / runtime model (CURRENT BASELINE, NO DRIFT)
 
 ### 0.1 Product definition
 
-**FDMS Lite is NOT a website and NOT a static web app.**  
-**FDMS Lite is a standalone desktop-local application** for Windows and Linux that uses **HTML/CSS/JS internally** for its UI.
+**Vectair Flite is NOT a website and NOT a hosted web app.**  
+**Vectair Flite is a local flight-data management application** for Windows and Linux.
 
-During development and QA, the UI is served locally from `src/` via a lightweight local server harness such as:
+Current development and QA builds use **HTML/CSS/JS internally** for the UI and are run through a lightweight local harness such as:
 
 ```text
 git pull
@@ -32,51 +54,67 @@ That local server is a development/runtime convenience only and must not be desc
 Development OS: Windows
 Operational target: Linux
 Constraint: both must remain supported
-0.3 Release-v1 workflow
+0.3 Approved current development workflow
 
-The current branch / PR / local-run workflow is approved for Release v1:
+The current branch / PR / local-run workflow remains approved during development:
 
 code changes via git branches + PRs
 local execution via local harness
 manual verification on Stuart’s Windows environment is the primary acceptance path
 Playwright and similar harnesses are developer QA tooling, not end-user runtime requirements
-0.4 Explicitly out of scope unless separately scheduled
+0.4 Productization transition note
 
-The following are not part of Release v1 unless explicitly promoted into a dedicated workstream:
+Historically, packaging / installers / updater mechanisms were treated as out of scope for the lightweight browser-era development model.
 
-packaging / installers
-desktop wrapper work
-auto-update mechanisms
-hosted/web deployment path
+That is no longer the current roadmap direction.
 
-Any future update mechanism should be based on versioned release artifacts, not “pull latest main and restart”.
+They are now promoted into a dedicated Desktop Productization Workstream (V1) and must be treated as a major V1 track rather than as a casual feature add-on.
 
 0.5 Drift guardrails
 
 Do not:
 
-describe FDMS Lite as a website or web app
+describe Flite as a website or hosted web app
 treat the local harness as hosting
-introduce packaging/updater scope into normal feature sprints
-reinterpret desktop-local behavior as browser-product behavior
+confuse the current development harness with the intended installed product
+collapse the distinction between the current browser-era runtime and the intended installed desktop product
+casually reintroduce old FDMS naming in new baselines or docs
 1) Product goal and system architecture
 1.1 Product goal
 
-FDMS Lite is a lightweight standalone ATC / ops support tool for local flight-data workflow. Core functions:
+Vectair Flite is a lightweight local ATC / ops support tool for flight-data workflow.
+
+Core functions currently include or target:
 
 Live Board for movement strips
 booking workflow that can create and stay linked to strips
 calendar for bookings and general events
 admin / config tooling
-local persistence via browser storage in the desktop-local runtime
-1.2 Runtime / storage model
+reporting and lifecycle handling
+local persistence in current development builds
+future installed-desktop productization for V1
+1.2 Runtime / storage model (current development baseline)
 single-client local state model
-persistence via localStorage
-no backend in current v1 scope
+persistence via localStorage in current development/runtime model
+no backend in current baseline
 no multi-user concurrency model
-1.3 Core UI / data modules
+1.3 Target V1 product direction
 
-The codebase is organized around these major responsibilities:
+V1 is no longer just “current local harness, but tidier”.
+
+V1 now includes a dedicated Desktop Productization Workstream targeting a proper installed local program, including:
+
+installer
+auto-update capability
+signed builds
+robust local file/database layer
+OS integration
+better crash/error logging
+cross-platform packaging discipline
+clean migration from browser/localStorage-era state into app-managed state
+1.4 Core UI / data modules
+
+The current codebase remains organized around these major responsibilities:
 
 src/index.html — shell / tab structure / panels
 src/js/app.js — boot / wiring / tab init / high-level rendering hooks
@@ -88,7 +126,7 @@ src/css/vectair.css — styling
 2) Canonical data / behavior invariants
 2.1 Reporting split (intentional and settled)
 
-Two reporting models exist and must remain distinct unless a dedicated sprint changes them:
+Two reporting models exist and must remain distinct unless a dedicated sprint changes them.
 
 Live Board daily stats
 
@@ -145,10 +183,10 @@ detect conflicts if multiple strips claim the same booking
 
 Engineering rules:
 
-All modal close paths must call closeActiveModal()
-All modal open paths must call closeActiveModal() before opening a new modal
-Inline-edit Enter / Escape handlers must stop propagation appropriately
-No ad-hoc modal teardown bypassing lifecycle helpers
+all modal close paths must call closeActiveModal()
+all modal open paths must call closeActiveModal() before opening a new modal
+inline-edit Enter / Escape handlers must stop propagation appropriately
+no ad-hoc modal teardown bypassing lifecycle helpers
 2.5 Scope boundaries preserved so far
 
 The following behaviors must not be changed casually because multiple tickets now depend on them:
@@ -156,9 +194,9 @@ The following behaviors must not be changed casually because multiple tickets no
 OVR remains excluded from daily movement totals
 ARR Active remains status-only and must not fabricate ATD
 booking reconciliation policy is stable
-timing / duration logic is now integrated across create / edit / duplicate / lifecycle flows
+timing / duration logic is integrated across create / edit / duplicate / lifecycle flows
 formation WTC semantics are defined and implemented
-current-state lifecycle views now coexist with retained audit/lifecycle records
+current-state lifecycle views coexist with retained audit/lifecycle records
 3) Stable implemented behavior (current baseline)
 
 The following capabilities are considered implemented and broadly stable unless a new ticket explicitly changes them.
@@ -170,13 +208,13 @@ inline editing hardened for canonical time fields and required-field safety
 status transitions and counter effects have had dedicated audit passes
 timing / inline-time normalization cluster is complete
 Active / Complete semantics by movement type are settled
-hard delete as immediate annihilation is no longer the product model; deletion now routes through soft-delete retention (see lifecycle section below)
+hard delete as immediate annihilation is no longer the product model; deletion now routes through soft-delete retention
 3.2 Booking ↔ strip sync
 booking create/update can create or update linked strips
 linked propagation behavior exists
 reconciliation runs at bootstrap
 reconciliation is surfaced visibly through the Integrity banner
-reconciliation policy itself remains unchanged
+reconciliation policy remains unchanged
 3.3 Calendar
 month / week / year implemented
 general calendar create / edit / delete supported
@@ -186,21 +224,22 @@ dirty-state save / discard where appropriate
 restore / export / reset hardening present
 backup metadata envelope and restore format detection in place
 3.5 Formations
+
+Currently implemented:
+
 formation create / edit / remove
 Live Board formation badge and expanded details
 per-element editing
 inheritance semantics
 WTC current / max semantics implemented
 
-Formations are usable but still have a continuation backlog (see deferred section).
+Formations are usable, but formation continuation / expansion remains a V1 workstream.
 
 4) Settled post-10.1 timing / interaction baseline
 
 The following cluster is complete and should not be casually reopened unless Stuart reports a regression.
 
 4.1 Sprint 10 — timing normalization
-
-The system now has a more centralized resolved timing model.
 
 Intent:
 
@@ -226,15 +265,12 @@ ARR activation no longer fabricates ATD
 
 Delivered/fixed:
 
-Activate:
-
+Activate
 DEP → stamps ATD if absent
 LOC → stamps ATD if absent
 OVR → stamps ACT/AOFT if absent
 ARR → status-only; no ATD fabrication
-
-Complete:
-
+Complete
 DEP → no new end-side time
 LOC → stamp ATA only if absent
 ARR → stamp ATA only if absent
@@ -301,7 +337,7 @@ manual inline ATA and ALFT survive Complete correctly
 OVR terminology normalized to EOFT / AOFT and ELFT / ALFT where applicable
 5) Lifecycle model (current accepted baseline)
 
-The lifecycle tranche is now established and must be treated as the current product model.
+The lifecycle tranche is established and must be treated as the current product model.
 
 5.1 Governing rule: current-state truth for operational reports
 
@@ -315,7 +351,7 @@ if currently CANCELLED → Cancelled Sorties / cancellation reporting
 if soft-deleted → Deleted Strips only, excluded from ordinary operational reporting
 if purged → nowhere
 
-Historical lifecycle/audit data may still be retained, but it must not override current-state operational views.
+Historical lifecycle/audit data may still be retained, but must not override current-state operational views.
 
 5.2 History information architecture
 
@@ -381,7 +417,7 @@ Semantics:
 the underlying cancelled movement is fully editable
 current-state cancellation reason/note may be updated later
 historical cancellation snapshot remains preserved
-current-state reporting should reflect the edited current cancellation record, not only the original first-write snapshot
+current-state reporting reflects the edited current cancellation record, not only the original first-write snapshot
 
 Expanded detail distinguishes:
 
@@ -480,7 +516,7 @@ A row belongs in Cancelled Sorties only if:
 
 sourceMovementId resolves to an existing movement
 that movement currently exists in getMovements()
-and that movement’s current status === 'CANCELLED'
+that movement’s current status === CANCELLED
 
 Therefore:
 
@@ -514,43 +550,48 @@ Outcome: complete
 
 Delivered:
 
-A dedicated Cancellation Report view inside the Reports tab, consistent with existing Reports IA.
-Date-range filter (start date / end date) with sensible 30-day default on load.
-Summary KPI cards: total cancellations, no-reason-assigned count, most common reason, most cancelled movement type.
-Reason code breakdown table: OPS / WX / TECH / ATC / ADMIN / CREW / OTHER / Unassigned — counts and percentages.
-Movement type breakdown table: DEP / ARR / LOC / OVR — counts and percentages.
-Ranked "most cancelled" tables: Aircraft Type, Registration, Captain/PIC, Departure Aerodrome, Arrival Aerodrome.
-Row-level detail table showing all current-state cancelled records in range.
-Export Cancellations CSV button: row-level export of the cancellation dataset with all key fields.
+dedicated Cancellation Report view inside the Reports tab, consistent with existing Reports IA
+date-range filter (start date / end date) with sensible 30-day default on load
+summary KPI cards:
+total cancellations
+no-reason-assigned count
+most common reason
+most cancelled movement type
+reason code breakdown table:
+OPS / WX / TECH / ATC / ADMIN / CREW / OTHER / Unassigned
+counts and percentages
+movement type breakdown table:
+DEP / ARR / LOC / OVR
+counts and percentages
+ranked “most cancelled” tables:
+Aircraft Type
+Registration
+Captain/PIC
+Departure Aerodrome
+Arrival Aerodrome
+row-level detail table showing all current-state cancelled records in range
+Export Cancellations CSV button: row-level export of the cancellation dataset with all key fields
 
 Files changed:
 
-src/js/reporting.js — added getCancelledSorties import; added computeCancellationReport(), exportCancellationsToCSV(), and exported CANCELLATION_REASON_ORDER / CANCELLATION_REASON_LABELS / FLIGHT_TYPE_ORDER / FLIGHT_TYPE_LABELS constants
-src/js/ui_reports.js — added imports, cancelStartDate/cancelEndDate state (default: last 30 days), wireReportsControls extensions, renderReports panel show/hide logic, renderCancellationReport(), formatISOToDisplay(), handleExportCancellationsCSV()
-src/index.html — added "Cancellation Report" option to reportsViewSelector; added cancellationDatePanel with start/end date inputs; added btnExportCancellationsCSV to export buttons
-src/css/vectair.css — added Cancellation Report section with .cancel-report-header, .cancel-section-title, .cancel-breakdown-table, .cancel-detail-table, .cancel-num-cell, .cancel-date-cell and supporting classes
+src/js/reporting.js
+src/js/ui_reports.js
+src/index.html
+src/css/vectair.css
 
 Data-source decision (documented):
 
-Primary reporting dataset: getMovements() filtered to status === 'CANCELLED'.
-Reinstated rows excluded automatically: they are no longer status=CANCELLED in the movements store.
-Soft-deleted rows excluded automatically: they are not present in getMovements().
-Reason code and reason text: taken from the mutable top-level fields on the getCancelledSorties() log entry — not from the immutable snapshot — so edits made after cancellation are correctly reflected.
-Date field for range filtering: cancelledAt from the log entry (primary); fallback to dof (date of flight) from the current movement record if no log entry or no cancelledAt is present. This is documented in the UI subtitle and in the date panel label.
-Default range: last 30 days (inclusive, computed at load time).
+primary reporting dataset: getMovements() filtered to status === 'CANCELLED'
+reinstated rows excluded automatically
+soft-deleted rows excluded automatically
+reason code and reason text taken from the mutable top-level fields on the getCancelledSorties() log entry, not from the immutable snapshot
+date field for range filtering: cancelledAt from the log entry (primary); fallback to dof from the current movement record if needed
+default range: last 30 days inclusive
 
 Historical / lifecycle-event analytics:
 
-Not included in Ticket 6b. The report is current-state operational only.
-If historical-event counts from the cancellation log are added later, they must be clearly separated and labeled, per the governing rule in section 5.1.
-
-Ranked tables — fields included and rationale:
-
-Aircraft Type (m.type) — included; generally reliable when registration entered from VKB
-Registration (m.registration) — included; reliable when populated
-Captain / PIC (m.captain) — included with explicit note that reliability depends on operator entry; blanks grouped as "Captain not recorded"
-Departure Aerodrome (m.depAd) — included; generally reliable
-Arrival Aerodrome (m.arrAd) — included; useful for ARR/LOC pattern analysis
+not included in Ticket 6b
+if added later, they must be clearly separated and labeled per section 5.1
 
 No-drift confirmations for Ticket 6b:
 
@@ -563,63 +604,200 @@ Live Board event-based vs nominal reporting split — unchanged
 History IA / lifecycle rules — unchanged
 Monthly Return / Dashboard / Insights — unchanged
 Cancelled Sorties view / Deleted Strips view — unchanged
+8) Documentation workstream (new explicit continuity layer)
 
-8) Known limitations / deliberate boundaries
+Documentation is now an explicit parallel workstream owned by ChatGPT as part of the Solutions Architect / QA role.
 
-These are known and intentional unless later promoted into dedicated tickets.
+Claude remains the engineer. ChatGPT maintains and updates documentation when features, naming, workflows, or operational behavior change.
 
-8.1 Cancellation analytics — historical lifecycle-event mode not yet implemented
+8.1 Documentation baseline currently in use
+
+The living documentation set consists of:
+
+README.md
+Quick_Start_Guide.md
+User_Guide.md
+Install_Update_Backup_Troubleshooting.md
+8.2 Documentation maintenance rule
+
+For each future implementation ticket, explicitly state one of:
+
+Docs: no change
+Docs: update README
+Docs: update Quick Start
+Docs: update User Guide
+Docs: update Install/Update/Backup/Troubleshooting
+or any combination of the above
+8.3 Documentation principles until V1
+accurate beats complete
+concise beats exhaustive
+current behavior beats aspirational behavior
+provisional areas should be labeled plainly
+naming should use Vectair Flite / Flite, with legacy FDMS wording only where needed for continuity
+8.4 Future docs structure note
+
+The documents are currently maintained locally and may later move into a /docs/ structure.
+
+9) Known limitations / deliberate boundaries
+
+These are known and intentional unless later promoted into dedicated tickets/workstreams.
+
+9.1 Cancellation analytics — historical lifecycle-event mode not yet implemented
 
 Ticket 6b delivers current-state operational cancellation reporting only.
 
 Not yet implemented:
 
-historical lifecycle-event counts from the cancellation log (as opposed to current-state cancelled movements)
+historical lifecycle-event counts from the cancellation log
 audit dashboard for all lifecycle transitions over time
-date-range analytics based on cancellation-event timestamps only (distinct from current-state model)
+date-range analytics based on cancellation-event timestamps only
 
-These are deferred and must remain clearly separated from the current-state totals if implemented.
+These are deferred and must remain clearly separated from current-state totals if implemented.
 
-8.2 Deleted-strip retention configurability
+9.2 Deleted-strip retention configurability
 retention period is hardcoded to 24 hours
 Admin configurability deferred
-8.3 Booking re-linkage on restore
+9.3 Booking re-linkage on restore
 restoring a deleted strip does not automatically restore booking linkage
 operator re-links manually if needed
-8.4 Manual purge-now action
+9.4 Manual purge-now action
 not implemented
 omitted deliberately until a safe confirmation model is scoped
-8.5 Full lifecycle event/audit reporting
+9.5 Full lifecycle event/audit reporting
 
 Historical lifecycle data is retained where needed for audit/export, but no dedicated audit dashboard exists yet.
 
-9) Backlog / deferred items
-9.1 Immediate next recommended tranche
+9.6 API / VKB integration not in current baseline
 
-Ticket 6b is now delivered. Next recommended items:
+Full Vectair-backed API / VKB integration is not part of the current functional baseline. It is now explicitly a V2 workstream.
 
-Ticket 6c — Callsign family grouping in cancellation ranked tables (group callsigns by prefix, e.g. "ASCOT" family)
-Historical lifecycle-event analytics (separate from current-state reporting, clearly labeled)
-Deleted Strips retention configurability (currently hardcoded to 24 hours)
-Booking re-linkage on strip restore
-9.2 Existing deferred backlog from earlier work
-Duplicate → “Create from…” concept
-formation continuation backlog
-booking confirmation email + pilot briefing pack
-note in booking briefing: GAR required for arrivals/departures outside contiguous UK, not managed by ATC
-DST-aware Auto timezone offset (Europe/London)
-future notification / reminder system workstream
-10) Manual verification posture
+9.7 METAR Builder not yet implemented
+
+METAR Builder is now in V1 scope but not yet implemented.
+
+9.8 Desktop productization not yet implemented
+
+The installed-desktop target is now part of V1 scope, but the current runtime remains the development harness / localStorage model.
+
+10) Roadmap classification
+
+The roadmap is now classified into:
+
+V1 required workstreams
+V2 workstreams
+rolling / lower-priority updates
+10.1 V1 required workstreams
+
+These are part of the current V1 target:
+
+A. Desktop Productization Workstream
+
+Scope includes:
+
+installer
+auto-update capability
+signed builds
+robust local file/database layer
+OS integration
+better crash/error logging
+cross-platform packaging discipline
+migration from browser/localStorage-era state into app-managed state
+B. DST-aware Auto timezone (Europe/London)
+
+This is a V1 correctness item.
+
+C. Formation continuation / expansion
+
+Formations are usable but not considered fully complete for V1.
+
+D. Create From workflow
+
+The older “Duplicate → Create from…” concept is now promoted into V1 scope as the Create From workflow.
+
+E. METAR Builder
+
+New V1 workstream.
+
+Purpose:
+
+all constituent METAR components are selectable/editable
+the system generates a plain-text METAR-style output string
+output is suitable for copy/paste into email or related operational communications
+10.2 V2 workstreams
+A. API / VKB integration
+
+Introduce fuller Vectair-backed knowledge integration so Flite can move beyond downloaded/static packs toward fuller VKB usage.
+
+B. Booking confirmation email / pilot briefing / GAR note
+
+Includes:
+
+booking confirmation email
+pilot briefing output
+note that GAR is required for arrivals/departures outside contiguous UK and is not managed by ATC
+10.3 Rolling / lower-priority updates
+
+These are useful but not launch-defining:
+
+Booking re-linkage
+Deleted Strip retention configurability
+Historical lifecycle event analysis
+Callsign family grouping (Ticket 6c)
+Notification / reminder system
+11) Recommended implementation order
+11.1 V1 programme structure
+
+V1 should now be understood as three parallel tracks:
+
+Track A — Desktop Productization
+
+Begin early at the architecture/planning level and continue through release hardening.
+
+Track B — Core Feature Completion
+DST-aware Auto timezone
+Formation continuation / expansion
+Create From workflow
+METAR Builder
+Track C — Release Hardening and Documentation
+naming continuity
+install/update guidance
+operator/user reference
+backup/troubleshooting guidance
+version/release notes discipline
+11.2 Recommended practical order
+
+Current recommended sequence:
+
+define desktop productization architecture
+define persistence / migration architecture
+define packaging / signing / update / logging strategy
+DST-aware Auto timezone
+Formation continuation / expansion
+Create From workflow
+METAR Builder
+implement installed-desktop packaging path
+implement migration into app-managed state
+cross-platform hardening and launch-readiness pass
+11.3 Deferred from immediate next-up status
+
+The following are not the next active tranche now:
+
+Ticket 6c — Callsign family grouping
+historical lifecycle-event analytics
+
+They remain valid backlog items but are no longer the immediate next recommended work.
+
+12) Manual verification posture
 
 Accepted posture remains:
 
 Stuart continues to smoke-test manually on Windows
 Claude implements narrowly to ticket
-ChatGPT maintains scope discipline, no-drift rules, and ledger quality
+ChatGPT maintains scope discipline, no-drift rules, documentation continuity, and ledger quality
 heavy automation should only be introduced where it materially reduces uncertainty
-11) Minimal restart instructions
+13) Minimal restart instructions
 
-When asked how to run FDMS locally, give only:
+When asked how to run Flite locally during the current development phase, give only:
 
 git pull
 python -m http.server 8000
@@ -627,9 +805,9 @@ http://localhost:8000/
 
 No extra scaffolding unless specifically requested.
 
-12) Current merge / baseline note
+14) Current accepted baseline summary
 
-The current accepted functional baseline after the lifecycle corrections is:
+The current accepted functional baseline is:
 
 post-10.1 timing / inline-time cluster complete
 Cancelled Sorties is a current-state cancelled view
@@ -637,6 +815,12 @@ cancelled strips are fully editable
 cancelled strips can be reinstated to PLANNED using offset-aware timing rules
 deletion uses soft-delete retention into Deleted Strips
 deleted strips are excluded from ordinary reports immediately
-Movement History / Cancelled Sorties / Deleted Strips now form the three-view lifecycle history model
+Movement History / Cancelled Sorties / Deleted Strips form the three-view lifecycle history model
+Ticket 6b cancellation reporting is complete
+Ticket 6c is deferred
+product name is now Vectair Flite
+documentation is now an explicit maintained workstream
+V1 scope now includes desktop productization, DST-aware Auto timezone, formation continuation/expansion, Create From workflow, and METAR Builder
+V2 scope includes API / VKB integration and booking confirmation / pilot briefing / GAR note
 
-This is the baseline future tickets should assume unless Stuart reports a regression.
+This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.
