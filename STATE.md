@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-03-28 (Europe/London) — Current baseline: Ticket 6b Cancellation / Lifecycle Reporting delivered; roadmap reclassified for V1 / V2 / rolling updates
+Last updated: 2026-03-30 (Europe/London) — Tagged baseline `flite-pre-desktop-baseline-2026-03` set at commit `d0c3d9486965642e482a6c4ff172c9138dcea501`. This is the last accepted browser-era/local-harness baseline before desktop productization. See `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
