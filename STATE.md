@@ -1,6 +1,23 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-03-30 (Europe/London) — Tagged baseline `flite-pre-desktop-baseline-2026-03` set at commit `4253035bedc926f2ac380cf5f1e44f34bf07323b`. This is the last accepted browser-era/local-harness baseline before desktop productization. See `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`.
+Last updated: 2026-03-30 (Europe/London) — DP-01 Desktop Productization Discovery complete. Active V1 workstream: desktop productization. Runtime recommendation: Tauri. See `docs/desktop-productization-discovery.md`. Frozen baseline: `flite-pre-desktop-baseline-2026-03` at `7a7c36a1241fa42e9aa19f184dca946dedca6c6f`. See `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`.
+
+---
+
+## Desktop productization workstream (active as of 2026-03-30)
+
+**DP-01 Discovery — complete.** See `docs/desktop-productization-discovery.md` for full detail.
+
+- Runtime recommendation: **Tauri** (primary). Electron as fallback only if a concrete WebView2 blocker is confirmed in DP-02.
+- Browser/localStorage coupling inventoried. All 9 operational localStorage keys mapped to JSON files in appLocalDataDir.
+- Storage adapter pattern defined: `LocalStorageAdapter` (existing, preserved) + `TauriFileAdapter` (new, for desktop). No behavioral change until DP-03.
+- File export/import adapter defined. Blob/FileReader pattern preserved in browser; replaced with Tauri `plugin-fs` + `plugin-dialog` in desktop.
+- VKB CSV load via `fetch('./data/*.csv')` — expected to work via Tauri asset protocol; confirm in DP-02.
+- SheetJS CDN dependency: must be vendored or confirmed unused before DP-04.
+- Auto-backup, local crash log, and GitHub-based auto-update plumbing deferred to DP-05.
+- Proposed next ticket sequence: DP-02 → DP-03 → DP-04 → DP-05 → DP-06.
+
+No functional product changes were made in DP-01. All settled behaviors from the pre-desktop baseline remain intact.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
