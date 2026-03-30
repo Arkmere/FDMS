@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-03-30 (Europe/London) — Tagged baseline `flite-pre-desktop-baseline-2026-03` set at commit `d0c3d9486965642e482a6c4ff172c9138dcea501`. This is the last accepted browser-era/local-harness baseline before desktop productization. See `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`.
+Last updated: 2026-03-30 (Europe/London) — Tagged baseline `flite-pre-desktop-baseline-2026-03` set at commit `557b03d91549539412759368e184c6a3d2064141`. This is the last accepted browser-era/local-harness baseline before desktop productization. See `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
