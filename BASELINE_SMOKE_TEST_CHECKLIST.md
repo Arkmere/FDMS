@@ -1,6 +1,6 @@
 # Baseline Smoke Test Checklist
 
-Pre-desktop-productization baseline — Vectair Flite (`d0c3d9486965642e482a6c4ff172c9138dcea501`)
+Pre-desktop-productization baseline — Vectair Flite (`7a7c36a1241fa42e9aa19f184dca946dedca6c6f`)
 
 Run these checks against the local harness before beginning any desktop conversion work. All items must pass before productization starts.
 

@@ -1,0 +1,4 @@
+# Icon placeholder directory — DP-06 will generate production icons.
+# Required icon files for packaging (not needed for dev mode):
+#   32x32.png, 128x128.png, 128x128@2x.png, icon.icns, icon.ico
+# Generate with: cargo tauri icon <source-image.png>

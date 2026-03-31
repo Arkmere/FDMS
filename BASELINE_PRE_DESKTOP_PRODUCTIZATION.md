@@ -18,7 +18,7 @@ It is a freeze marker. No conversion work was performed in the session that crea
 
 | Field | Value |
 |---|---|
-| Commit hash | `4253035bedc926f2ac380cf5f1e44f34bf07323b` |
+| Commit hash | `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` |
 | Date | 2026-03-30 |
 | Branch | `baseline/pre-desktop-productization` |
 | Tag | `flite-pre-desktop-baseline-2026-03` |
