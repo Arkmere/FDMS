@@ -26,6 +26,7 @@ No functional product changes were made in DP-01. All settled behaviors from the
 - Tauri v2 scaffold committed: `src-tauri/Cargo.toml`, `build.rs`, `tauri.conf.json`, `capabilities/default.json`, `src/main.rs`, `src/lib.rs`.
 - Dev mode: run `python3 -m http.server 8000` from `src/`, then `cargo tauri dev` from repo root.
 - CSP disabled (`null`) for dev until DP-04 vendors SheetJS.
+- Tauri CLI v2.10.1: ✓ installed successfully from crates.io.
 - Rust/Cargo dependency resolution: ✓ validated — 475 crates resolved; scaffold compiles to linking stage.
 - System library install (webkit2gtk): apt download did not complete in CI session due to network constraint; not a package availability issue.
 - `cargo tauri dev` and interactive smoke test: pending developer-machine validation. Developer instructions in `docs/desktop-productization-dp02-validation.md`.

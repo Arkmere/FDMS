@@ -114,15 +114,27 @@ This confirms:
 - `src/main.rs` and `src/lib.rs` compile to the linking stage
 - No Rust-level errors in the scaffold
 
+#### Tauri CLI install — ✓ PASS
+
+```bash
+cargo install tauri-cli --version "^2"
+# Installed: tauri-cli v2.10.1
+# Binary: ~/.cargo/bin/cargo-tauri
+```
+
+Tauri CLI 2.10.1 compiled and installed successfully from crates.io.
+
 #### System library install — ✗ BLOCKED (environment constraint, not a Tauri issue)
 
 ```bash
 sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev
-# Result: packages available in Ubuntu 24.04 noble repo; downloads did not complete
-#         in this session due to degraded archive.ubuntu.com connectivity.
+# Result: packages exist in Ubuntu 24.04 noble repo (version 2.50.4 confirmed in apt-cache);
+#         .deb downloads did not complete — archive.ubuntu.com reachable but package
+#         download requests return Ign: responses (environment download restriction).
+#         External internet also blocked in this environment (confirmed).
 ```
 
-The packages exist in the Ubuntu Noble repository and are the correct versions for Tauri v2. This is an environment network constraint, not a package availability or compatibility problem.
+This is an environment network constraint. The packages exist at the correct versions for Tauri v2 and will install normally on a developer machine with unrestricted internet access.
 
 #### `cargo tauri dev` — ✗ NOT RUN (depends on system libraries above)
 
@@ -228,6 +240,7 @@ Expected: a native window opens pointing to `http://localhost:8000`, app loads, 
 | Authoritative baseline commit identified | `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` — branch and tag agree |
 | Baseline marker docs corrected | `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md`, `BASELINE_SMOKE_TEST_CHECKLIST.md` |
 | Tauri v2 scaffold committed | `src-tauri/` created with correct `Cargo.toml`, `tauri.conf.json`, `capabilities/`, `src/main.rs`, `src/lib.rs` |
+| Tauri CLI installed | ✓ VALIDATED — `tauri-cli v2.10.1` installed successfully |
 | Rust/Cargo dependency resolution | ✓ VALIDATED — 475 crates resolved; scaffold compiles to linking stage |
 | App loads in Tauri dev mode | Pending — system libs unavailable in CI environment; developer-machine instructions provided |
 | All 12 smoke checks pass in webview | Expected PASS (architectural basis); pending interactive confirmation on developer machine |
