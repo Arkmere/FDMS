@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-03-31 (Europe/London) — DP-02 Tauri scaffold + baseline reconciliation complete. Authoritative baseline: `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` (branch and tag agree). Tauri v2 scaffold committed (`src-tauri/`). All baseline docs now reference the single authoritative commit. See `docs/desktop-productization-dp02-validation.md`.
+Last updated: 2026-03-31 (Europe/London) — DP-02 baseline reconciliation + Tauri scaffold complete; interactive desktop runtime validation pending. Authoritative baseline: `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` (branch and tag agree). Tauri v2 scaffold committed (`src-tauri/`). All baseline docs now reference the single authoritative commit. See `docs/desktop-productization-dp02-validation.md`.
 
 ---
 
@@ -19,20 +19,21 @@ Last updated: 2026-03-31 (Europe/London) — DP-02 Tauri scaffold + baseline rec
 
 No functional product changes were made in DP-01. All settled behaviors from the pre-desktop baseline remain intact.
 
-**DP-02 Scaffold + Baseline Reconciliation — complete.** See `docs/desktop-productization-dp02-validation.md` for full detail.
+**DP-02 Baseline Reconciliation + Tauri Scaffold — scaffold complete; interactive validation pending.** See `docs/desktop-productization-dp02-validation.md` for full detail.
 
 - Authoritative frozen baseline confirmed via git: `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` — branch `baseline/pre-desktop-productization` and tag `flite-pre-desktop-baseline-2026-03` agree.
 - Baseline marker doc discrepancies corrected: `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md` and `BASELINE_SMOKE_TEST_CHECKLIST.md` both now reference `7a7c36a`.
 - Tauri v2 scaffold committed: `src-tauri/Cargo.toml`, `build.rs`, `tauri.conf.json`, `capabilities/default.json`, `src/main.rs`, `src/lib.rs`.
-- Dev mode: run `python3 -m http.server 8000` from `src/`, then `cargo tauri dev` from repo root.
-- CSP disabled (`null`) for dev until DP-04 vendors SheetJS.
+- Dev mode for desktop validation: run `python3 -m http.server 8000` from `src/`, then `cargo tauri dev` from repo root.
+- CSP disabled (`null`) for dev until DP-04 vendors or removes the SheetJS CDN dependency.
 - Tauri CLI v2.10.1: ✓ installed successfully from crates.io.
 - Rust/Cargo dependency resolution: ✓ validated — 475 crates resolved; scaffold compiles to linking stage.
 - System library install (webkit2gtk): apt download did not complete in CI session due to network constraint; not a package availability issue.
-- `cargo tauri dev` and interactive smoke test: pending developer-machine validation. Developer instructions in `docs/desktop-productization-dp02-validation.md`.
+- `cargo tauri dev` native launch in a usable desktop runtime: pending developer-machine validation.
+- Interactive smoke validation in the desktop shell: pending developer-machine validation.
 - Windows/WebView2 validation: pending — requires Windows hardware.
-- Electron fallback: no blockers found; Tauri remains confirmed.
-- Next: DP-03 (storage adapter layer). Prerequisite: Windows/WebView2 confirmation.
+- Electron fallback: no blockers found so far; Tauri remains confirmed.
+- DP-03 (storage adapter layer) must not begin until desktop runtime validation has been completed on a developer machine.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
