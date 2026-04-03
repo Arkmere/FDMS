@@ -146,9 +146,16 @@ This environment is headless (no DISPLAY). Even with system libs installed, a GU
 
 ---
 
-### Smoke test: expected results based on architectural analysis
+### Smoke test: architectural expectation only (not acceptance evidence)
 
-All 12 baseline checklist items are expected to pass in the Tauri webview without modification. Basis for this assertion:
+The following table records engineering expectation based on static architectural analysis only. It is useful for risk assessment and triage, but it is **not** acceptance evidence and does **not** replace real-machine validation.
+
+DP-02 is not fully closed until a developer machine has:
+- launched `cargo tauri dev` successfully,
+- opened the native window,
+- and executed the baseline smoke checklist inside the desktop shell.
+
+All checklist items below are therefore **expected** outcomes, not confirmed outcomes. Basis for this expectation:
 
 - The app is pure HTML/CSS/JS with zero production npm dependencies.
 - All APIs in use (localStorage, Blob/URL.createObjectURL, FileReader, fetch, DOM manipulation) are fully supported in both WebKitGTK and WebView2.
@@ -175,7 +182,7 @@ All 12 baseline checklist items are expected to pass in the Tauri webview withou
 | `window.__fdmsDiag` available | ✓ Expected PASS | Global window object available in webview |
 | SheetJS CDN | ✓ Expected PASS | CSP null; CDN accessible |
 
-**Actual interactive confirmation required on developer machine.** Instructions below.
+**Actual interactive confirmation is still required on a developer machine.** The table above must not be treated as proof that the checks passed; it is a pre-validation expectation only. Instructions below.
 
 ---
 
@@ -242,8 +249,8 @@ Expected: a native window opens pointing to `http://localhost:8000`, app loads, 
 | Tauri v2 scaffold committed | `src-tauri/` created with correct `Cargo.toml`, `tauri.conf.json`, `capabilities/`, `src/main.rs`, `src/lib.rs` |
 | Tauri CLI installed | ✓ VALIDATED — `tauri-cli v2.10.1` installed successfully |
 | Rust/Cargo dependency resolution | ✓ VALIDATED — 475 crates resolved; scaffold compiles to linking stage |
-| App loads in Tauri dev mode | Pending — system libs unavailable in CI environment; developer-machine instructions provided |
-| All 12 smoke checks pass in webview | Expected PASS (architectural basis); pending interactive confirmation on developer machine |
+| App loads in Tauri dev mode | Pending — not yet interactively confirmed in a usable desktop runtime; developer-machine validation required |
+| All 12 smoke checks pass in webview | Pending — architectural analysis suggests likely pass, but no acceptance evidence exists yet |
 | No functional behavior changes introduced | ✓ — no JS/HTML/CSS files changed |
 | Tauri remains confirmed as runtime | ✓ — no blockers found |
 | Electron fallback needed | No — no blockers identified |
