@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-04-03 (Europe/London) — DP-02 Windows icon asset blocker resolved; placeholder icon set committed to src-tauri/icons/
+Last updated: 2026-04-03 (Europe/London) — DP-02 corrective tranche delivered; 4 Windows runtime defects fixed (saveCancelledSorties import, date-filter events, CSV feedback, inline-time seed)
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -856,5 +856,66 @@ Resolution (2026-04-03):
 Next step: rerun `cargo tauri dev` on Stuart's Windows environment to confirm the
 icon blocker is resolved and identify the next item in the DP-02 validation checklist.
 
+### DP-02 — Corrective tranche (2026-04-03)
+
+Full Windows desktop validation was performed. 15 items checked; 11 PASS, 4 FAIL.
+
+**PASS items confirmed:** App launches via Tauri dev mode, Live Board renders,
+Movement History / Cancelled Sorties / Deleted Strips separation works, Deleted strip
+lifecycle, ARR Active ATD fabrication guardrail, OVR runway total exclusion, booking
+reconciliation banner, VKB/static datasets, no console errors outside the failing
+actions, no desktop-shell rendering issues.
+
+**FAIL items and corrective fixes:**
+
+Defect A+B (items 4 & 5) — `saveCancelledSortie is not defined` on edit and reinstate
+- Root cause: `saveCancelledSorties` is exported from `datamodel.js` but was absent
+  from the import list in `ui_liveboard.js`. Both `reinstateFromCancelledLog` (line
+  7368) and `updateCancelledSortieReason` (line 7393) call it directly.
+- Fix: added `saveCancelledSorties` to the `import` block in `ui_liveboard.js`.
+- File: `src/js/ui_liveboard.js`
+
+Defect C (item 7) — Cancellation Report date filter does not reliably update
+- Root cause: only a `change` event was wired on the `<input type="date">` elements.
+  In Tauri / WebView2 on Windows, `change` may not fire when the date is entered via
+  keyboard; the `input` event fires more reliably on value changes.
+- Fix: added an `input` event handler alongside `change` for both `cancelReportStart`
+  and `cancelReportEnd`.
+- File: `src/js/ui_reports.js`
+
+Defect D (item 8) — Export Cancellations CSV gives no visible result
+- Root cause: `handleExportCancellationsCSV` performed the export but provided no
+  user-visible feedback. The file likely downloaded silently (or failed silently),
+  leaving the operator with no confirmation.
+- Fix: imported `showToast` from `app.js`; added a `showToast` call on success with
+  the row count, and a `'warning'` toast on an empty-range result.
+- File: `src/js/ui_reports.js`
+
+Defect E (item 9) — Inline time edit does not commit correctly for PLANNED strips
+- Root cause: `startInlineEdit` seeded the time `<input>` with `el.textContent.trim()`,
+  which includes the label text rendered inside the same span (e.g. "ETD 12:00").
+  After `.replace(':', '')` this produced "ETD 1200" as the initial input value.
+  Pressing Enter/Tab to confirm without retyping caused `validateTime` to fail because
+  the label letters are not digits. On a previously-Planned strip (where the user is
+  most likely to confirm an existing estimated time by pressing Enter), this silently
+  prevented the save from committing.
+- Fix: for `inputType === 'time'`, replaced the full `textContent` extraction with a
+  targeted `\b(\d{1,2}:\d{2})\b` regex match. Returns just the HH:MM clock value, or
+  empty string when no time is set. Label text (ETD/ATD/ETA/ATA/EOFT/AOFT/ELFT/ALFT)
+  is now cleanly excluded.
+- File: `src/js/ui_liveboard.js`
+
+**No-drift confirmations for corrective tranche:**
+- All settled timing / lifecycle / reporting semantics unchanged
+- No storage architecture changes
+- No desktop architecture changes
+- No DP-03 work introduced
+
+**Retest instructions:**
+1. Pull the branch and run `cargo tauri dev` on the Windows machine.
+2. Verify the four defects above are resolved.
+3. Rerun items 4, 5, 7, 8, 9 from the original validation checklist.
+4. If all 15 items now PASS, DP-02 Windows validation leg can be closed.
+
 ### DP-03 and beyond
-Not started. Do not begin until DP-02 Windows validation is confirmed clean.
+Not started. Do not begin until DP-02 Windows validation is confirmed clean after retest.

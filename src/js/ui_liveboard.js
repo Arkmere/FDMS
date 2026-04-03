@@ -36,6 +36,7 @@ import {
   resolvedEndTime,
   recalculateTimingModel,
   getCancelledSorties,
+  saveCancelledSorties,
   appendCancelledSortie,
   ensureCancelledSortiesInitialised,
   getDeletedStrips,
@@ -678,7 +679,19 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
   if (el.querySelector('input, select')) return;
 
   const originalContent = el.innerHTML;
-  const currentValue = el.textContent.trim();
+
+  // For time inputs the element's textContent includes the label text (ETD/ATD/ETA/ATA etc.)
+  // in addition to the time value. Extract only the HH:MM portion so the editor is
+  // pre-populated with the time alone — not garbage like "ETD 12:00" or "ETD -".
+  // For all other field types, use the full textContent as before.
+  let currentValue;
+  if (inputType === 'time') {
+    const timeMatch = el.textContent.match(/\b(\d{1,2}:\d{2})\b/);
+    currentValue = timeMatch ? timeMatch[1] : '';
+  } else {
+    currentValue = el.textContent.trim();
+  }
+
   const displayValue = currentValue === '—' || currentValue === '-' ? '' : currentValue;
 
   // ── WTC: create a <select> constrained to the active wtcSystem ────────────
