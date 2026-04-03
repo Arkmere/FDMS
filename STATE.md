@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-03-28 (Europe/London) — Current baseline: Ticket 6b Cancellation / Lifecycle Reporting delivered; roadmap reclassified for V1 / V2 / rolling updates
+Last updated: 2026-04-03 (Europe/London) — DP-02 Windows icon asset blocker resolved; placeholder icon set committed to src-tauri/icons/
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -824,3 +824,37 @@ V1 scope now includes desktop productization, DST-aware Auto timezone, formation
 V2 scope includes API / VKB integration and booking confirmation / pilot briefing / GAR note
 
 This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.
+
+---
+
+## 15) Desktop Productization Workstream — progress log
+
+### DP-01 — Tauri scaffold recognised
+Status: complete (validated on Stuart's Windows environment)
+Outcome: `cargo tauri dev` recognises the project and begins the build pipeline.
+
+### DP-02 — Windows icon assets (blocker found and resolved)
+
+First real Windows runtime blocker encountered during DP-01 validation:
+
+- `tauri-build` requires `src-tauri/icons/icon.ico` (and the standard PNG set) to
+  generate the Windows Resource file (.rc) embedded in the binary.
+- The `src-tauri/icons/` directory was absent from the repository.
+- Build failed with: `icons/icon.ico not found`
+
+Resolution (2026-04-03):
+- Created `src-tauri/icons/` and committed the minimum required placeholder icon set:
+  - `icon.ico`   — ICO container embedding 32 × 32 and 256 × 256 PNG images
+  - `32x32.png`         — 32 × 32 RGB placeholder
+  - `128x128.png`       — 128 × 128 RGB placeholder
+  - `128x128@2x.png`    — 256 × 256 RGB placeholder (2 × HiDPI)
+  - `icon.png`          — 512 × 512 RGB placeholder
+- All files are structurally valid (correct PNG signature / ICO header) but contain
+  only a solid neutral-gray fill. Final branding/icon design is explicitly deferred.
+- No app logic, storage model, or desktop architecture was changed.
+
+Next step: rerun `cargo tauri dev` on Stuart's Windows environment to confirm the
+icon blocker is resolved and identify the next item in the DP-02 validation checklist.
+
+### DP-03 and beyond
+Not started. Do not begin until DP-02 Windows validation is confirmed clean.
