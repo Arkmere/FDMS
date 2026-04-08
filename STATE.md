@@ -893,6 +893,48 @@ Resolution (2026-04-03):
 Next step: rerun `cargo tauri dev` on Stuart's Windows environment to confirm the
 icon blocker is resolved and identify the next item in the DP-02 validation checklist.
 
+### DP-02 — Windows interactive validation (corrective tranche, 2026-04-08)
+
+Windows interactive validation against 11 items produced mixed results on branch
+`claude/protect-baseline-PM0XU`. The following defects were identified and fixed
+in-branch in a narrow corrective tranche (no DP-03 scope, no storage changes):
+
+**Item 4+5 — `saveCancelledSorties is not defined` (FAIL → FIXED)**
+- Cause: `saveCancelledSorties` was exported from `datamodel.js` but absent from
+  the `ui_liveboard.js` import block. `reinstateFromCancelledLog` and
+  `updateCancelledSortieReason` both call it, producing a `ReferenceError` at runtime.
+- Fix: added `saveCancelledSorties` to the import block in `ui_liveboard.js`.
+
+**Item 7 — Cancellation Report filter not re-rendering on date change (NOT TESTABLE → FIXED)**
+- Cause: only `change` event was wired on the date range inputs; browser date-picker
+  in WebView2 fires `input` not `change` during incremental selection.
+- Fix: added `input` event listener alongside `change` for both `cancelReportStart`
+  and `cancelReportEnd` inputs in `ui_reports.js`.
+
+**Item 8 — Export Cancellations CSV gives no visible result (PARTIAL → FIXED)**
+- Cause: `handleExportCancellationsCSV` had no feedback at all; blob downloads go
+  silently to the OS Downloads folder under WebView2.
+- Fix: added `showToast` import to `ui_reports.js`; updated handler to toast the
+  filename with "check your Downloads folder" on success, and to toast an info
+  message when the selected range contains no rows.
+
+**Item 9 — Inline dep-actual time save doesn't activate PLANNED strip (FAIL → FIXED)**
+- Cause had two components:
+  (a) Seed-text pollution: `el.textContent.trim()` returned the full label text
+      (e.g. "ETD 12:00"), so the input was pre-seeded as "ETD 1200". Fixed by
+      extracting HH:MM via regex in `startInlineEdit`.
+  (b) Missing activation: `reEvaluateStatusAfterTimeChange` only acts on ACTIVE
+      strips; no code promoted PLANNED strips when `depActual` was saved inline.
+      Fixed by adding "Part F" in `saveEdit()`: when `fieldName === 'depActual'`
+      and the strip is still PLANNED after the time update, call
+      `updateMovement(movementId, { status: 'ACTIVE' })`.
+
+**Save & Complete in Cancelled Sorties / Deleted Strips edit modal — DEFERRED**
+- The edit modal shows "Save & Complete" regardless of strip status, which is
+  inappropriate when editing a CANCELLED or soft-deleted strip. Assessed as
+  non-trivially local (requires modal status-awareness wiring). Deferred to a
+  future ticket; does not block DP-02 close.
+
 ### DP-03 and beyond
 Not started. Do not begin until DP-02 Windows validation is confirmed clean.
 

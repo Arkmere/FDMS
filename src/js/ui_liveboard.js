@@ -36,6 +36,7 @@ import {
   resolvedEndTime,
   recalculateTimingModel,
   getCancelledSorties,
+  saveCancelledSorties,
   appendCancelledSortie,
   ensureCancelledSortiesInitialised,
   getDeletedStrips,
@@ -715,8 +716,11 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // ── All other fields: plain <input type="text"> ─────────────────────────
     input = document.createElement('input');
     input.type = 'text';
-    // For time inputs, strip the colon for easier editing
-    input.value = inputType === 'time' ? displayValue.replace(':', '') : displayValue;
+    // For time inputs, extract HH:MM from the cell text (cell may contain a label
+    // like "ETD 12:00"), then strip the colon for the bare-HHMM input convention.
+    input.value = inputType === 'time'
+      ? (currentValue.match(/\d{2}:\d{2}/) || [''])[0].replace(':', '')
+      : displayValue;
     input.className = 'inline-edit-input';
 
     // Time inputs get a narrower width
@@ -876,6 +880,14 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(fieldName);
     if (isTimeField) {
       reEvaluateStatusAfterTimeChange(movementId);
+    }
+
+    // Part F: Operator explicitly entered a dep-actual time on a PLANNED strip —
+    // promote to ACTIVE immediately (mirrors what transitionToActive does for DEP).
+    // Only depActual triggers this; arrActual does not fabricate a dep stamp.
+    const freshMovement = getMovements().find(m => m.id === movementId);
+    if (fieldName === 'depActual' && freshMovement && freshMovement.status === 'PLANNED') {
+      updateMovement(movementId, { status: 'ACTIVE' });
     }
 
     // Re-render — renderLiveBoard already calls renderTimeline at its end, but

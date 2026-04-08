@@ -2,6 +2,7 @@
 // UI rendering for Reports tab: Official Monthly Return, Dashboard, Insights
 
 import { getMovements } from './datamodel.js';
+import { showToast } from './app.js';
 import {
   loadHours,
   saveHours,
@@ -145,18 +146,22 @@ function wireReportsControls() {
 
   if (cancelStartInput) {
     cancelStartInput.value = cancelStartDate;
-    cancelStartInput.addEventListener('change', e => {
+    const onStartChange = e => {
       cancelStartDate = e.target.value;
       if (currentView === 'cancellation') renderReports();
-    });
+    };
+    cancelStartInput.addEventListener('change', onStartChange);
+    cancelStartInput.addEventListener('input',  onStartChange);
   }
 
   if (cancelEndInput) {
     cancelEndInput.value = cancelEndDate;
-    cancelEndInput.addEventListener('change', e => {
+    const onEndChange = e => {
       cancelEndDate = e.target.value;
       if (currentView === 'cancellation') renderReports();
-    });
+    };
+    cancelEndInput.addEventListener('change', onEndChange);
+    cancelEndInput.addEventListener('input',  onEndChange);
   }
 
   // Export cancellations CSV button
@@ -282,10 +287,15 @@ function handleExportXLSX() {
  */
 function handleExportCancellationsCSV() {
   const report = computeCancellationReport(cancelStartDate, cancelEndDate);
+  if (report.rows.length === 0) {
+    showToast('No cancellations found for the selected date range.', 'info');
+    return;
+  }
   const start  = cancelStartDate || 'all';
   const end    = cancelEndDate   || 'all';
   const filename = `cancellations_${start}_to_${end}.csv`;
   exportCancellationsToCSV(report.rows, filename);
+  showToast(`Exported ${filename} — check your Downloads folder.`, 'success');
 }
 
 /**
