@@ -918,22 +918,40 @@ in-branch in a narrow corrective tranche (no DP-03 scope, no storage changes):
   filename with "check your Downloads folder" on success, and to toast an info
   message when the selected range contains no rows.
 
-**Item 9 — Inline dep-actual time save doesn't activate PLANNED strip (FAIL → FIXED)**
-- Cause had two components:
-  (a) Seed-text pollution: `el.textContent.trim()` returned the full label text
-      (e.g. "ETD 12:00"), so the input was pre-seeded as "ETD 1200". Fixed by
-      extracting HH:MM via regex in `startInlineEdit`.
-  (b) Missing activation: `reEvaluateStatusAfterTimeChange` only acts on ACTIVE
-      strips; no code promoted PLANNED strips when `depActual` was saved inline.
-      Fixed by adding "Part F" in `saveEdit()`: when `fieldName === 'depActual'`
-      and the strip is still PLANNED after the time update, call
-      `updateMovement(movementId, { status: 'ACTIVE' })`.
+**Item 9 — Inline dep-actual time save doesn't activate PLANNED strip (FAIL → FIXED, two passes)**
+- First-pass fix (tranche 1) addressed seed-text pollution and added Part F activation
+  check, but Part F was gated on `fieldName === 'depActual'` — a condition that can
+  never be true in the common operator workflow (PLANNED strip → estimate mode →
+  time cell bound to `depPlanned`).
+- Root cause confirmed (tranche 2): for a PLANNED DEP/LOC strip the dep-time cell
+  is in 'estimate' mode by default (operator has not toggled ETD→ATD label).
+  `_inlineTimeFieldForMode('DEP', 'dep', 'estimate')` returns `'depPlanned'`.
+  When the operator double-clicks and enters the historical departure time, the
+  write goes to `depPlanned`, not `depActual`. Part F never fired.
+- Fix (tranche 2): added "Historical dep-actual redirect" block in `saveEdit()`
+  before the transactional update. When `fieldName === 'depPlanned'` and the strip
+  is PLANNED DEP/LOC and the entered time is in the past (`checkPastTime`), the
+  write is transparently redirected to `depActual` (`effectiveFieldName`).
+  `depPlanned` is left unchanged (ETD is preserved as the plan).
+  `recalculateTimingModel`, Part E, and Part F all operate on `effectiveFieldName`,
+  so Part F fires correctly and promotes the strip to ACTIVE.
+- ARR strips are not affected: their dep-side cell is always `depActual` regardless
+  of mode (no redirect path). `arrActual` never triggers dep-time fabrication.
 
 **Save & Complete in Cancelled Sorties / Deleted Strips edit modal — DEFERRED**
 - The edit modal shows "Save & Complete" regardless of strip status, which is
   inappropriate when editing a CANCELLED or soft-deleted strip. Assessed as
   non-trivially local (requires modal status-awareness wiring). Deferred to a
   future ticket; does not block DP-02 close.
+
+**Backlog — configurable CSV export save location (UX improvement, not DP-02)**
+- Current behaviour: blob download goes silently to the OS Downloads folder; a
+  toast now tells the operator the filename and to check Downloads.
+- Future UX improvement: allow the operator to configure a preferred export
+  folder via the Admin / Config panel, so exports land in an ops-specific
+  directory (e.g. a shared drive) without manual file moves.
+- Requires Tauri `dialog` + `fs` plugins (Cargo.toml, lib.rs, capabilities).
+  Not trivially local. Do not implement under DP-02. Record here for V1 backlog.
 
 ### DP-03 and beyond
 Not started. Do not begin until DP-02 Windows validation is confirmed clean.

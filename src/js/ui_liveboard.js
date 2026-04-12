@@ -848,9 +848,27 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
       storedValue = num;
     }
 
+    // ── Historical dep-actual redirect ────────────────────────────────────
+    // When the operator edits the dep-side estimate cell (depPlanned) on a
+    // PLANNED DEP/LOC strip to a past time they are recording the actual
+    // departure, not adjusting the plan.  Redirect the write to depActual so
+    // the timing model and Part F promotion logic handle it correctly.
+    // depPlanned is intentionally left unchanged — the ETD is preserved.
+    // ARR strips are excluded: their dep-side cell is always depActual already.
+    let effectiveFieldName = fieldName;
+    if (fieldName === 'depPlanned' && inputType === 'time' && storedValue) {
+      const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
+      const preFt = (preSaveMvt?.flightType || '').toUpperCase();
+      if ((preFt === 'DEP' || preFt === 'LOC') && preSaveMvt?.status === 'PLANNED') {
+        if (checkPastTime(storedValue, preSaveMvt.dof).isPast) {
+          effectiveFieldName = 'depActual';
+        }
+      }
+    }
+
     // ── Transactional update ───────────────────────────────────────────────
     const updateData = {};
-    updateData[fieldName] = storedValue;
+    updateData[effectiveFieldName] = storedValue;
 
     const updatedMovement = updateMovement(movementId, updateData);
     if (!updatedMovement) {
@@ -863,8 +881,8 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // Modal edits use bindPlannedTimesSync for live UI feedback and save the
     // already-computed values; inline edits must trigger recalc here on commit.
     const timingFields = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual', 'durationMinutes'];
-    if (timingFields.includes(fieldName)) {
-      const timingPatch = recalculateTimingModel(updatedMovement, fieldName);
+    if (timingFields.includes(effectiveFieldName)) {
+      const timingPatch = recalculateTimingModel(updatedMovement, effectiveFieldName);
       const isWeak = timingPatch._weakPrediction;
       delete timingPatch._weakPrediction;
       if (Object.keys(timingPatch).length > 0 && !isWeak) {
@@ -877,16 +895,17 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
     // Part E: For time field edits on ACTIVE strips, re-evaluate whether status
     // should revert to PLANNED (if the new time is now outside the activate window).
-    const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(fieldName);
+    const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(effectiveFieldName);
     if (isTimeField) {
       reEvaluateStatusAfterTimeChange(movementId);
     }
 
-    // Part F: Operator explicitly entered a dep-actual time on a PLANNED strip —
-    // promote to ACTIVE immediately (mirrors what transitionToActive does for DEP).
+    // Part F: Operator entered a dep-actual time on a PLANNED strip (either via
+    // the actual-mode cell directly, or via the estimate-mode cell redirected
+    // above).  Promote to ACTIVE immediately.
     // Only depActual triggers this; arrActual does not fabricate a dep stamp.
     const freshMovement = getMovements().find(m => m.id === movementId);
-    if (fieldName === 'depActual' && freshMovement && freshMovement.status === 'PLANNED') {
+    if (effectiveFieldName === 'depActual' && freshMovement && freshMovement.status === 'PLANNED') {
       updateMovement(movementId, { status: 'ACTIVE' });
     }
 
