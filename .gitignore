@@ -1,2 +1,12 @@
 .scratch/
 node_modules/
+src-tauri/target/
+
+branch-file-list.txt
+branch-tree.txt
+branches.txt
+remote-branches-detailed.txt
+working-tree-status.txt
+current-branch-files.txt
+branch-diff-stats.txt
+core-file-touches.txt
