@@ -1289,6 +1289,14 @@ function initAdminPanelHandlers() {
       checkDirty();
     });
   }
+
+  // ── Reload app ─────────────────────────────────────────────────
+  const btnReloadApp = document.getElementById('btnReloadApp');
+  if (btnReloadApp) {
+    btnReloadApp.addEventListener('click', () => {
+      location.reload();
+    });
+  }
 }
 
 /**

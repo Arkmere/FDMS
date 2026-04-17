@@ -3380,7 +3380,7 @@ function shouldShowNewFormTimeModeToggle() {
   return (cfg.timezoneOffsetHours || 0) !== 0;
 }
 
-function openNewFlightModal(flightType = "DEP") {
+function openNewFlightModal(flightType = "DEP", prefill = null) {
   openModal(`
     <div class="modal-header">
       <div>
@@ -3894,6 +3894,31 @@ function openNewFlightModal(flightType = "DEP") {
   // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
   bindPlannedTimesSync("newDepPlanned", "newArrPlanned", "newDuration",
     { arrMode: flightType === 'ARR' });
+
+  // Pre-populate fields from prefill data (used by reciprocal strip workflow)
+  if (prefill) {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val != null) el.value = val;
+    };
+    set('newCallsignCode', prefill.callsignCode || '');
+    set('newReg',          prefill.registration  || '');
+    set('newType',         prefill.type          || '');
+    set('newDepAd',        prefill.depAd         || '');
+    set('newArrAd',        prefill.arrAd         || '');
+    set('newDOF',          prefill.dof           || getTodayDateString());
+    set('newDepPlanned',   prefill.depPlanned    || '');
+    set('newArrPlanned',   prefill.arrPlanned    || '');
+    set('newPob',          prefill.pob != null ? String(prefill.pob) : '');
+    set('rwRemarks',       prefill.remarks       || '');
+    set('newCaptain',      prefill.captain       || '');
+    const rulesEl = document.getElementById('newRules');
+    if (rulesEl && prefill.rules) rulesEl.value = prefill.rules;
+    if (wtcSelect && prefill.wtc) {
+      wtcSelect.value = prefill.wtc;
+      wtcDirty = true;
+    }
+  }
 
   // Bind save handler with validation
   document.querySelector(".js-save-flight")?.addEventListener("click", () => {
@@ -6336,97 +6361,46 @@ function openReciprocalStripModal(m, targetType) {
   const config = getConfig();
   const sourceFT = (m.flightType || "").toUpperCase();
 
-  // Calculate the reciprocal time
+  // Calculate the reciprocal time using configured offsets
   let newTime = "";
   if (sourceFT === "DEP" && targetType === "ARR") {
-    // DEP → ARR: Arrival time = ETD/ATD + depToArrOffsetMinutes
     const sourceTime = m.depActual || m.depPlanned || "";
     if (sourceTime) {
       newTime = addMinutesToTime(sourceTime, config.depToArrOffsetMinutes || 180);
     }
   } else if (sourceFT === "ARR" && targetType === "DEP") {
-    // ARR → DEP: Departure time = ETA/ATA + arrToDepOffsetMinutes
     const sourceTime = m.arrActual || m.arrPlanned || "";
     if (sourceTime) {
       newTime = addMinutesToTime(sourceTime, config.arrToDepOffsetMinutes || 30);
     }
   }
 
-  // Swap aerodromes - the original arrival becomes the departure and vice versa
+  // Swap aerodromes
   const newDepAd = m.arrAd || "";
   const newArrAd = m.depAd || "";
-  const newDepName = getLocationName(newDepAd);
-  const newArrName = getLocationName(newArrAd);
 
-  // Get WTC for new flight type
+  // Get WTC for the target flight type
   const wtc = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
 
-  // Determine time fields based on target type
-  const dof = getTodayDateString();
-  const depPlanned = targetType === "DEP" ? newTime : "";
-  const arrPlanned = targetType === "ARR" ? newTime : "";
-
-  // Determine initial status based on whether time is past
-  const initialStatus = determineInitialStatus(targetType, dof, depPlanned, arrPlanned);
-
-  // Create the reciprocal movement
-  let movement = {
-    status: initialStatus,
-    flightType: targetType,
+  // Build prefill for the creation modal — no movement is created yet
+  const prefill = {
     callsignCode: m.callsignCode || "",
-    callsignLabel: m.callsignLabel || "",
-    callsignVoice: m.callsignVoice || "",
     registration: m.registration || "",
-    operator: m.operator || "",
-    type: m.type || "",
-    popularName: m.popularName || "",
-    rules: m.rules || "VFR",
-    depAd: newDepAd,
-    depName: newDepName,
-    arrAd: newArrAd,
-    arrName: newArrName,
-    wtc: wtc,
-    dof: dof,
-    depPlanned: depPlanned,
-    arrPlanned: arrPlanned,
-    pob: m.pob || 0,
-    tngCount: 0,
-    osCount: 0,
-    fisCount: targetType === "OVR" ? 1 : 0,
-    egowCode: "",
-    ssr: "",
-    remarks: `Reciprocal of ${m.callsignCode || ""} ${sourceFT}`,
-    warnings: m.warnings || "",
-    notes: m.notes || ""
+    type:         m.type         || "",
+    wtc:          wtc,
+    rules:        m.rules        || "VFR",
+    depAd:        newDepAd,
+    arrAd:        newArrAd,
+    dof:          getTodayDateString(),
+    depPlanned:   targetType === "DEP" ? newTime : "",
+    arrPlanned:   targetType === "ARR" ? newTime : "",
+    pob:          m.pob || 0,
+    captain:      m.captain || "",
+    remarks:      `Reciprocal of ${m.callsignCode || ""} ${sourceFT}`,
   };
 
-  // Inherit formation (copy identity fields + depAd/arrAd; reset operational state)
-  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length >= 2) {
-    const resetElements = m.formation.elements.map(el => ({
-      ...el,
-      status:     "PLANNED",
-      depActual:  "",
-      arrActual:  ""
-    }));
-    const { wtcCurrent, wtcMax } = computeFormationWTC(resetElements);
-    movement.formation = { ...m.formation, elements: resetElements, wtcCurrent, wtcMax };
-  }
-
-  // Enrich with auto-populated fields
-  movement = enrichMovementData(movement);
-
-  // Create the movement
-  const newMovement = createMovement(movement);
-  renderLiveBoard();
-  renderHistoryBoard();
-  if (window.updateDailyStats) window.updateDailyStats();
-  if (window.updateFisCounters) window.updateFisCounters();
-  showToast(`Reciprocal ${targetType} strip created`, 'success');
-
-  // Open edit modal for the new movement so user can adjust
-  if (newMovement) {
-    openEditMovementModal(newMovement);
-  }
+  // Open the standard creation modal pre-filled; strip is only persisted on Save
+  openNewFlightModal(targetType, prefill);
 }
 
 /**
