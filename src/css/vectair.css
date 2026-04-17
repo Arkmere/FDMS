@@ -2022,10 +2022,9 @@ tr.strip.ft-ovr > td {
   position: relative;
   background: linear-gradient(to bottom, #f8f5f0 0%, #f0ebe4 100%);
   border: 1px solid var(--va-border);
-  border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  border-radius: 4px;
   margin-bottom: 0;
-  padding: 8px 0 0 0;
+  padding: 8px 0 6px 0;
   overflow: hidden;
 }
 
