@@ -3515,7 +3515,7 @@ function openNewFlightModal(flightType = "DEP") {
           </div>
           <div class="modal-field" data-timing-group="planned" style="grid-column:3;grid-row:1">
             <label class="modal-label">${flightType === "OVR" ? "ELFT" : "ETA"}</label>
-            <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
+            <input id="newArrPlanned" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
           <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:1;grid-row:1">
             <label class="modal-label">${flightType === "OVR" ? "AOFT" : "ATD"}</label>
@@ -3523,7 +3523,7 @@ function openNewFlightModal(flightType = "DEP") {
           </div>
           <div class="modal-field" data-timing-group="actual" style="display:none;grid-column:3;grid-row:1">
             <label class="modal-label">${flightType === "OVR" ? "ALFT" : "ATA"}</label>
-            <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value=""${flightType === "OVR" ? " disabled" : ""} />
+            <input id="newArrActual" class="modal-input" placeholder="HH:MM" style="width: 80px;" value="" />
           </div>
         </div>
       </section>
@@ -5229,8 +5229,8 @@ function openEditMovementModal(m) {
             etdVal: m.depPlanned || "", etaVal: m.arrPlanned || "",
             atdVal: m.depActual  || "", ataVal: m.arrActual  || "",
             durationVal: m.durationMinutes || "",
-            etaDisabled: flightType === "OVR",
-            ataDisabled: flightType === "OVR"
+            etaDisabled: false,
+            ataDisabled: false
           })}
         </div>
       </section>
@@ -6111,8 +6111,8 @@ function openDuplicateMovementModal(m) {
           etaLabel: flightType === "OVR" ? "ELFT" : "ETA",
           atdLabel: flightType === "OVR" ? "AOFT" : "ATD",
           ataLabel: flightType === "OVR" ? "ALFT" : "ATA",
-          etaDisabled: flightType === "OVR",
-          ataDisabled: flightType === "OVR",
+          etaDisabled: false,
+          ataDisabled: false,
           etdVal: newETD, etaVal: newETA,
           durationVal: m.durationMinutes || ""
         })}
