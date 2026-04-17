@@ -113,6 +113,9 @@ body {
   background: #f0f3f4;
   border-bottom: 1px solid var(--va-border);
   padding: 0 18px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 .nav-tabs {
   display: flex;
