@@ -20,7 +20,7 @@ const defaultConfig = {
   ovrFlightDurationMinutes: 5,  // OVR: ELFT = EOFT + this (time on frequency, default 5 min)
   ovrOffsetMinutes: 0,          // OVR: EOFT = now + this (when creating new OVR)
   ovrAutoActivateMinutes: 30,   // Legacy - kept for backwards compatibility
-  timezoneOffsetHours: 0, // Local time offset from UTC (e.g., 0 for UTC, +1 for BST, -5 for EST)
+  timezoneOffsetHours: 0, // Legacy/manual timezone offset field retained for compatibility
   showLocalTime: false,   // Show local time conversions alongside UTC
   hideLocalTimeInBannerIfSame: false, // Hide local time in banner when same as UTC
   alwaysHideLocalTimeInBanner: false, // Never show local time in banner
@@ -1472,7 +1472,63 @@ export function updateConfig(updates) {
 }
 
 /**
- * Convert UTC time to local time based on configured offset
+ * Get the UTC instant for 01:00 on the last Sunday of a given month.
+ * Month is 0-indexed (0=Jan ... 11=Dec).
+ * Used for Europe/London DST boundary calculation.
+ *
+ * BST runs from:
+ *   last Sunday in March at 01:00 UTC
+ * to
+ *   last Sunday in October at 01:00 UTC
+ *
+ * @param {number} year
+ * @param {number} monthIndex
+ * @returns {Date}
+ */
+function getLastSundayAt0100UTC(year, monthIndex) {
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0, 1, 0, 0));
+  const dayOfWeek = lastDay.getUTCDay(); // 0=Sunday
+  lastDay.setUTCDate(lastDay.getUTCDate() - dayOfWeek);
+  return lastDay;
+}
+
+/**
+ * Canonical Europe/London seasonal offset helper.
+ * Returns 1 during BST, otherwise 0.
+ *
+ * @param {Date} [atDate]
+ * @returns {number}
+ */
+function getEuropeLondonSeasonalOffsetHours(atDate = new Date()) {
+  const year = atDate.getUTCFullYear();
+  const bstStart = getLastSundayAt0100UTC(year, 2);  // March
+  const bstEnd   = getLastSundayAt0100UTC(year, 9);  // October
+  return (atDate >= bstStart && atDate < bstEnd) ? 1 : 0;
+}
+
+/**
+ * Canonical operational timezone offset for the app.
+ *
+ * Behaviour:
+ * - explicit non-UK style offsets (e.g. -5, +3) are respected directly
+ * - UK-style values (0 or +1) are treated as "Europe/London operational mode"
+ *   and resolved seasonally from the current date
+ *
+ * This preserves the existing schema while removing the brittle
+ * "raw non-zero configured offset" dependency for local-time behaviour.
+ *
+ * @returns {number}
+ */
+function getOperationalTimezoneOffsetHours() {
+  const configured = Number(config.timezoneOffsetHours);
+  if (Number.isFinite(configured) && Math.abs(configured) > 1) {
+    return configured;
+  }
+  return getEuropeLondonSeasonalOffsetHours();
+}
+
+/**
+ * Convert UTC time to local time based on canonical operational offset.
  * @param {string} utcTime - Time in HH:MM format (UTC)
  * @returns {string} Time in HH:MM format (Local)
  */
@@ -1483,7 +1539,7 @@ export function convertUTCToLocal(utcTime) {
 
   const hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
-  const offsetHours = config.timezoneOffsetHours;
+  const offsetHours = getOperationalTimezoneOffsetHours();
 
   let localHours = hours + offsetHours;
 
@@ -1495,7 +1551,7 @@ export function convertUTCToLocal(utcTime) {
 }
 
 /**
- * Convert local time to UTC time based on configured offset (inverse of convertUTCToLocal)
+ * Convert local time to UTC time based on canonical operational offset.
  * @param {string} localTime - Time in HH:MM format (Local)
  * @returns {string} Time in HH:MM format (UTC)
  */
@@ -1506,7 +1562,7 @@ export function convertLocalToUTC(localTime) {
 
   const hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
-  const offsetHours = config.timezoneOffsetHours;
+  const offsetHours = getOperationalTimezoneOffsetHours();
 
   let utcHours = hours - offsetHours;
 
@@ -1519,13 +1575,44 @@ export function convertLocalToUTC(localTime) {
 
 /**
  * Get timezone offset label (e.g., "+1", "-5", "UTC")
+ * Uses canonical operational offset, not raw stored config.
  * @returns {string} Offset label
  */
 export function getTimezoneOffsetLabel() {
-  const offset = config.timezoneOffsetHours;
+  const offset = getOperationalTimezoneOffsetHours();
   if (offset === 0) return "UTC";
   const sign = offset > 0 ? "+" : "";
   return `${sign}${offset}`;
+}
+
+/**
+ * Returns true when local time is operationally distinct from UTC under the
+ * canonical app timing model.
+ *
+ * This is the single source of truth for whether local time is actually
+ * meaningful to operators at the current moment.
+ */
+function isLocalTimeOperationallyDistinct() {
+  return getOperationalTimezoneOffsetHours() !== 0;
+}
+
+/**
+ * Canonical helper: should the UTC/Local toggle be shown in new-strip forms?
+ *
+ * Policy meanings (config.newFormUtcLocalTogglePolicy):
+ *   "show" → always render the toggle
+ *   "hide" → never render the toggle
+ *   "auto" → render when local time is operationally distinct from UTC
+ *
+ * Callers must not reinterpret config values themselves; use this function only.
+ *
+ * @returns {boolean}
+ */
+export function shouldShowUtcLocalToggleForNewForms() {
+  const policy = config.newFormUtcLocalTogglePolicy || "auto";
+  if (policy === "show") return true;
+  if (policy === "hide") return false;
+  return isLocalTimeOperationallyDistinct();
 }
 
 /* -----------------------------
