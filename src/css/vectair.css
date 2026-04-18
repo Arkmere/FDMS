@@ -3112,6 +3112,12 @@ tr.strip.ft-ovr > td {
   color: #2e7d32;
 }
 
+.admin-nav-btn--dev {
+  margin-top: 8px;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 12px;
+}
+
 /* Danger zone panel */
 .admin-danger-zone {
   border: 2px solid #ef9a9a;
