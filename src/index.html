@@ -788,67 +788,59 @@
             </nav>
 
             <!-- Right content area -->
-            <div class="admin-content" id="adminContent">
+<div class="admin-content" id="adminContent">
 
-              <!-- Sticky save bar (shown for config sections 3–7) -->
-              <div class="admin-save-bar hidden" id="adminSaveBar">
-                <span class="admin-save-status" id="adminSaveStatus">All changes saved</span>
-                <button class="btn btn-secondary" id="adminDiscardBtn" type="button" disabled>Discard</button>
-                <button class="btn btn-primary" id="adminSaveBtn" type="button" disabled>Save</button>
-              </div>
+  <!-- Sticky save bar (shown for config sections 3–7) -->
+  <div class="admin-save-bar hidden" id="adminSaveBar">
+    <span class="admin-save-status" id="adminSaveStatus">All changes saved</span>
+    <button class="btn btn-secondary" id="adminDiscardBtn" type="button" disabled>Discard</button>
+    <button class="btn btn-primary" id="adminSaveBtn" type="button" disabled>Save</button>
+  </div>
 
-              <!-- ── SECTION 1: System Status ── -->
-              <div class="admin-section" id="admin-sec-status">
-                <div class="page-title">Admin</div>
-                <div class="page-subtitle">
-                  Status and high-level diagnostics for this local FDMS instance. All data is stored in browser LocalStorage.
-                </div>
+  <!-- ── SECTION 1: System Status ── -->
+  <div class="admin-section" id="admin-sec-status">
+    <div class="page-title">Admin</div>
+    <div class="page-subtitle">
+      Status and high-level diagnostics for this local FDMS instance. All data is stored in browser LocalStorage.
+    </div>
 
-                <div class="panel">
-                  <h3>System Status</h3>
-                  <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
-                    <strong>⏳ Initialising...</strong>
-                  </div>
-                </div>
+    <div class="panel">
+      <h3>System Status</h3>
+      <div id="initStatus" style="padding: 8px; background: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 12px;">
+        <strong>⏳ Initialising...</strong>
+      </div>
+    </div>
 
-                <div class="panel">
-                  <h3>Diagnostics</h3>
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold; width: 200px;">Last Init Time:</td>
-                      <td id="diagInitTime" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
-                      <td id="diagRenderTime" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Storage Key:</td>
-                      <td id="diagStorageKey" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
-                      <td id="diagMovementCount" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Last Error:</td>
-                      <td id="diagLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">None</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
-                      <td id="diagStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                  </table>
-                </div>
-
-                <div class="panel">
-                  <h3>Application</h3>
-                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Reload the application frontend. In the desktop runtime this re-fetches all JS and CSS from disk, picking up any code or style changes without requiring DevTools or a manual cache-disable step.
-                  </p>
-                  <button class="btn btn-secondary" id="btnReloadApp" type="button">Reload App</button>
-                </div>
-              </div>
+    <div class="panel">
+      <h3>Diagnostics</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px; font-weight: bold; width: 200px;">Last Init Time:</td>
+          <td id="diagInitTime" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
+          <td id="diagRenderTime" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Storage Key:</td>
+          <td id="diagStorageKey" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
+          <td id="diagMovementCount" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Last Error:</td>
+          <td id="diagLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">None</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
+          <td id="diagStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
+        </tr>
+      </table>
+    </div>
+  </div>
 
               <!-- ── SECTION 2: Session ── -->
               <div class="admin-section hidden" id="admin-sec-session">
