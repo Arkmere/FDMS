@@ -783,6 +783,7 @@
               <button class="admin-nav-btn" data-section="admin-sec-wtc">Wake Turbulence</button>
               <button class="admin-nav-btn" data-section="admin-sec-history">History &amp; Timeline</button>
               <button class="admin-nav-btn" data-section="admin-sec-profiles">Booking Profiles</button>
+              <button class="admin-nav-btn admin-nav-btn--dev" data-section="admin-sec-developer">Developer</button>
               <button class="admin-nav-btn admin-nav-btn--danger" data-section="admin-sec-danger">Danger Zone</button>
             </nav>
 
@@ -1458,6 +1459,92 @@
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- ── SECTION: Developer ── -->
+              <div class="admin-section hidden" id="admin-sec-developer">
+                <div class="page-title">Developer</div>
+                <div class="page-subtitle">
+                  Runtime and build status for this FDMS instance. Use the diagnostic report when troubleshooting or reporting issues.
+                </div>
+
+                <!-- A. Quick Status -->
+                <div class="panel">
+                  <h3>Quick Status</h3>
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold; width: 200px;">App Name:</td>
+                      <td id="devAppName" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Schema Version:</td>
+                      <td id="devSchemaVersion" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Runtime Mode:</td>
+                      <td id="devRuntimeMode" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Runtime URL:</td>
+                      <td id="devRuntimeURL" style="padding: 6px; font-family: monospace; word-break: break-all;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Git Commit:</td>
+                      <td id="devGitCommit" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Git Branch:</td>
+                      <td id="devGitBranch" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Last Init Time:</td>
+                      <td id="devInitTime" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
+                      <td id="devRenderTime" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
+                      <td id="devMovementCount" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
+                      <td id="devStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Last Error:</td>
+                      <td id="devLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">—</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px; font-weight: bold;">Status Captured:</td>
+                      <td id="devStatusCaptured" style="padding: 6px; font-family: monospace;">—</td>
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- B. Developer Actions -->
+                <div class="panel">
+                  <h3>Developer Actions</h3>
+                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Reload the application frontend. In the desktop runtime this re-fetches all JS and CSS from disk, picking up any code or style changes without requiring DevTools.
+                  </p>
+                  <button class="btn btn-secondary" id="btnReloadAppDev" type="button">Reload App</button>
+                </div>
+
+                <!-- C. Diagnostic Report -->
+                <div class="panel">
+                  <h3>Diagnostic Report</h3>
+                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
+                    Structured plain-text snapshot of current runtime, config, and data state. Copy and paste into a troubleshooting session or support request.
+                  </p>
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                    <button class="btn btn-secondary" id="btnCopyDiagnostic" type="button">Copy Diagnostic Report</button>
+                    <button class="btn btn-secondary" id="btnRefreshDiagnostic" type="button">Refresh</button>
+                    <span id="devCopyStatus" style="font-size: 11px; color: #2e7d32; visibility: hidden;">Copied to clipboard</span>
+                  </div>
+                  <pre id="devDiagnosticOutput" style="margin: 0; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; font-family: monospace; font-size: 11px; white-space: pre; overflow-x: auto; max-height: 360px; overflow-y: auto; color: #333; line-height: 1.5;"></pre>
                 </div>
               </div>
 

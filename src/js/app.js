@@ -557,6 +557,105 @@ function initHistorySubtabs() {
   });
 }
 
+function generateDiagnosticReport() {
+  const now = new Date();
+  const storageInfo = getStorageInfo();
+  const storageQuota = getStorageQuota();
+  const cfg = getConfig();
+  const movements = getMovements();
+
+  const usedKB  = (storageQuota.used / 1024).toFixed(1);
+  const quotaMB = (storageQuota.quota / (1024 * 1024)).toFixed(1);
+  const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
+
+  const activeTabBtn = document.querySelector('.nav-tab.active');
+  const activeTab = activeTabBtn ? (activeTabBtn.dataset.tab || 'unknown') : 'unknown';
+
+  const pad = (label, width = 24) => label.padEnd(width);
+
+  const lines = [
+    '==== FDMS DIAGNOSTIC REPORT ====',
+    `${pad('generated:')}    ${now.toISOString()}`,
+    '',
+    '[RUNTIME]',
+    `${pad('app_name:')}      Vectair FDMS Lite`,
+    `${pad('schema_version:')}${storageInfo.version}`,
+    `${pad('runtime_mode:')} ${runtimeMode}`,
+    `${pad('runtime_url:')}  ${location.href}`,
+    `${pad('user_agent:')}   ${navigator.userAgent}`,
+    '',
+    '[BUILD]',
+    `${pad('git_commit:')}   not available`,
+    `${pad('git_branch:')}   not available`,
+    '',
+    '[TIMING]',
+    `${pad('init_time:')}    ${diagnostics.initTime || 'not available'}`,
+    `${pad('render_time:')} ${diagnostics.lastRenderTime || 'not available'}`,
+    `${pad('report_time:')} ${now.toISOString()}`,
+    '',
+    '[DATA]',
+    `${pad('movement_count:')}${movements.length}`,
+    `${pad('storage_key:')}  ${storageInfo.key}`,
+    `${pad('storage_used:')} ${usedKB} KB`,
+    `${pad('storage_pct:')}  ${storageQuota.percentage}%`,
+    `${pad('storage_quota:')}${quotaMB} MB`,
+    '',
+    '[CONFIG]',
+    `${pad('timezone_offset:')}${cfg.timezoneOffsetHours ?? 'unknown'}`,
+    `${pad('wtc_system:')}   ${cfg.wtcSystem ?? 'unknown'}`,
+    `${pad('wtc_threshold:')}${cfg.wtcAlertThreshold ?? 'unknown'}`,
+    `${pad('timeline_enabled:')}${cfg.timelineEnabled ?? 'unknown'}`,
+    `${pad('timeline_hours:')}${cfg.timelineStartHour ?? '?'}–${cfg.timelineEndHour ?? '?'} UTC`,
+    `${pad('auto_dep:')}     ${cfg.autoActivateDepEnabled ?? 'unknown'}`,
+    `${pad('auto_arr:')}     ${cfg.autoActivateArrEnabled ?? 'unknown'}`,
+    `${pad('auto_loc:')}     ${cfg.autoActivateLocEnabled ?? 'unknown'}`,
+    `${pad('auto_ovr:')}     ${cfg.autoActivateOvrEnabled ?? 'unknown'}`,
+    `${pad('show_time_labels:')}${cfg.showTimeLabelsOnStrip ?? 'unknown'}`,
+    '',
+    '[UI_STATE]',
+    `${pad('active_tab:')}   ${activeTab}`,
+    `${pad('page_url:')}     ${location.href}`,
+    '',
+    '[ERRORS]',
+    `${pad('last_error:')}   ${diagnostics.lastError || 'none'}`,
+    '',
+    '==== END REPORT ===='
+  ];
+
+  return lines.join('\n');
+}
+
+function refreshDeveloperSection() {
+  const now = new Date();
+  const storageInfo = getStorageInfo();
+  const storageQuota = getStorageQuota();
+
+  const usedKB  = (storageQuota.used / 1024).toFixed(1);
+  const quotaMB = (storageQuota.quota / (1024 * 1024)).toFixed(1);
+  const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
+
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  set('devAppName',        'Vectair FDMS Lite');
+  set('devSchemaVersion',  String(storageInfo.version));
+  set('devRuntimeMode',    runtimeMode);
+  set('devRuntimeURL',     location.href);
+  set('devGitCommit',      'not available');
+  set('devGitBranch',      'not available');
+  set('devInitTime',       diagnostics.initTime || 'not available');
+  set('devRenderTime',     diagnostics.lastRenderTime || 'not available');
+  set('devMovementCount',  String(storageInfo.movementCount));
+  set('devStorageUsage',   `${usedKB} KB  (${storageQuota.percentage}% of ${quotaMB} MB)`);
+  set('devLastError',      diagnostics.lastError || 'none');
+  set('devStatusCaptured', now.toISOString());
+
+  const outputEl = document.getElementById('devDiagnosticOutput');
+  if (outputEl) outputEl.textContent = generateDiagnosticReport();
+}
+
 function initAdminPanelHandlers() {
   // ── Section navigation ─────────────────────────────────────────
   const navBtns = document.querySelectorAll('.admin-nav-btn');
@@ -1295,6 +1394,55 @@ function initAdminPanelHandlers() {
   if (btnReloadApp) {
     btnReloadApp.addEventListener('click', () => {
       location.reload();
+    });
+  }
+
+  // ── Developer section ───────────────────────────────────────────
+  const devNavBtn = document.querySelector('[data-section="admin-sec-developer"]');
+  if (devNavBtn) {
+    devNavBtn.addEventListener('click', refreshDeveloperSection);
+  }
+
+  const btnReloadAppDev = document.getElementById('btnReloadAppDev');
+  if (btnReloadAppDev) {
+    btnReloadAppDev.addEventListener('click', () => location.reload());
+  }
+
+  const btnRefreshDiagnostic = document.getElementById('btnRefreshDiagnostic');
+  if (btnRefreshDiagnostic) {
+    btnRefreshDiagnostic.addEventListener('click', () => {
+      refreshDeveloperSection();
+    });
+  }
+
+  const btnCopyDiagnostic = document.getElementById('btnCopyDiagnostic');
+  if (btnCopyDiagnostic) {
+    btnCopyDiagnostic.addEventListener('click', () => {
+      const report = generateDiagnosticReport();
+      const outputEl = document.getElementById('devDiagnosticOutput');
+      if (outputEl) outputEl.textContent = report;
+
+      const copyStatus = document.getElementById('devCopyStatus');
+      navigator.clipboard.writeText(report).then(() => {
+        if (copyStatus) {
+          copyStatus.style.visibility = 'visible';
+          setTimeout(() => { copyStatus.style.visibility = 'hidden'; }, 2500);
+        }
+      }).catch(() => {
+        // Fallback for environments where clipboard API is unavailable
+        const ta = document.createElement('textarea');
+        ta.value = report;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (copyStatus) {
+          copyStatus.style.visibility = 'visible';
+          setTimeout(() => { copyStatus.style.visibility = 'hidden'; }, 2500);
+        }
+      });
     });
   }
 }
