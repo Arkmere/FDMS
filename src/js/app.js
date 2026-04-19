@@ -1389,14 +1389,6 @@ function initAdminPanelHandlers() {
     });
   }
 
-  // ── Reload app ─────────────────────────────────────────────────
-  const btnReloadApp = document.getElementById('btnReloadApp');
-  if (btnReloadApp) {
-    btnReloadApp.addEventListener('click', () => {
-      location.reload();
-    });
-  }
-
   // ── Developer section ───────────────────────────────────────────
   const devNavBtn = document.querySelector('[data-section="admin-sec-developer"]');
   if (devNavBtn) {
