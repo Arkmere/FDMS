@@ -1458,85 +1458,125 @@
               <div class="admin-section hidden" id="admin-sec-developer">
                 <div class="page-title">Developer</div>
                 <div class="page-subtitle">
-                  Runtime and build status for this FDMS instance. Use the diagnostic report when troubleshooting or reporting issues.
+                  Runtime diagnostics for Vectair Flite. Click Refresh to update all values, then Copy Diagnostic Report for a structured snapshot suitable for troubleshooting.
                 </div>
 
-                <!-- A. Quick Status -->
+                <!-- Actions -->
                 <div class="panel">
-                  <h3>Quick Status</h3>
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold; width: 200px;">App Name:</td>
-                      <td id="devAppName" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Schema Version:</td>
-                      <td id="devSchemaVersion" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Runtime Mode:</td>
-                      <td id="devRuntimeMode" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Runtime URL:</td>
-                      <td id="devRuntimeURL" style="padding: 6px; font-family: monospace; word-break: break-all;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Git Commit:</td>
-                      <td id="devGitCommit" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Git Branch:</td>
-                      <td id="devGitBranch" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Last Init Time:</td>
-                      <td id="devInitTime" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Last Render Time:</td>
-                      <td id="devRenderTime" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Movement Count:</td>
-                      <td id="devMovementCount" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Storage Usage:</td>
-                      <td id="devStorageUsage" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Last Error:</td>
-                      <td id="devLastError" style="padding: 6px; font-family: monospace; color: #d32f2f;">—</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 6px; font-weight: bold;">Status Captured:</td>
-                      <td id="devStatusCaptured" style="padding: 6px; font-family: monospace;">—</td>
-                    </tr>
+                  <h3>Actions</h3>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" id="btnRefreshDiagnostic" type="button">Refresh</button>
+                    <button class="btn btn-secondary" id="btnCopyDiagnostic" type="button">Copy Diagnostic Report</button>
+                    <button class="btn btn-secondary" id="btnReloadAppDev" type="button">Reload App</button>
+                    <span id="devCopyStatus" style="font-size: 11px; color: #2e7d32; visibility: hidden;">Copied to clipboard</span>
+                  </div>
+                </div>
+
+                <!-- 1. Build -->
+                <div class="panel">
+                  <h3>Build</h3>
+                  <table class="dev-table">
+                    <tr><td>App Name</td><td id="devAppName">—</td></tr>
+                    <tr><td>Version</td><td id="devAppVersion">—</td></tr>
+                    <tr><td>Git Commit</td><td id="devGitCommit">—</td></tr>
+                    <tr><td>Git Branch</td><td id="devGitBranch">—</td></tr>
+                    <tr><td>Build Timestamp</td><td id="devBuildTimestamp">—</td></tr>
                   </table>
                 </div>
 
-                <!-- B. Developer Actions -->
+                <!-- 2. Timing / Bootstrap -->
                 <div class="panel">
-                  <h3>Developer Actions</h3>
-                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Reload the application frontend. In the desktop runtime this re-fetches all JS and CSS from disk, picking up any code or style changes without requiring DevTools.
-                  </p>
-                  <button class="btn btn-secondary" id="btnReloadAppDev" type="button">Reload App</button>
+                  <h3>Timing / Bootstrap</h3>
+                  <table class="dev-table">
+                    <tr><td>Init Start</td><td id="devInitStart">—</td></tr>
+                    <tr><td>Init Complete</td><td id="devInitComplete">—</td></tr>
+                    <tr><td>Last Render</td><td id="devLastRender">—</td></tr>
+                    <tr><td>Last Diagnostic Refresh</td><td id="devLastDiagRefresh">—</td></tr>
+                    <tr><td>Current Stage</td><td id="devCurrentStage">—</td></tr>
+                    <tr><td>Last Successful Stage</td><td id="devLastSuccessStage">—</td></tr>
+                    <tr><td>Failed Stage</td><td id="devFailedStage">—</td></tr>
+                  </table>
                 </div>
 
-                <!-- C. Diagnostic Report -->
+                <!-- 3. Runtime -->
+                <div class="panel">
+                  <h3>Runtime</h3>
+                  <table class="dev-table">
+                    <tr><td>Runtime Mode</td><td id="devRuntimeMode">—</td></tr>
+                    <tr><td>Protocol</td><td id="devProtocol">—</td></tr>
+                    <tr><td>Origin</td><td id="devOrigin">—</td></tr>
+                    <tr><td>Pathname</td><td id="devPathname" class="dev-wrap">—</td></tr>
+                    <tr><td>Full URL</td><td id="devRuntimeURL" class="dev-wrap">—</td></tr>
+                  </table>
+                </div>
+
+                <!-- 4. Data / Storage -->
+                <div class="panel">
+                  <h3>Data / Storage</h3>
+                  <table class="dev-table">
+                    <tr><td>Schema Version</td><td id="devSchemaVersion">—</td></tr>
+                    <tr><td>Storage Key</td><td id="devStorageKey">—</td></tr>
+                    <tr><td>Movements</td><td id="devMovementCount">—</td></tr>
+                    <tr><td>Calendar Events</td><td id="devCalendarEvents">—</td></tr>
+                    <tr><td>Booking Profiles</td><td id="devBookingProfiles">—</td></tr>
+                    <tr><td>Cancelled Sorties</td><td id="devCancelledSorties">—</td></tr>
+                    <tr><td>Deleted Strips</td><td id="devDeletedStrips">—</td></tr>
+                    <tr><td>Storage Used</td><td id="devStorageUsed">—</td></tr>
+                    <tr><td>Storage Quota</td><td id="devStorageQuota">—</td></tr>
+                  </table>
+                </div>
+
+                <!-- 5. UI State -->
+                <div class="panel">
+                  <h3>UI State</h3>
+                  <table class="dev-table">
+                    <tr><td>Active Top Tab</td><td id="devActiveTopTab">—</td></tr>
+                    <tr><td>Active History Subtab</td><td id="devActiveHistorySubtab">—</td></tr>
+                    <tr><td>Active Admin Section</td><td id="devActiveAdminSection">—</td></tr>
+                    <tr><td>Visible Modals</td><td id="devVisibleModals">—</td></tr>
+                  </table>
+                </div>
+
+                <!-- 6. Last Error -->
+                <div class="panel">
+                  <h3>Last Error</h3>
+                  <table class="dev-table">
+                    <tr><td>Message</td><td id="devErrMessage" class="dev-error dev-wrap">—</td></tr>
+                    <tr><td>Type</td><td id="devErrType">—</td></tr>
+                    <tr><td>Time</td><td id="devErrTime">—</td></tr>
+                    <tr><td>Source</td><td id="devErrSource" class="dev-wrap">—</td></tr>
+                    <tr><td>Line / Column</td><td id="devErrLineCol">—</td></tr>
+                  </table>
+                </div>
+
+                <!-- 7. Runtime Counters -->
+                <div class="panel">
+                  <h3>Runtime Counters</h3>
+                  <table class="dev-table">
+                    <tr><td>renderLiveBoard</td><td id="devCntRenderLive">—</td></tr>
+                    <tr><td>renderHistoryBoard</td><td id="devCntRenderHistory">—</td></tr>
+                    <tr><td>renderTimeline</td><td id="devCntRenderTimeline">—</td></tr>
+                    <tr><td>updateDailyStats</td><td id="devCntDailyStats">—</td></tr>
+                    <tr><td>updateFisCounters</td><td id="devCntFisCounters">—</td></tr>
+                  </table>
+                </div>
+
+                <!-- 8. Bootstrap Log -->
+                <div class="panel">
+                  <h3>Bootstrap Log</h3>
+                  <pre id="devBootstrapLog" class="dev-pre dev-pre--log">(not yet captured — click Refresh)</pre>
+                </div>
+
+                <!-- 9. Recent Errors -->
+                <div class="panel">
+                  <h3>Recent Errors</h3>
+                  <pre id="devRecentErrors" class="dev-pre dev-pre--errors">(none)</pre>
+                </div>
+
+                <!-- 10. Diagnostic Report -->
                 <div class="panel">
                   <h3>Diagnostic Report</h3>
-                  <p style="font-size: 11px; color: #666; margin-bottom: 12px;">
-                    Structured plain-text snapshot of current runtime, config, and data state. Copy and paste into a troubleshooting session or support request.
-                  </p>
-                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                    <button class="btn btn-secondary" id="btnCopyDiagnostic" type="button">Copy Diagnostic Report</button>
-                    <button class="btn btn-secondary" id="btnRefreshDiagnostic" type="button">Refresh</button>
-                    <span id="devCopyStatus" style="font-size: 11px; color: #2e7d32; visibility: hidden;">Copied to clipboard</span>
-                  </div>
-                  <pre id="devDiagnosticOutput" style="margin: 0; padding: 12px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; font-family: monospace; font-size: 11px; white-space: pre; overflow-x: auto; max-height: 360px; overflow-y: auto; color: #333; line-height: 1.5;"></pre>
+                  <pre id="devDiagnosticOutput" class="dev-pre dev-pre--report"></pre>
                 </div>
               </div>
 

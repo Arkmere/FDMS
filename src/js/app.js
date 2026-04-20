@@ -37,6 +37,7 @@ import {
   resetMovementsToDemo,
   getStorageInfo,
   getStorageQuota,
+  getDataCounts,
   getConfig,
   updateConfig,
   getGenericOverflightsCount,
@@ -251,29 +252,101 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-// Diagnostics state
-const diagnostics = {
-  initTime: null,
-  lastRenderTime: null,
-  lastError: null
+const BUILD_INFO = {
+  appName:        'Vectair Flite',
+  appVersion:     'dev',
+  gitCommit:      'unknown',
+  gitBranch:      'unknown',
+  buildTimestamp: new Date().toISOString(),
 };
 
-window.addEventListener("error", (e) => {
-  const message = e.message || String(e.error || e);
-  diagnostics.lastError = message;
-  updateDiagnostics();
+const diagnostics = {
+  timing: {
+    initStartTime:              null,
+    initCompleteTime:           null,
+    lastRenderTime:             null,
+    lastDiagnosticRefreshTime:  null,
+  },
+  bootstrap: {
+    currentStage:        'not-started',
+    lastSuccessfulStage: null,
+    failedStage:         null,
+    stageLog:            [],
+  },
+  errors: {
+    lastErrorMessage: null,
+    lastErrorSource:  null,
+    lastErrorLine:    null,
+    lastErrorColumn:  null,
+    lastErrorStack:   null,
+    lastErrorType:    null,
+    lastErrorTime:    null,
+    recentErrors:     [],
+  },
+  uiState: {
+    activeTopTab:        null,
+    activeHistorySubtab: null,
+    activeAdminSection:  null,
+    visibleModalCount:   0,
+  },
+  runtimeCounters: {
+    renderLiveBoardCount:    0,
+    renderHistoryBoardCount: 0,
+    renderTimelineCount:     0,
+    updateDailyStatsCount:   0,
+    updateFisCountersCount:  0,
+  },
+};
 
-  // Show toast notification for user
-  showToast(`Error: ${message}`, 'error', 6000);
+window.__FDMS_DIAGNOSTICS__ = true;
+window.__fdmsDiag = diagnostics.runtimeCounters;
+
+function recordError(obj) {
+  const entry = {
+    message: obj.message || 'unknown',
+    source:  obj.source  || null,
+    line:    obj.line    != null ? obj.line   : null,
+    column:  obj.column  != null ? obj.column : null,
+    stack:   obj.stack   || null,
+    type:    obj.type    || 'error',
+    time:    new Date().toISOString(),
+  };
+  diagnostics.errors.lastErrorMessage = entry.message;
+  diagnostics.errors.lastErrorSource  = entry.source;
+  diagnostics.errors.lastErrorLine    = entry.line;
+  diagnostics.errors.lastErrorColumn  = entry.column;
+  diagnostics.errors.lastErrorStack   = entry.stack;
+  diagnostics.errors.lastErrorType    = entry.type;
+  diagnostics.errors.lastErrorTime    = entry.time;
+  diagnostics.errors.recentErrors.unshift(entry);
+  if (diagnostics.errors.recentErrors.length > 10) diagnostics.errors.recentErrors.length = 10;
+}
+
+window.addEventListener("error", (e) => {
+  recordError({
+    message: e.message || String(e.error || e),
+    source:  e.filename || null,
+    line:    e.lineno != null ? e.lineno : null,
+    column:  e.colno  != null ? e.colno  : null,
+    stack:   e.error?.stack || null,
+    type:    'error',
+  });
+  updateDiagnostics();
+  showToast(`Error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
 });
 
 window.addEventListener("unhandledrejection", (e) => {
-  const message = String(e.reason || e);
-  diagnostics.lastError = message;
+  const reason = e.reason;
+  recordError({
+    message: String(reason?.message || reason || e),
+    source:  null,
+    line:    null,
+    column:  null,
+    stack:   reason?.stack || null,
+    type:    'unhandledrejection',
+  });
   updateDiagnostics();
-
-  // Show toast notification for user
-  showToast(`Promise error: ${message}`, 'error', 6000);
+  showToast(`Promise error: ${diagnostics.errors.lastErrorMessage}`, 'error', 6000);
 });
 
 /**
@@ -438,11 +511,11 @@ function updateDiagnostics() {
   const lastErrorEl = document.getElementById("diagLastError");
   const storageUsageEl = document.getElementById("diagStorageUsage");
 
-  if (initTimeEl) initTimeEl.textContent = diagnostics.initTime || "—";
-  if (renderTimeEl) renderTimeEl.textContent = diagnostics.lastRenderTime || "—";
+  if (initTimeEl) initTimeEl.textContent = diagnostics.timing.initCompleteTime || "—";
+  if (renderTimeEl) renderTimeEl.textContent = diagnostics.timing.lastRenderTime || "—";
   if (storageKeyEl) storageKeyEl.textContent = storageInfo.key || "—";
   if (movementCountEl) movementCountEl.textContent = String(storageInfo.movementCount);
-  if (lastErrorEl) lastErrorEl.textContent = diagnostics.lastError || "None";
+  if (lastErrorEl) lastErrorEl.textContent = diagnostics.errors.lastErrorMessage || "None";
 
   // Update storage usage if element exists
   if (storageUsageEl) {
@@ -557,67 +630,139 @@ function initHistorySubtabs() {
   });
 }
 
+function logBootstrapStage(label, status, detail = null) {
+  const entry = { time: new Date().toISOString(), label, status, detail };
+  diagnostics.bootstrap.stageLog.push(entry);
+  diagnostics.bootstrap.currentStage = label;
+  if (status === 'success') diagnostics.bootstrap.lastSuccessfulStage = label;
+  if (status === 'failed')  diagnostics.bootstrap.failedStage = label;
+}
+
+function runStage(label, fn) {
+  logBootstrapStage(label, 'started');
+  try {
+    fn();
+    logBootstrapStage(label, 'success');
+  } catch (e) {
+    logBootstrapStage(label, 'failed', e.message || String(e));
+    throw e;
+  }
+}
+
 function generateDiagnosticReport() {
   const now = new Date();
-  const storageInfo = getStorageInfo();
+  const storageInfo  = getStorageInfo();
   const storageQuota = getStorageQuota();
-  const cfg = getConfig();
-  const movements = getMovements();
+  const counts       = getDataCounts();
+  const cfg          = getConfig();
 
   const usedKB  = (storageQuota.used / 1024).toFixed(1);
   const quotaMB = (storageQuota.quota / (1024 * 1024)).toFixed(1);
   const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
 
-  const activeTabBtn = document.querySelector('.nav-tab.active');
-  const activeTab = activeTabBtn ? (activeTabBtn.dataset.tab || 'unknown') : 'unknown';
+  const activeTabBtn    = document.querySelector('.nav-tab.active');
+  const activeHistBtn   = document.querySelector('.history-subtab-btn.active');
+  const activeAdminBtn  = document.querySelector('.admin-nav-btn.active');
+  const visibleModals   = document.querySelectorAll('.modal:not(.hidden), [role="dialog"]:not(.hidden)').length;
 
-  const pad = (label, width = 24) => label.padEnd(width);
+  const P = 28;
+  const f = (label, value) => `${label.padEnd(P)}${value ?? 'none'}`;
+
+  const bsLog = diagnostics.bootstrap.stageLog.length > 0
+    ? diagnostics.bootstrap.stageLog
+        .map(e => `  ${e.time}  ${e.status.padEnd(9)}${e.label}${e.detail ? '  // ' + e.detail : ''}`)
+        .join('\n')
+    : '  (no entries)';
+
+  const recentErrLines = diagnostics.errors.recentErrors.length > 0
+    ? diagnostics.errors.recentErrors.map((e, i) =>
+        `  [${i + 1}] ${e.time}  type:${e.type}\n       msg: ${e.message}` +
+        (e.source ? `\n       at:  ${e.source}${e.line != null ? ':' + e.line : ''}` : '')
+      ).join('\n')
+    : '  (none)';
 
   const lines = [
-    '==== FDMS DIAGNOSTIC REPORT ====',
-    `${pad('generated:')}    ${now.toISOString()}`,
-    '',
-    '[RUNTIME]',
-    `${pad('app_name:')}      Vectair FDMS Lite`,
-    `${pad('schema_version:')}${storageInfo.version}`,
-    `${pad('runtime_mode:')} ${runtimeMode}`,
-    `${pad('runtime_url:')}  ${location.href}`,
-    `${pad('user_agent:')}   ${navigator.userAgent}`,
+    '==== VECTAIR FLITE DIAGNOSTIC REPORT ====',
+    f('generated:', now.toISOString()),
     '',
     '[BUILD]',
-    `${pad('git_commit:')}   not available`,
-    `${pad('git_branch:')}   not available`,
+    f('app_name:', BUILD_INFO.appName),
+    f('app_version:', BUILD_INFO.appVersion),
+    f('git_commit:', BUILD_INFO.gitCommit),
+    f('git_branch:', BUILD_INFO.gitBranch),
+    f('build_timestamp:', BUILD_INFO.buildTimestamp),
     '',
     '[TIMING]',
-    `${pad('init_time:')}    ${diagnostics.initTime || 'not available'}`,
-    `${pad('render_time:')} ${diagnostics.lastRenderTime || 'not available'}`,
-    `${pad('report_time:')} ${now.toISOString()}`,
+    f('init_start:', diagnostics.timing.initStartTime || 'not available'),
+    f('init_complete:', diagnostics.timing.initCompleteTime || 'not available'),
+    f('last_render:', diagnostics.timing.lastRenderTime || 'not available'),
+    f('last_diag_refresh:', diagnostics.timing.lastDiagnosticRefreshTime || 'not available'),
     '',
-    '[DATA]',
-    `${pad('movement_count:')}${movements.length}`,
-    `${pad('storage_key:')}  ${storageInfo.key}`,
-    `${pad('storage_used:')} ${usedKB} KB`,
-    `${pad('storage_pct:')}  ${storageQuota.percentage}%`,
-    `${pad('storage_quota:')}${quotaMB} MB`,
+    '[BOOTSTRAP]',
+    f('current_stage:', diagnostics.bootstrap.currentStage),
+    f('last_successful_stage:', diagnostics.bootstrap.lastSuccessfulStage || 'none'),
+    f('failed_stage:', diagnostics.bootstrap.failedStage || 'none'),
     '',
-    '[CONFIG]',
-    `${pad('timezone_offset:')}${cfg.timezoneOffsetHours ?? 'unknown'}`,
-    `${pad('wtc_system:')}   ${cfg.wtcSystem ?? 'unknown'}`,
-    `${pad('wtc_threshold:')}${cfg.wtcAlertThreshold ?? 'unknown'}`,
-    `${pad('timeline_enabled:')}${cfg.timelineEnabled ?? 'unknown'}`,
-    `${pad('timeline_hours:')}${cfg.timelineStartHour ?? '?'}–${cfg.timelineEndHour ?? '?'} UTC`,
-    `${pad('auto_dep:')}     ${cfg.autoActivateDepEnabled ?? 'unknown'}`,
-    `${pad('auto_arr:')}     ${cfg.autoActivateArrEnabled ?? 'unknown'}`,
-    `${pad('auto_loc:')}     ${cfg.autoActivateLocEnabled ?? 'unknown'}`,
-    `${pad('auto_ovr:')}     ${cfg.autoActivateOvrEnabled ?? 'unknown'}`,
-    `${pad('show_time_labels:')}${cfg.showTimeLabelsOnStrip ?? 'unknown'}`,
+    '[BOOTSTRAP_LOG]',
+    bsLog,
+    '',
+    '[RUNTIME]',
+    f('runtime_mode:', runtimeMode),
+    f('protocol:', location.protocol),
+    f('origin:', location.origin || 'null'),
+    f('pathname:', location.pathname),
+    f('url:', location.href),
+    f('user_agent:', navigator.userAgent),
+    '',
+    '[DATA_STORAGE]',
+    f('schema_version:', storageInfo.version),
+    f('storage_key:', storageInfo.key),
+    f('movements:', counts.movements),
+    f('calendar_events:', counts.calendarEvents),
+    f('booking_profiles:', counts.bookingProfiles),
+    f('cancelled_sorties:', counts.cancelledSorties),
+    f('deleted_strips:', counts.deletedStrips),
+    f('storage_used_kb:', usedKB),
+    f('storage_used_pct:', storageQuota.percentage + '%'),
+    f('storage_quota_mb:', quotaMB),
     '',
     '[UI_STATE]',
-    `${pad('active_tab:')}   ${activeTab}`,
-    `${pad('page_url:')}     ${location.href}`,
+    f('active_top_tab:', activeTabBtn   ? (activeTabBtn.dataset.tab      || 'none') : 'none'),
+    f('active_history_subtab:', activeHistBtn  ? (activeHistBtn.dataset.subpage   || 'none') : 'none'),
+    f('active_admin_section:', activeAdminBtn ? (activeAdminBtn.dataset.section  || 'none') : 'none'),
+    f('visible_modals:', visibleModals),
+    f('page_url:', location.href),
     '',
     '[ERRORS]',
-    `${pad('last_error:')}   ${diagnostics.lastError || 'none'}`,
+    f('last_error_message:', diagnostics.errors.lastErrorMessage || 'none'),
+    f('last_error_type:', diagnostics.errors.lastErrorType || 'none'),
+    f('last_error_time:', diagnostics.errors.lastErrorTime || 'none'),
+    f('last_error_source:', diagnostics.errors.lastErrorSource || 'none'),
+    f('last_error_line_col:', diagnostics.errors.lastErrorLine != null
+        ? `${diagnostics.errors.lastErrorLine}:${diagnostics.errors.lastErrorColumn ?? '?'}`
+        : 'none'),
+    '',
+    '[RECENT_ERRORS]',
+    recentErrLines,
+    '',
+    '[COUNTERS]',
+    f('render_live_board:', diagnostics.runtimeCounters.renderLiveBoardCount),
+    f('render_history_board:', diagnostics.runtimeCounters.renderHistoryBoardCount),
+    f('render_timeline:', diagnostics.runtimeCounters.renderTimelineCount),
+    f('update_daily_stats:', diagnostics.runtimeCounters.updateDailyStatsCount),
+    f('update_fis_counters:', diagnostics.runtimeCounters.updateFisCountersCount),
+    '',
+    '[CONFIG]',
+    f('timezone_offset:', cfg.timezoneOffsetHours ?? 'unknown'),
+    f('wtc_system:', cfg.wtcSystem ?? 'unknown'),
+    f('wtc_threshold:', cfg.wtcAlertThreshold ?? 'unknown'),
+    f('timeline_enabled:', cfg.timelineEnabled ?? 'unknown'),
+    f('timeline_hours:', `${cfg.timelineStartHour ?? '?'}–${cfg.timelineEndHour ?? '?'} UTC`),
+    f('auto_dep:', cfg.autoActivateDepEnabled ?? 'unknown'),
+    f('auto_arr:', cfg.autoActivateArrEnabled ?? 'unknown'),
+    f('auto_loc:', cfg.autoActivateLocEnabled ?? 'unknown'),
+    f('auto_ovr:', cfg.autoActivateOvrEnabled ?? 'unknown'),
+    f('show_time_labels:', cfg.showTimeLabelsOnStrip ?? 'unknown'),
     '',
     '==== END REPORT ===='
   ];
@@ -626,32 +771,104 @@ function generateDiagnosticReport() {
 }
 
 function refreshDeveloperSection() {
-  const now = new Date();
-  const storageInfo = getStorageInfo();
+  const now          = new Date();
+  diagnostics.timing.lastDiagnosticRefreshTime = now.toISOString();
+  const storageInfo  = getStorageInfo();
   const storageQuota = getStorageQuota();
+  const counts       = getDataCounts();
 
   const usedKB  = (storageQuota.used / 1024).toFixed(1);
   const quotaMB = (storageQuota.quota / (1024 * 1024)).toFixed(1);
   const runtimeMode = location.protocol === 'file:' ? 'desktop-local' : 'browser';
 
+  const activeTabBtn   = document.querySelector('.nav-tab.active');
+  const activeHistBtn  = document.querySelector('.history-subtab-btn.active');
+  const activeAdminBtn = document.querySelector('.admin-nav-btn.active');
+  const visibleModals  = document.querySelectorAll('.modal:not(.hidden), [role="dialog"]:not(.hidden)').length;
+
   const set = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = val;
+    if (el) el.textContent = val ?? '—';
   };
 
-  set('devAppName',        'Vectair FDMS Lite');
-  set('devSchemaVersion',  String(storageInfo.version));
-  set('devRuntimeMode',    runtimeMode);
-  set('devRuntimeURL',     location.href);
-  set('devGitCommit',      'not available');
-  set('devGitBranch',      'not available');
-  set('devInitTime',       diagnostics.initTime || 'not available');
-  set('devRenderTime',     diagnostics.lastRenderTime || 'not available');
-  set('devMovementCount',  String(storageInfo.movementCount));
-  set('devStorageUsage',   `${usedKB} KB  (${storageQuota.percentage}% of ${quotaMB} MB)`);
-  set('devLastError',      diagnostics.lastError || 'none');
-  set('devStatusCaptured', now.toISOString());
+  // Build
+  set('devAppName',        BUILD_INFO.appName);
+  set('devAppVersion',     BUILD_INFO.appVersion);
+  set('devGitCommit',      BUILD_INFO.gitCommit);
+  set('devGitBranch',      BUILD_INFO.gitBranch);
+  set('devBuildTimestamp', BUILD_INFO.buildTimestamp);
 
+  // Timing / Bootstrap
+  set('devInitStart',        diagnostics.timing.initStartTime || 'not available');
+  set('devInitComplete',     diagnostics.timing.initCompleteTime || 'not available');
+  set('devLastRender',       diagnostics.timing.lastRenderTime || 'not available');
+  set('devLastDiagRefresh',  now.toISOString());
+  set('devCurrentStage',     diagnostics.bootstrap.currentStage);
+  set('devLastSuccessStage', diagnostics.bootstrap.lastSuccessfulStage || 'none');
+  set('devFailedStage',      diagnostics.bootstrap.failedStage || 'none');
+
+  // Runtime
+  set('devRuntimeMode', runtimeMode);
+  set('devProtocol',    location.protocol);
+  set('devOrigin',      location.origin || 'null');
+  set('devPathname',    location.pathname);
+  set('devRuntimeURL',  location.href);
+
+  // Data / Storage
+  set('devSchemaVersion',    String(storageInfo.version));
+  set('devStorageKey',       storageInfo.key);
+  set('devMovementCount',    String(counts.movements));
+  set('devCalendarEvents',   String(counts.calendarEvents));
+  set('devBookingProfiles',  String(counts.bookingProfiles));
+  set('devCancelledSorties', String(counts.cancelledSorties));
+  set('devDeletedStrips',    String(counts.deletedStrips));
+  set('devStorageUsed',      `${usedKB} KB  (${storageQuota.percentage}%)`);
+  set('devStorageQuota',     `${quotaMB} MB`);
+
+  // UI State
+  set('devActiveTopTab',        activeTabBtn   ? (activeTabBtn.dataset.tab      || 'none') : 'none');
+  set('devActiveHistorySubtab', activeHistBtn  ? (activeHistBtn.dataset.subpage  || 'none') : 'none');
+  set('devActiveAdminSection',  activeAdminBtn ? (activeAdminBtn.dataset.section || 'none') : 'none');
+  set('devVisibleModals',       String(visibleModals));
+
+  // Errors
+  set('devErrMessage', diagnostics.errors.lastErrorMessage || 'none');
+  set('devErrType',    diagnostics.errors.lastErrorType    || 'none');
+  set('devErrTime',    diagnostics.errors.lastErrorTime    || 'none');
+  set('devErrSource',  diagnostics.errors.lastErrorSource  || 'none');
+  set('devErrLineCol', diagnostics.errors.lastErrorLine != null
+      ? `${diagnostics.errors.lastErrorLine}:${diagnostics.errors.lastErrorColumn ?? '?'}`
+      : 'none');
+
+  // Counters
+  set('devCntRenderLive',    String(diagnostics.runtimeCounters.renderLiveBoardCount));
+  set('devCntRenderHistory', String(diagnostics.runtimeCounters.renderHistoryBoardCount));
+  set('devCntRenderTimeline',String(diagnostics.runtimeCounters.renderTimelineCount));
+  set('devCntDailyStats',    String(diagnostics.runtimeCounters.updateDailyStatsCount));
+  set('devCntFisCounters',   String(diagnostics.runtimeCounters.updateFisCountersCount));
+
+  // Bootstrap Log
+  const bsLogEl = document.getElementById('devBootstrapLog');
+  if (bsLogEl) {
+    bsLogEl.textContent = diagnostics.bootstrap.stageLog.length > 0
+      ? diagnostics.bootstrap.stageLog
+          .map(e => `${e.time}  ${e.status.padEnd(9)}${e.label}${e.detail ? '  // ' + e.detail : ''}`)
+          .join('\n')
+      : '(no entries)';
+  }
+
+  // Recent Errors
+  const recentErrsEl = document.getElementById('devRecentErrors');
+  if (recentErrsEl) {
+    recentErrsEl.textContent = diagnostics.errors.recentErrors.length > 0
+      ? diagnostics.errors.recentErrors.map((e, i) =>
+          `[${i + 1}] ${e.time}  type:${e.type}\n    msg: ${e.message}` +
+          (e.source ? `\n    at:  ${e.source}${e.line != null ? ':' + e.line : ''}` : '')
+        ).join('\n\n')
+      : '(none)';
+  }
+
+  // Diagnostic Report
   const outputEl = document.getElementById('devDiagnosticOutput');
   if (outputEl) outputEl.textContent = generateDiagnosticReport();
 }
@@ -1410,9 +1627,9 @@ function initAdminPanelHandlers() {
   const btnCopyDiagnostic = document.getElementById('btnCopyDiagnostic');
   if (btnCopyDiagnostic) {
     btnCopyDiagnostic.addEventListener('click', () => {
-      const report = generateDiagnosticReport();
+      refreshDeveloperSection();
       const outputEl = document.getElementById('devDiagnosticOutput');
-      if (outputEl) outputEl.textContent = report;
+      const report = outputEl ? outputEl.textContent : generateDiagnosticReport();
 
       const copyStatus = document.getElementById('devCopyStatus');
       navigator.clipboard.writeText(report).then(() => {
@@ -1591,59 +1808,66 @@ function initLiveboardCounters() {
 let _lastTickDate = null;
 
 async function bootstrap() {
+  diagnostics.timing.initStartTime = new Date().toISOString();
+  logBootstrapStage('bootstrap:start', 'success');
   updateInitStatus("Initialising app...");
 
   try {
     initErrorOverlay();
 
-    // Global UI primitives
-    initTabs();
-    initClock();
+    runStage('tabs:init',  () => initTabs());
+    runStage('clock:init', () => initClock());
 
-    // Load VKB data in background
+    // VKB load is non-fatal — failure is logged but does not abort bootstrap
+    logBootstrapStage('vkb:load', 'started');
     updateInitStatus("Loading VKB data...");
     try {
       await loadVKBData();
-      const status = getVKBStatus();
-      showToast(`VKB loaded: ${status.counts.aircraftTypes + status.counts.callsignsStandard + status.counts.locations + status.counts.registrations} records`, 'success', 3000);
+      const vkbStatus = getVKBStatus();
+      const recordCount = vkbStatus.counts.aircraftTypes + vkbStatus.counts.callsignsStandard +
+                          vkbStatus.counts.locations + vkbStatus.counts.registrations;
+      showToast(`VKB loaded: ${recordCount} records`, 'success', 3000);
+      logBootstrapStage('vkb:load', 'success', `${recordCount} records`);
     } catch (vkbError) {
+      logBootstrapStage('vkb:load', 'failed', vkbError.message);
       console.warn('VKB load failed, continuing without VKB:', vkbError);
       showToast('VKB data failed to load - lookup features unavailable', 'warning', 5000);
     }
 
-    // Feature modules: bind handlers first
-    initLiveBoard();
-    initTimeline();
-    initLiveboardCounters();
-    initHistoryBoard();
-    initCancelledSortiesLog();
-    initDeletedStripsLog();
-    initHistoryExport();
-    initHistorySubtabs();
-    initVkbLookup();
-    initAdminPanel();
-    initAdminPanelHandlers();
-    initReports();
-    initBookingPage();
-    initCalendarPage();
-    initBookingProfilesAdmin();
+    runStage('liveboard:init', () => initLiveBoard());
+    runStage('timeline:init',  () => { initTimeline(); initLiveboardCounters(); });
+    runStage('history:init',   () => {
+      initHistoryBoard();
+      initCancelledSortiesLog();
+      initDeletedStripsLog();
+      initHistoryExport();
+      initHistorySubtabs();
+    });
+    runStage('vkb-lookup:init', () => initVkbLookup());
+    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); });
+    runStage('reports:init',    () => initReports());
+    runStage('booking:init',    () => { initBookingPage(); initCalendarPage(); initBookingProfilesAdmin(); });
 
-    // Reconcile any dangling booking↔strip links from previous sessions (before first render)
+    logBootstrapStage('reconcile:run', 'started');
     const reconcileSummary = reconcileLinks();
+    logBootstrapStage('reconcile:run', 'success');
 
-    // Initial renders
+    logBootstrapStage('first-render', 'started');
     renderLiveBoard();
+    diagnostics.runtimeCounters.renderLiveBoardCount++;
     renderTimeline();
+    diagnostics.runtimeCounters.renderTimelineCount++;
     renderHistoryBoard();
+    diagnostics.runtimeCounters.renderHistoryBoardCount++;
     renderReports();
     renderCalendar();
+    logBootstrapStage('first-render', 'success');
 
-    // Show integrity banner if reconciliation found any issues
     showReconcileBanner(reconcileSummary);
 
-    // Record init complete
-    diagnostics.initTime = new Date().toISOString();
-    diagnostics.lastRenderTime = diagnostics.initTime;
+    diagnostics.timing.initCompleteTime = new Date().toISOString();
+    diagnostics.timing.lastRenderTime   = diagnostics.timing.initCompleteTime;
+    logBootstrapStage('bootstrap:complete', 'success');
     updateInitStatus("Init complete", true);
     updateDiagnostics();
 
@@ -1657,14 +1881,19 @@ async function bootstrap() {
       const isLiveActive = !document.getElementById('tab-live')?.classList.contains('hidden');
       if (isLiveActive || dayRolled) {
         renderLiveBoard();
+        diagnostics.runtimeCounters.renderLiveBoardCount++;
         renderTimeline();
+        diagnostics.runtimeCounters.renderTimelineCount++;
       }
       if (dayRolled) {
         _lastTickDate = currentDate;
       }
     }, 45000); // 45-second tick
   } catch (e) {
-    diagnostics.lastError = e.message || String(e);
+    if (!diagnostics.bootstrap.failedStage) {
+      logBootstrapStage(diagnostics.bootstrap.currentStage || 'unknown', 'failed', e.message || String(e));
+    }
+    recordError({ message: e.message || String(e), stack: e.stack || null, type: 'bootstrap-error' });
     updateInitStatus("Init failed - check diagnostics", false);
     updateDiagnostics();
     throw e;
