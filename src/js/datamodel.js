@@ -586,9 +586,10 @@ export function inferTypeFromReg(registration) {
  */
 function getTimeWithOffset(offsetMinutes) {
   const now = new Date();
-  now.setMinutes(now.getMinutes() + offsetMinutes);
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const base = now.getUTCHours() * 60 + now.getUTCMinutes() + offsetMinutes;
+  const totalMinutes = ((base % 1440) + 1440) % 1440;
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
   return `${hours}:${minutes}`;
 }
 
@@ -609,12 +610,10 @@ function addMinutesToTime(timeStr, minutesToAdd) {
     return getTimeWithOffset(minutesToAdd);
   }
 
-  const date = new Date();
-  date.setHours(hours);
-  date.setMinutes(minutes + minutesToAdd);
-
-  const newHours = String(date.getHours()).padStart(2, '0');
-  const newMinutes = String(date.getMinutes()).padStart(2, '0');
+  const base = hours * 60 + minutes + minutesToAdd;
+  const totalMinutes = ((base % 1440) + 1440) % 1440;
+  const newHours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const newMinutes = String(totalMinutes % 60).padStart(2, '0');
   return `${newHours}:${newMinutes}`;
 }
 
@@ -1539,7 +1538,7 @@ function getEuropeLondonSeasonalOffsetHours(atDate = new Date()) {
  *
  * @returns {number}
  */
-function getOperationalTimezoneOffsetHours() {
+export function getOperationalTimezoneOffsetHours() {
   const configured = Number(config.timezoneOffsetHours);
   if (Number.isFinite(configured) && Math.abs(configured) > 1) {
     return configured;

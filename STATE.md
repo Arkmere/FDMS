@@ -1,43 +1,6 @@
 # STATE.md — Vectair Flite
 
-<<<<<<< HEAD
-Last updated: 2026-03-31 (Europe/London) — DP-02 baseline reconciliation + Tauri scaffold complete; interactive desktop runtime validation pending. Authoritative baseline: `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` (branch and tag agree). Tauri v2 scaffold committed (`src-tauri/`). All baseline docs now reference the single authoritative commit. See `docs/desktop-productization-dp02-validation.md`.
-
----
-
-## Desktop productization workstream (active as of 2026-03-30)
-
-**DP-01 Discovery — complete.** See `docs/desktop-productization-discovery.md` for full detail.
-
-- Runtime recommendation: **Tauri** (primary). Electron as fallback only if a concrete WebView2 blocker is confirmed in DP-02.
-- Browser/localStorage coupling inventoried. All 9 operational localStorage keys mapped to JSON files in appLocalDataDir.
-- Storage adapter pattern defined: `LocalStorageAdapter` (existing, preserved) + `TauriFileAdapter` (new, for desktop). No behavioral change until DP-03.
-- File export/import adapter defined. Blob/FileReader pattern preserved in browser; replaced with Tauri `plugin-fs` + `plugin-dialog` in desktop.
-- VKB CSV load via `fetch('./data/*.csv')` — expected to work via Tauri asset protocol; confirm in DP-02.
-- SheetJS CDN dependency: must be vendored or confirmed unused before DP-04.
-- Auto-backup, local crash log, and GitHub-based auto-update plumbing deferred to DP-05.
-- Proposed next ticket sequence: DP-02 → DP-03 → DP-04 → DP-05 → DP-06.
-
-No functional product changes were made in DP-01. All settled behaviors from the pre-desktop baseline remain intact.
-
-**DP-02 Baseline Reconciliation + Tauri Scaffold — scaffold complete; interactive validation pending.** See `docs/desktop-productization-dp02-validation.md` for full detail.
-
-- Authoritative frozen baseline confirmed via git: `7a7c36a1241fa42e9aa19f184dca946dedca6c6f` — branch `baseline/pre-desktop-productization` and tag `flite-pre-desktop-baseline-2026-03` agree.
-- Baseline marker doc discrepancies corrected: `BASELINE_PRE_DESKTOP_PRODUCTIZATION.md` and `BASELINE_SMOKE_TEST_CHECKLIST.md` both now reference `7a7c36a`.
-- Tauri v2 scaffold committed: `src-tauri/Cargo.toml`, `build.rs`, `tauri.conf.json`, `capabilities/default.json`, `src/main.rs`, `src/lib.rs`.
-- Dev mode for desktop validation: run `python3 -m http.server 8000` from `src/`, then `cargo tauri dev` from repo root.
-- CSP disabled (`null`) for dev until DP-04 vendors or removes the SheetJS CDN dependency.
-- Tauri CLI v2.10.1: ✓ installed successfully from crates.io.
-- Rust/Cargo dependency resolution: ✓ validated — 475 crates resolved; scaffold compiles to linking stage.
-- System library install (webkit2gtk): apt download did not complete in CI session due to network constraint; not a package availability issue.
-- `cargo tauri dev` native launch in a usable desktop runtime: pending developer-machine validation.
-- Interactive smoke validation in the desktop shell: pending developer-machine validation.
-- Windows/WebView2 validation: pending — requires Windows hardware.
-- Electron fallback: no blockers found so far; Tauri remains confirmed.
-- DP-03 (storage adapter layer) must not begin until desktop runtime validation has been completed on a developer machine.
-=======
-Last updated: 2026-04-03 (Europe/London) — DP-02 Windows icon asset blocker resolved; placeholder icon set committed to src-tauri/icons/
->>>>>>> origin/claude/add-windows-icon-assets-fP0Fp
+Last updated: 2026-04-20 (Europe/London) — Unified timing model complete: UTC storage, BST conversion, and banner/default-time logic now all use canonical `getOperationalTimezoneOffsetHours()`. See section 16 below.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1768,3 +1731,41 @@ Next step: continue DP-02 Windows validation/retest loop and clear the remaining
 DP-03 and beyond
 
 Not started. Do not begin until DP-02 desktop validation is confirmed clean.
+
+---
+
+## 16) Unified Timing Model — implementation record (2026-04-20)
+
+### Root cause summary
+
+The codebase mixed two time models:
+
+- **Canonical model** in `src/js/datamodel.js`: `getOperationalTimezoneOffsetHours()` resolves Europe/London seasonally (BST=+1, GMT=0) for config values 0 or 1; uses explicit offset directly for other values.
+- **Legacy paths** still active: `initClock()` in `app.js` read raw `config.timezoneOffsetHours` directly (bypassing seasonal resolution), and `getTimeWithOffset()` / `addMinutesToTime()` in `datamodel.js` used browser-local `Date#getHours()` / `setHours()` methods rather than UTC methods.
+
+This caused BST-season disagreement: the banner local clock showed the raw stored offset (0 in BST = UTC, not UTC+1), while modal UTC↔Local conversion correctly showed UTC+1. Default planned times were also skewed by host machine local time rather than UTC.
+
+### Files changed
+
+- `src/js/datamodel.js`
+  - `getTimeWithOffset(offsetMinutes)`: Replaced local `Date#getHours/getMinutes` mutation with UTC-based total-minutes arithmetic (`getUTCHours`, `getUTCMinutes`, mod-1440 wrap).
+  - `addMinutesToTime(timeStr, minutesToAdd)`: Replaced `Date#setHours/getHours` local-time arithmetic with pure integer minutes arithmetic (parse HH:MM → total minutes → add → mod 1440 → format).
+  - `getOperationalTimezoneOffsetHours()`: Exported (added `export` keyword) so banner and other runtime consumers can use it directly without reinterpreting config.
+
+- `src/js/app.js`
+  - Added `getOperationalTimezoneOffsetHours` to import from `./datamodel.js`.
+  - `initClock()`: Replaced `const offsetHours = cfg.timezoneOffsetHours || 0` with `const offsetHours = getOperationalTimezoneOffsetHours()`. Banner local-time calculation and hide-if-same visibility logic now driven by canonical seasonal offset, not raw stored value.
+
+### Manual smoke results
+
+Pending developer verification on Stuart's Windows machine. Expected outcomes:
+
+- **BST banner parity**: With config offset 0 or 1, banner local clock shows UTC+1 during BST, matching modal local conversion. `hideLocalTimeInBannerIfSame` keeps the local line visible during BST.
+- **Default new-strip times**: DEP/ARR/LOC/OVR default planned times are generated from UTC clock, no one-hour BST skew.
+- **Modal UTC/local parity**: Toggle continues to work exactly as before (modal path unchanged).
+- **Reciprocal timing**: Configured minute offsets applied without BST/local-machine skew.
+- **Explicit non-UK offsets** (e.g. +3, -5): Still respected literally — no regression.
+
+### Deferred items
+
+None identified during implementation. Modal UTC↔Local toggle logic in `ui_liveboard.js` was not touched (already uses canonical model). Data schema unchanged. Timeline policy unchanged.

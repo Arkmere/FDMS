@@ -46,7 +46,8 @@ import {
   getMovements,
   isOverflight,
   runwayMovementContribution,
-  egowRunwayContribution
+  egowRunwayContribution,
+  getOperationalTimezoneOffsetHours
 } from "./datamodel.js";
 
 import {
@@ -445,7 +446,7 @@ function initClock() {
     // Local time (conditional display)
     if (localTimeEl && localTimeLineEl) {
       const cfg = getConfig();
-      const offsetHours = cfg.timezoneOffsetHours || 0;
+      const offsetHours = getOperationalTimezoneOffsetHours();
 
       // Calculate local time
       const localTime = new Date(now.getTime() + (offsetHours * 60 * 60 * 1000));
@@ -454,7 +455,7 @@ function initClock() {
       const localSs = String(localTime.getUTCSeconds()).padStart(2, "0");
       localTimeEl.textContent = `${localHh}:${localMm}:${localSs}`;
 
-      // Determine visibility
+      // Determine visibility using canonical offset (not raw config value)
       const isSameAsUtc = offsetHours === 0;
       const hideIfSame = cfg.hideLocalTimeInBannerIfSame || false;
       const alwaysHide = cfg.alwaysHideLocalTimeInBanner || false;
