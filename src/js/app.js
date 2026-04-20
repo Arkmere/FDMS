@@ -683,14 +683,6 @@ function initAdminPanelHandlers() {
     btn.addEventListener('click', () => showAdminSection(btn.dataset.section));
   });
 
-  // ── Reload app ─────────────────────────────────────────────────
-  const btnReloadApp = document.getElementById('btnReloadApp');
-  if (btnReloadApp) {
-    btnReloadApp.addEventListener('click', () => {
-      location.reload();
-    });
-  }
-
   // ── Session export ─────────────────────────────────────────────
   const btnExport = document.getElementById("btnExportSession");
   if (btnExport) {
@@ -1394,14 +1386,6 @@ function initAdminPanelHandlers() {
     adminDiscardBtn.addEventListener('click', () => {
       applySnapshot(_configSnapshot);
       checkDirty();
-    });
-  }
-
-  // ── Reload app ─────────────────────────────────────────────────
-  const btnReloadApp = document.getElementById('btnReloadApp');
-  if (btnReloadApp) {
-    btnReloadApp.addEventListener('click', () => {
-      location.reload();
     });
   }
 
