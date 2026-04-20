@@ -3118,6 +3118,74 @@ tr.strip.ft-ovr > td {
   padding-top: 12px;
 }
 
+/* ── Developer diagnostics section ─────────────────────────────── */
+.dev-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dev-table td {
+  padding: 5px 6px;
+  vertical-align: top;
+}
+
+.dev-table td:first-child {
+  font-weight: 600;
+  width: 190px;
+  color: #444;
+  white-space: nowrap;
+}
+
+.dev-table td:last-child {
+  font-family: monospace;
+  font-size: 11px;
+  color: #222;
+  word-break: break-word;
+}
+
+.dev-table tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+.dev-error {
+  color: #c62828 !important;
+}
+
+.dev-wrap {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.dev-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  color: #333;
+}
+
+.dev-pre--log {
+  max-height: 220px;
+  color: #1a237e;
+}
+
+.dev-pre--errors {
+  max-height: 220px;
+  color: #c62828;
+}
+
+.dev-pre--report {
+  max-height: 420px;
+}
+
 /* Danger zone panel */
 .admin-danger-zone {
   border: 2px solid #ef9a9a;

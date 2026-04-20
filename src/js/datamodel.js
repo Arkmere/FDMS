@@ -1448,6 +1448,26 @@ export function getStorageInfo() {
   };
 }
 
+export function getDataCounts() {
+  function countKey(key) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  return {
+    movements:        movementsInitialised ? movements.length : 0,
+    calendarEvents:   countKey('vectair_fdms_calendar_events_v1'),
+    bookingProfiles:  countKey('fdms_booking_profiles_v1'),
+    cancelledSorties: countKey('vectair_fdms_cancelled_sorties_v1'),
+    deletedStrips:    countKey('vectair_fdms_deleted_strips_v1'),
+  };
+}
+
 /* -----------------------------
    Configuration Management
 ------------------------------ */
