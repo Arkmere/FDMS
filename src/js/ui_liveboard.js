@@ -6423,10 +6423,10 @@ function openReciprocalStripModal(m, targetType) {
  */
 function roundActiveStampToMinute(date) {
   const d = new Date(date.getTime());
-  if (d.getSeconds() >= 30) {
-    d.setMinutes(d.getMinutes() + 1);
+  if (d.getUTCSeconds() >= 30) {
+    d.setUTCMinutes(d.getUTCMinutes() + 1);
   }
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 /**
@@ -6436,7 +6436,7 @@ function roundActiveStampToMinute(date) {
  * are not degraded by minute-level rounding.
  */
 function getExactActiveTimestamp(date) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}:${String(date.getUTCSeconds()).padStart(2, '0')}`;
 }
 
 /**

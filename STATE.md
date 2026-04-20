@@ -1769,3 +1769,29 @@ Pending developer verification on Stuart's Windows machine. Expected outcomes:
 ### Deferred items
 
 None identified during implementation. Modal UTC↔Local toggle logic in `ui_liveboard.js` was not touched (already uses canonical model). Data schema unchanged. Timeline policy unchanged.
+
+---
+
+## 17) Activate/Complete UTC stamping fix — implementation record (2026-04-20)
+
+### Root cause
+
+`roundActiveStampToMinute()` and `getExactActiveTimestamp()` in `src/js/ui_liveboard.js` used local-time `Date` methods (`getHours()`, `getMinutes()`, `getSeconds()`, `setMinutes()`) despite their doc-comments stating UTC wall-clock output. On a host running BST (UTC+1) these helpers stamped times one hour ahead of UTC into `depActual`, `arrActual`, and `depActualExact`.
+
+### File changed
+
+- `src/js/ui_liveboard.js`
+  - `roundActiveStampToMinute(date)`: replaced `getSeconds()` / `setMinutes()` / `getHours()` / `getMinutes()` with `getUTCSeconds()` / `setUTCMinutes()` / `getUTCHours()` / `getUTCMinutes()`. Rounding rule (00–29 s round down, 30–59 s round up) is unchanged.
+  - `getExactActiveTimestamp(date)`: replaced `getHours()` / `getMinutes()` / `getSeconds()` with `getUTCHours()` / `getUTCMinutes()` / `getUTCSeconds()`.
+
+No surrounding transition logic (`transitionToActive`, `transitionToCompleted`) was modified.
+
+### Smoke results
+
+Pending developer verification on Stuart's Windows machine. Expected outcomes:
+
+- **Activate UTC stamp**: Clicking Activate on a PLANNED DEP/LOC/OVR strip stamps `depActual` equal to the UTC banner time, not local wall-clock.
+- **Complete UTC stamp**: Clicking Complete on an ACTIVE ARR/LOC/OVR strip stamps `arrActual` equal to the UTC banner time, not local wall-clock.
+- **depActualExact UTC**: Stored as UTC HH:MM:SS matching UTC banner seconds.
+- **Local-entry modal parity**: Entering/editing times via local display mode in the modal continues to store canonical UTC — no regression.
+- **BST-distinct host**: With host in BST (UTC+1), stamped actuals agree with UTC clock, not UTC+1 local clock.
