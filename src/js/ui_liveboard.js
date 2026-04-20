@@ -3902,6 +3902,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       if (el && val != null) el.value = val;
     };
     set('newCallsignCode', prefill.callsignCode || '');
+    set('newFlightNumber', prefill.flightNumber  || '');
     set('newReg',          prefill.registration  || '');
     set('newType',         prefill.type          || '');
     set('newDepAd',        prefill.depAd         || '');
@@ -3912,6 +3913,8 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     set('newPob',          prefill.pob != null ? String(prefill.pob) : '');
     set('rwRemarks',       prefill.remarks       || '');
     set('newCaptain',      prefill.captain       || '');
+    set('newEgowCode',     prefill.egowCode      || '');
+    set('newUnitCode',     prefill.unitCode      || '');
     const rulesEl = document.getElementById('newRules');
     if (rulesEl && prefill.rules) rulesEl.value = prefill.rules;
     if (wtcSelect && prefill.wtc) {
@@ -6379,15 +6382,23 @@ function openReciprocalStripModal(m, targetType) {
   const newDepAd = m.arrAd || "";
   const newArrAd = m.depAd || "";
 
-  // Get WTC for the target flight type
-  const wtc = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
+  // Split the combined callsign into code and flight-number parts
+  const rawCallsign = m.callsignCode || "";
+  const csMatch = rawCallsign.match(/^([A-Z]+)(\d+.*)?$/);
+  const splitCallsignCode = csMatch ? csMatch[1] : rawCallsign;
+  const splitFlightNumber = (csMatch && csMatch[2]) ? csMatch[2] : "";
+
+  // Get WTC and normalise to the leading token expected by the WTC select
+  const wtcRaw = getWTC(m.type || "", targetType, config.wtcSystem || "ICAO");
+  const wtcToken = String(wtcRaw || "").trim().toUpperCase().match(/^[A-Z]+/)?.[0] || "";
 
   // Build prefill for the creation modal — no movement is created yet
   const prefill = {
-    callsignCode: m.callsignCode || "",
+    callsignCode: splitCallsignCode,
+    flightNumber: splitFlightNumber,
     registration: m.registration || "",
     type:         m.type         || "",
-    wtc:          wtc,
+    wtc:          wtcToken,
     rules:        m.rules        || "VFR",
     depAd:        newDepAd,
     arrAd:        newArrAd,
@@ -6396,7 +6407,9 @@ function openReciprocalStripModal(m, targetType) {
     arrPlanned:   targetType === "ARR" ? newTime : "",
     pob:          m.pob || 0,
     captain:      m.captain || "",
-    remarks:      `Reciprocal of ${m.callsignCode || ""} ${sourceFT}`,
+    egowCode:     m.egowCode    || "",
+    unitCode:     m.unitCode    || "",
+    remarks:      `Reciprocal of ${rawCallsign} ${sourceFT}`,
   };
 
   // Open the standard creation modal pre-filled; strip is only persisted on Save
