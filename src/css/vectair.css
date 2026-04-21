@@ -2057,10 +2057,46 @@ tr.strip.ft-ovr > td {
 .timeline-scale {
   position: relative;
   width: 100%;
-  height: 24px;
   background: #e8e3dc;
   border-top: 1px solid #d5cfc6;
   border-bottom: 1px solid #d5cfc6;
+  /* height is auto — rows define it */
+}
+
+/* ── Dual-ruler row containers ─────────────────────────────── */
+.timeline-scale-row {
+  position: relative;
+  width: 100%;
+  height: 22px;
+}
+
+.timeline-scale-row + .timeline-scale-row {
+  border-top: 1px solid #d5cfc6;
+}
+
+/* UTC row — visually primary (no extra treatment needed) */
+.timeline-scale-row-utc {}
+
+/* Local row — visually subordinate */
+.timeline-scale-row-local {
+  background: #ede8e1;
+}
+
+/* Row identity label (right-aligned, subtle) */
+.timeline-scale-row-label {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #b5afa8;
+  letter-spacing: 0.05em;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
 }
 
 .timeline-hour-marker {
@@ -2071,12 +2107,23 @@ tr.strip.ft-ovr > td {
   font-size: 10px;
   color: #666;
   padding-left: 4px;
-  line-height: 24px;
+  line-height: 22px;
 }
 
 .timeline-hour-marker.hour-major {
   border-left: 1px solid #9a9488;
   font-weight: 600;
+}
+
+/* Local row markers are quieter than UTC */
+.timeline-scale-row-local .timeline-hour-marker {
+  color: #8a8480;
+  font-size: 9px;
+}
+
+.timeline-scale-row-local .timeline-hour-marker.hour-major {
+  color: #737069;
+  border-left-color: #b5afa8;
 }
 
 .timeline-tracks {

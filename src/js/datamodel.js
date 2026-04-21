@@ -55,6 +55,10 @@ const defaultConfig = {
   timelineDepTokenMinutes: 10,          // DEP token window minutes when not shared
   timelineArrMode: "token",             // ARR display mode when separate: "token" | "full"
   timelineArrTokenMinutes: 10,          // ARR token window minutes when not shared
+  // Timeline ruler display settings
+  timelineShowLocalRuler: true,         // Show secondary local ruler below UTC ruler
+  timelineHideLocalRulerIfSame: true,   // Hide local ruler when operationally identical to UTC
+  timelineSwapUtcLocalRulers: false,    // When true: local ruler on top, UTC on bottom
   // Reciprocal strip creation settings
   depToArrOffsetMinutes: 180,        // DEP→ARR: Arrival time = ETD/ATD + this (default 3 hours)
   arrToDepOffsetMinutes: 30,         // ARR→DEP: Departure time = ETA/ATA + this (default 30 min)

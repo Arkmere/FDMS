@@ -1307,6 +1307,37 @@
                     <div style="font-size: 11px; color: #666;">
                       Timeline will display movements scheduled within this UTC time window.
                     </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configTimelineShowLocalRuler" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Show local time ruler</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Display a secondary local-time ruler row alongside the UTC ruler
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configTimelineHideLocalRulerIfSame" style="cursor: pointer;" checked>
+                        <span style="font-size: 12px; font-weight: bold;">Hide local ruler when same as UTC</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Automatically hide the local ruler when local time is operationally identical to UTC
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="configTimelineSwapUtcLocalRulers" style="cursor: pointer;">
+                        <span style="font-size: 12px; font-weight: bold;">Swap UTC / local ruler order</span>
+                      </label>
+                      <div style="font-size: 11px; color: #666; margin-left: 24px; margin-top: 4px;">
+                        Place the local ruler on top and UTC ruler on bottom
+                      </div>
+                    </div>
+
                   </div>
                 </div>
                 <div class="panel">
