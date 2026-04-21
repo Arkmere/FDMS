@@ -1158,6 +1158,9 @@ function initAdminPanelHandlers() {
   const configTimelineEnabled = document.getElementById("configTimelineEnabled");
   const configTimelineStartHour = document.getElementById("configTimelineStartHour");
   const configTimelineEndHour = document.getElementById("configTimelineEndHour");
+  const configTimelineShowLocalRuler = document.getElementById("configTimelineShowLocalRuler");
+  const configTimelineHideLocalRulerIfSame = document.getElementById("configTimelineHideLocalRulerIfSame");
+  const configTimelineSwapUtcLocalRulers = document.getElementById("configTimelineSwapUtcLocalRulers");
   // Reciprocal strip settings
   const configDepToArrOffset = document.getElementById("configDepToArrOffset");
   const configArrToDepOffset = document.getElementById("configArrToDepOffset");
@@ -1178,7 +1181,10 @@ function initAdminPanelHandlers() {
     'configHistoryShowTimeAlerts', 'configHistoryShowEmergencyAlerts',
     'configHistoryShowCallsignAlerts', 'configHistoryShowWtcAlerts',
     'configTimelineEnabled',
-    'configTimelineArrDepShared'
+    'configTimelineArrDepShared',
+    'configTimelineShowLocalRuler',
+    'configTimelineHideLocalRulerIfSame',
+    'configTimelineSwapUtcLocalRulers'
   ];
   const VALUE_IDS = [
     'configDepOffset', 'configDepDuration', 'configArrOffset', 'configArrDuration', 'configLocOffset', 'configLocDuration',
@@ -1355,6 +1361,11 @@ function initAdminPanelHandlers() {
   if (configTimelineArrTokenMinutes) configTimelineArrTokenMinutes.value = currentConfig.timelineArrTokenMinutes ?? 10;
   syncTimelineUi();
 
+  // Load Timeline ruler display settings
+  if (configTimelineShowLocalRuler) configTimelineShowLocalRuler.checked = currentConfig.timelineShowLocalRuler !== false;
+  if (configTimelineHideLocalRulerIfSame) configTimelineHideLocalRulerIfSame.checked = currentConfig.timelineHideLocalRulerIfSame !== false;
+  if (configTimelineSwapUtcLocalRulers) configTimelineSwapUtcLocalRulers.checked = currentConfig.timelineSwapUtcLocalRulers === true;
+
   // Load Reciprocal strip settings
   if (configDepToArrOffset) configDepToArrOffset.value = currentConfig.depToArrOffsetMinutes ?? 180;
   if (configArrToDepOffset) configArrToDepOffset.value = currentConfig.arrToDepOffsetMinutes ?? 30;
@@ -1517,6 +1528,10 @@ function initAdminPanelHandlers() {
     const tlArrModeChecked = document.querySelector('input[name="tlArrMode"]:checked');
     const timelineArrMode = (tlArrModeChecked && tlArrModeChecked.value === 'full') ? 'full' : 'token';
     const timelineArrTokenMinutes = parseInt(configTimelineArrTokenMinutes?.value || "10", 10);
+    // Timeline ruler display settings
+    const timelineShowLocalRuler = configTimelineShowLocalRuler?.checked !== false;
+    const timelineHideLocalRulerIfSame = configTimelineHideLocalRulerIfSame?.checked !== false;
+    const timelineSwapUtcLocalRulers = configTimelineSwapUtcLocalRulers?.checked || false;
     // Reciprocal strip settings
     const depToArrOffset = parseInt(configDepToArrOffset?.value || "180", 10);
     const arrToDepOffset = parseInt(configArrToDepOffset?.value || "30", 10);
@@ -1586,6 +1601,9 @@ function initAdminPanelHandlers() {
       timelineDepTokenMinutes: timelineDepTokenMinutes,
       timelineArrMode: timelineArrMode,
       timelineArrTokenMinutes: timelineArrTokenMinutes,
+      timelineShowLocalRuler: timelineShowLocalRuler,
+      timelineHideLocalRulerIfSame: timelineHideLocalRulerIfSame,
+      timelineSwapUtcLocalRulers: timelineSwapUtcLocalRulers,
       depToArrOffsetMinutes: depToArrOffset,
       arrToDepOffsetMinutes: arrToDepOffset
     });

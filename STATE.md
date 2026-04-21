@@ -4,8 +4,8 @@ Last updated: 2026-04-21 (Europe/London)
 
 Current headline status:
 - UTC-first timing hardening now passes manual smoke for the tested strip lifecycle paths.
+- Dual UTC/local timeline ruler implemented (display-only; UTC authority unchanged).
 - `main` is current locally and matches `origin/main`.
-- The next queued timing-adjacent item is the **dual UTC/local timeline ruler** enhancement, but only as a post-hardening UX item, not as part of the timing blocker.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -1023,12 +1023,90 @@ The timing blocker for the tested strip lifecycle paths is now considered closed
 
 Deferred / queued next item
 
-The next timing-adjacent UX item is:
+The UTC-first timing blocker is closed. The dual UTC/local timeline ruler has now been implemented as the follow-on display enhancement (see section 19).
 
-dual UTC/local timeline ruler
-local secondary ruler beneath primary UTC ruler by default
-hide local ruler if operationally identical to UTC
-swap top/bottom order option
-display-only; must not alter UTC authority, timeline windows, or bar positions
+19) Dual UTC/local timeline ruler — implementation record (2026-04-21)
+Purpose
 
-This remains queued as a post-hardening enhancement, not a correctness blocker.
+Display-only enhancement to the Day Timeline ruler. Adds an optional secondary local-time ruler row beneath (or above) the primary UTC ruler. Does not alter UTC authority, timeline bar positioning, or now-line behavior.
+
+Files changed
+
+src/js/datamodel.js
+  Added three new config defaults:
+    timelineShowLocalRuler: true
+    timelineHideLocalRulerIfSame: true
+    timelineSwapUtcLocalRulers: false
+
+src/js/ui_liveboard.js
+  Added getOperationalTimezoneOffsetHours to import block.
+  Refactored renderTimelineScale() to build two .timeline-scale-row containers
+  (UTC and LOCAL) instead of appending markers directly to #timelineScale.
+  UTC labels: HH:00 unchanged.
+  Local labels: generated via canonical convertUTCToLocal(), never via raw
+    cfg.timezoneOffsetHours.
+  Distinctness check: getOperationalTimezoneOffsetHours() !== 0 (canonical,
+    not raw config read).
+  Ordering: swapped config controls which row is appended first.
+  updateTimelineNowLine(), renderTimelineTracks() are unchanged.
+
+src/index.html
+  Added three checkboxes in the "Day View / Timeline Settings" admin panel:
+    configTimelineShowLocalRuler
+    configTimelineHideLocalRulerIfSame
+    configTimelineSwapUtcLocalRulers
+
+src/js/app.js
+  Added element references for three new checkboxes.
+  Added all three IDs to CHECKBOX_IDS for dirty-state tracking.
+  Load path: reads all three from currentConfig.
+  Save path: reads checkbox states, passes to updateConfig().
+  renderTimeline() is called after save (existing pattern, unchanged).
+
+src/css/vectair.css
+  Removed fixed height: 24px from .timeline-scale (rows define height now).
+  Changed .timeline-hour-marker line-height from 24px to 22px.
+  Added .timeline-scale-row, .timeline-scale-row-utc, .timeline-scale-row-local,
+    .timeline-scale-row-label, and local-row marker overrides.
+  UTC row: no extra treatment (primary by default).
+  Local row: slightly darker background (#ede8e1), quieter text and border colours.
+  Row labels ("UTC" / "LOCAL") right-aligned, 8px, very subtle colour.
+
+New timeline ruler settings
+
+timelineShowLocalRuler (bool, default true)
+  Show secondary local ruler row.
+
+timelineHideLocalRulerIfSame (bool, default true)
+  Suppress local ruler when getOperationalTimezoneOffsetHours() === 0.
+
+timelineSwapUtcLocalRulers (bool, default false)
+  When true: local row on top, UTC row on bottom.
+
+Smoke tests (manual — pending Stuart verification)
+
+Default display
+  UTC ruler renders on top with HH:00 labels.
+  Local ruler renders below, labels from convertUTCToLocal().
+  Local row is visually quieter.
+
+Hide-if-same (UTC-equivalent state, offset = 0)
+  timelineHideLocalRulerIfSame enabled → local ruler absent.
+
+BST-distinct (offset = +1)
+  UTC and local rulers differ by one hour.
+
+Swap order
+  timelineSwapUtcLocalRulers enabled → local on top, UTC below.
+  Timeline bars and now-line positions unchanged.
+
+Persistence
+  Save config → reload → settings restored correctly.
+
+UTC authority confirmation
+
+This tranche is display-only.
+No movement time fields were changed.
+No bar span calculations were changed.
+No now-line calculations were changed.
+UTC remains the sole time storage and positioning authority.
