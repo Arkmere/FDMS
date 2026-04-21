@@ -45,6 +45,7 @@ import {
   purgeExpiredDeletedStrips,
   insertRestoredMovement,
   ensureDeletedStripsInitialised,
+  shouldShowUtcLocalToggleForNewForms,
   DELETED_STRIPS_RETENTION_HOURS
 } from "./datamodel.js";
 
@@ -3377,7 +3378,7 @@ function shouldShowNewFormTimeModeToggle() {
   const policy = cfg.newFormUtcLocalTogglePolicy || "auto";
   if (policy === "show") return true;
   if (policy === "hide") return false;
-  return (cfg.timezoneOffsetHours || 0) !== 0;
+  return shouldShowUtcLocalToggleForNewForms();
 }
 
 function openNewFlightModal(flightType = "DEP", prefill = null) {
@@ -4212,7 +4213,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
     // Get current time for actual times
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
 
     // Get form values for validation
     const dof = document.getElementById("newDOF")?.value || getTodayDateString();
@@ -4980,7 +4981,7 @@ function openNewLocFlightModal() {
   // Bind "Save & Complete" handler
   document.querySelector(".js-save-complete-loc")?.addEventListener("click", () => {
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
 
     const dof = document.getElementById("newLocDOF")?.value || getTodayDateString();
     let depPlanned = document.getElementById("newLocStart")?.value || "";
@@ -5865,7 +5866,7 @@ function openEditMovementModal(m) {
   document.querySelector(".js-save-complete-edit")?.addEventListener("click", () => {
     // Get current time for actual times if not set
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
 
     // Get form values
     const dof = document.getElementById("editDOF")?.value || getTodayDateString();
