@@ -4,7 +4,7 @@ Last updated: 2026-04-21 (Europe/London)
 
 Current headline status:
 - UTC-first timing hardening now passes manual smoke for the tested strip lifecycle paths.
-- `main` is current locally and includes additional local timing fixes beyond `origin/main`.
+- `main` is current locally and matches `origin/main`.
 - The next queued timing-adjacent item is the **dual UTC/local timeline ruler** enhancement, but only as a post-hardening UX item, not as part of the timing blocker.
 
 This file is the shared source of truth for the Manager–Worker workflow:
