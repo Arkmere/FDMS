@@ -8280,6 +8280,70 @@ function getDayTimelineDisplayRange(m) {
  * coordinate basis as #timelineTracks bars and #timelineNowLine.
  * Bar positioning and now-line behaviour are therefore unaffected.
  */
+/**
+ * Build a single-row ruler shell: label-overlay column + full-width marker row.
+ *
+ * The label overlay is position:absolute so it does not narrow the marker row.
+ * Marker left-% values therefore stay in the same coordinate space as
+ * #timelineTracks bars and #timelineNowLine.
+ *
+ * @param {string}   labelText     Row label ('UTC', 'LOCAL', …)
+ * @param {string|null} labelSub   Optional sub-label, e.g. '(+1)'
+ * @param {string}   posClass      'timeline-scale-primary' | 'timeline-scale-secondary'
+ * @param {number}   startHour
+ * @param {number}   endHour
+ * @param {Function} getHourLabel  hour → display string for that marker
+ */
+function buildRulerShell(labelText, labelSub, posClass, startHour, endHour, getHourLabel) {
+  const totalHours = endHour - startHour;
+
+  const shell = document.createElement('div');
+  shell.className = `timeline-scale-shell ${posClass}`;
+
+  // Label overlay — absolute, left-anchored, full shell height
+  const labelsCol = document.createElement('div');
+  labelsCol.className = 'timeline-scale-labels';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'timeline-scale-row-label';
+  const mainSpan = document.createElement('span');
+  mainSpan.textContent = labelText;
+  labelEl.appendChild(mainSpan);
+  if (labelSub) {
+    const subSpan = document.createElement('span');
+    subSpan.className = 'timeline-scale-row-label-sub';
+    subSpan.textContent = labelSub;
+    labelEl.appendChild(subSpan);
+  }
+  labelsCol.appendChild(labelEl);
+
+  // Marker row — full width, same coordinate basis as tracks / now-line
+  const markersWrapper = document.createElement('div');
+  markersWrapper.className = 'timeline-scale-markers';
+
+  const row = document.createElement('div');
+  row.className = 'timeline-scale-row';
+
+  for (let hour = startHour; hour <= endHour; hour++) {
+    const leftPercent = ((hour - startHour) / totalHours) * 100;
+    const isMajor = hour % 3 === 0;
+    const marker = document.createElement('div');
+    marker.className = `timeline-hour-marker${isMajor ? ' hour-major' : ''}`;
+    marker.style.left = `${leftPercent}%`;
+    marker.textContent = getHourLabel(hour);
+    row.appendChild(marker);
+  }
+
+  markersWrapper.appendChild(row);
+  shell.appendChild(labelsCol);
+  shell.appendChild(markersWrapper);
+  return shell;
+}
+
+/**
+ * Render the top timeline ruler into #timelineScale (primary styling).
+ * Which timezone sits on top depends on timelineSwapUtcLocalRulers.
+ */
 function renderTimelineScale() {
   const scale = byId("timelineScale");
   if (!scale) return;
@@ -8287,7 +8351,6 @@ function renderTimelineScale() {
   scale.innerHTML = '';
 
   const { startHour, endHour } = getTimelineConfig();
-  const totalHours = endHour - startHour;
   const cfg = getConfig();
 
   const showLocal = cfg.timelineShowLocalRuler !== false;
@@ -8298,84 +8361,89 @@ function renderTimelineScale() {
   const localIsDistinct = getOperationalTimezoneOffsetHours() !== 0;
   const renderLocal = showLocal && !(hideIfSame && !localIsDistinct);
 
-  // ── Shell (gives the absolute-positioned label overlay a sizing context) ─
-  const shell = document.createElement('div');
-  shell.className = 'timeline-scale-shell';
+  const utcHourLabel = h => `${String(h).padStart(2, '0')}:00`;
+  const localHourLabel = h => convertUTCToLocal(`${String(h).padStart(2, '0')}:00`);
 
-  // ── Labels column: absolute overlay, left edge, full shell height ────────
-  const labelsCol = document.createElement('div');
-  labelsCol.className = 'timeline-scale-labels';
+  // Top ruler: LOCAL when swapped and local is shown, otherwise UTC.
+  let topText, topSub, topGetLabel;
+  if (swapped && renderLocal) {
+    const ol = getTimezoneOffsetLabel();
+    topText = 'LOCAL';
+    topSub = ol !== 'UTC' ? `(${ol})` : null;
+    topGetLabel = localHourLabel;
+  } else {
+    topText = 'UTC';
+    topSub = null;
+    topGetLabel = utcHourLabel;
+  }
 
-  const utcLabelEl = document.createElement('div');
-  utcLabelEl.className = 'timeline-scale-row-label timeline-scale-row-label-utc';
-  utcLabelEl.textContent = 'UTC';
+  scale.appendChild(
+    buildRulerShell(topText, topSub, 'timeline-scale-primary', startHour, endHour, topGetLabel)
+  );
+}
 
-  let localLabelEl = null;
-  if (renderLocal) {
-    localLabelEl = document.createElement('div');
-    localLabelEl.className = 'timeline-scale-row-label timeline-scale-row-label-local';
-    const mainSpan = document.createElement('span');
-    mainSpan.textContent = 'LOCAL';
-    localLabelEl.appendChild(mainSpan);
-    const offsetLabel = getTimezoneOffsetLabel();
-    if (offsetLabel !== 'UTC') {
-      const subSpan = document.createElement('span');
-      subSpan.className = 'timeline-scale-row-label-sub';
-      subSpan.textContent = `(${offsetLabel})`;
-      localLabelEl.appendChild(subSpan);
+/**
+ * Render the bottom timeline ruler into #timelineScaleBottom (secondary styling).
+ * The element is created dynamically and inserted before #timelineNowLine.
+ * Removed entirely when no secondary ruler is needed (hide-if-same, show-local off).
+ */
+function renderTimelineScaleBottom() {
+  const container = byId("timelineContainer");
+  if (!container) return;
+
+  const { startHour, endHour } = getTimelineConfig();
+  const cfg = getConfig();
+
+  const showLocal = cfg.timelineShowLocalRuler !== false;
+  const hideIfSame = cfg.timelineHideLocalRulerIfSame !== false;
+  const swapped = cfg.timelineSwapUtcLocalRulers === true;
+
+  const localIsDistinct = getOperationalTimezoneOffsetHours() !== 0;
+  const renderLocal = showLocal && !(hideIfSame && !localIsDistinct);
+
+  let bottomScale = byId("timelineScaleBottom");
+
+  if (!renderLocal) {
+    // No secondary ruler — remove any existing element and return.
+    if (bottomScale) bottomScale.remove();
+    return;
+  }
+
+  // Create element once; subsequent calls just clear and rebuild its content.
+  if (!bottomScale) {
+    bottomScale = document.createElement('div');
+    bottomScale.id = 'timelineScaleBottom';
+    bottomScale.className = 'timeline-scale timeline-scale-bottom';
+    // Insert before the now-line so it sits below tracks but above the absolute indicator.
+    const nowLine = byId("timelineNowLine");
+    if (nowLine) {
+      container.insertBefore(bottomScale, nowLine);
+    } else {
+      container.appendChild(bottomScale);
     }
   }
 
-  // ── Marker rows: full-width — same coordinate basis as tracks/now-line ───
-  const utcRow = document.createElement('div');
-  utcRow.className = 'timeline-scale-row timeline-scale-row-utc';
+  bottomScale.innerHTML = '';
 
-  let localRow = null;
-  if (renderLocal) {
-    localRow = document.createElement('div');
-    localRow.className = 'timeline-scale-row timeline-scale-row-local';
+  const utcHourLabel = h => `${String(h).padStart(2, '0')}:00`;
+  const localHourLabel = h => convertUTCToLocal(`${String(h).padStart(2, '0')}:00`);
+
+  // Bottom ruler: UTC when swapped, otherwise LOCAL.
+  let botText, botSub, botGetLabel;
+  if (swapped) {
+    botText = 'UTC';
+    botSub = null;
+    botGetLabel = utcHourLabel;
+  } else {
+    const ol = getTimezoneOffsetLabel();
+    botText = 'LOCAL';
+    botSub = ol !== 'UTC' ? `(${ol})` : null;
+    botGetLabel = localHourLabel;
   }
 
-  for (let hour = startHour; hour <= endHour; hour++) {
-    const leftPercent = ((hour - startHour) / totalHours) * 100;
-    const utcTimeStr = `${String(hour).padStart(2, '0')}:00`;
-    const isMajor = hour % 3 === 0;
-    const markerClass = `timeline-hour-marker${isMajor ? ' hour-major' : ''}`;
-
-    const utcMarker = document.createElement('div');
-    utcMarker.className = markerClass;
-    utcMarker.style.left = `${leftPercent}%`;
-    utcMarker.textContent = utcTimeStr;
-    utcRow.appendChild(utcMarker);
-
-    if (localRow) {
-      const localMarker = document.createElement('div');
-      localMarker.className = markerClass;
-      localMarker.style.left = `${leftPercent}%`;
-      localMarker.textContent = convertUTCToLocal(utcTimeStr);
-      localRow.appendChild(localMarker);
-    }
-  }
-
-  // ── Assemble in correct row order ─────────────────────────────────────────
-  const [firstLabel, secondLabel] = (swapped && localLabelEl)
-    ? [localLabelEl, utcLabelEl]
-    : [utcLabelEl, localLabelEl];
-  const [firstRow, secondRow] = (swapped && localRow)
-    ? [localRow, utcRow]
-    : [utcRow, localRow];
-
-  labelsCol.appendChild(firstLabel);
-  if (secondLabel) labelsCol.appendChild(secondLabel);
-
-  const markersWrapper = document.createElement('div');
-  markersWrapper.className = 'timeline-scale-markers';
-  markersWrapper.appendChild(firstRow);
-  if (secondRow) markersWrapper.appendChild(secondRow);
-
-  shell.appendChild(labelsCol);
-  shell.appendChild(markersWrapper);
-  scale.appendChild(shell);
+  bottomScale.appendChild(
+    buildRulerShell(botText, botSub, 'timeline-scale-secondary', startHour, endHour, botGetLabel)
+  );
 }
 
 /**
@@ -8582,9 +8650,10 @@ export function renderTimeline() {
 
   const { enabled } = getTimelineConfig();
 
-  // Show or hide timeline based on config
   if (!enabled) {
     container.classList.add('hidden');
+    const bs = byId("timelineScaleBottom");
+    if (bs) bs.remove();
     return;
   }
 
@@ -8592,6 +8661,7 @@ export function renderTimeline() {
   renderTimelineScale();
   renderTimelineTracks();
   updateTimelineNowLine();
+  renderTimelineScaleBottom();
 }
 
 /**
