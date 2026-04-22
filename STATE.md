@@ -1,10 +1,11 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-04-21 (Europe/London)
+Last updated: 2026-04-22 (Europe/London)
 
 Current headline status:
 - UTC-first timing hardening now passes manual smoke for the tested strip lifecycle paths.
 - Dual UTC/local timeline ruler implemented (display-only; UTC authority unchanged).
+- Internal timeline header strip removed; rulers now form the top/bottom boundaries of the timeline area.
 - `main` is current locally and matches `origin/main`.
 
 This file is the shared source of truth for the Manager–Worker workflow:
@@ -1110,3 +1111,81 @@ No movement time fields were changed.
 No bar span calculations were changed.
 No now-line calculations were changed.
 UTC remains the sole time storage and positioning authority.
+
+20) Dual ruler layout correction + header strip removal (2026-04-22)
+Purpose
+
+Layout/display refinement only. Corrects the ruler stacking model and
+removes the now-redundant internal timeline header strip.
+
+Problems fixed
+
+Previous implementation stacked both rulers at the top of the timeline
+area, leaving no bottom ruler.
+
+Ruler styling was timezone-identity-based (UTC vs LOCAL classes) rather
+than position-based (top vs bottom), so swapping broke the visual hierarchy.
+
+The internal "DAY TIMELINE (UTC)" header strip and its right-aligned UTC
+clock were redundant now that the top ruler provides the time context.
+
+Files changed
+
+src/js/ui_liveboard.js
+  Replaced renderTimelineScale() with three components:
+    buildRulerShell(labelText, labelSub, posClass, startHour, endHour, getHourLabel)
+      Builds a single-row ruler (label overlay + full-width marker row).
+      posClass is 'timeline-scale-primary' or 'timeline-scale-secondary'.
+    renderTimelineScale()
+      Renders only the top ruler into #timelineScale.
+      Top ruler always gets primary styling.
+      Which timezone is on top follows timelineSwapUtcLocalRulers.
+    renderTimelineScaleBottom()
+      Renders the bottom ruler into a dynamically managed #timelineScaleBottom.
+      Inserts the element before #timelineNowLine inside #timelineContainer.
+      Bottom ruler always gets secondary styling.
+      Removed entirely (element deleted) when no secondary ruler is needed.
+  Updated renderTimeline() to call renderTimelineScaleBottom() and clean
+  up #timelineScaleBottom when the timeline is disabled.
+
+src/css/vectair.css
+  .timeline-header: display:none — redundant strip removed.
+  Replaced timezone-identity classes (.timeline-scale-row-label-utc,
+    .timeline-scale-row-label-local, .timeline-scale-row-local) with
+    position-based classes (.timeline-scale-primary, .timeline-scale-secondary).
+  .timeline-scale-secondary: quieter label column background and marker colours.
+  .timeline-scale-bottom: border-bottom:none (container bottom edge suffices).
+  All other dual-ruler structure (shell, label overlay, marker pane) unchanged.
+
+Internal container layout (post-change)
+
+  #timelineContainer (position:relative, same footprint/style)
+    #timelineScale             ← top ruler, primary styling
+    #timelineTracks            ← bars, unchanged
+    #timelineScaleBottom       ← bottom ruler, secondary styling (dynamic)
+    #timelineNowLine           ← position:absolute, spans full container height
+
+Alignment guarantee
+
+  Marker rows in both rulers are full-width (same coordinate space as
+  #timelineTracks and #timelineNowLine). The label overlay (position:absolute,
+  52 px, left-anchored) does not narrow the marker field.
+
+Styling rule (position-based, not timezone-based)
+
+  Top ruler  → .timeline-scale-primary  (full contrast, regardless of UTC/LOCAL)
+  Bottom ruler → .timeline-scale-secondary (quieter, regardless of UTC/LOCAL)
+  Label text is still accurate (UTC or LOCAL / LOCAL (+offset)).
+
+Smoke results (pending Stuart verification)
+
+  A. Default: UTC top (primary), LOCAL bottom (secondary), no header strip, bars in middle.
+  B. Swap: LOCAL top (primary styling), UTC bottom (secondary styling), bars unchanged.
+  C. Alignment: both rulers align with bars and now-line.
+  D. Hide-if-same: local ruler removed cleanly, no empty lower band.
+  E. BST-distinct: both rulers, correct offset, position-based styling applied.
+  F. Readability: no overlap, no wrap, compact label column.
+
+UTC authority confirmation
+
+Display-only. UTC authority, bar placement, and now-line placement unchanged.

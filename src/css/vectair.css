@@ -2030,17 +2030,12 @@ tr.strip.ft-ovr > td {
   border: 1px solid var(--va-border);
   border-radius: 4px;
   margin-bottom: 0;
-  padding: 8px 0 6px 0;
+  padding: 0;
   overflow: hidden;
 }
 
 .timeline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px 6px 10px;
-  font-size: 11px;
-  color: var(--va-text-soft);
+  display: none; /* redundant internal title strip removed; top ruler serves as header */
 }
 
 .timeline-title {
@@ -2058,72 +2053,139 @@ tr.strip.ft-ovr > td {
   position: relative;
   width: 100%;
   background: #e8e3dc;
-  border-top: 1px solid #d5cfc6;
   border-bottom: 1px solid #d5cfc6;
-  /* height is auto — rows define it */
+  /* no border-top — container edge is the top boundary */
 }
 
-/* ── Dual-ruler row containers ─────────────────────────────── */
-.timeline-scale-row {
+/* ── Dual-ruler: shell, label overlay, position-based styles ─────────── */
+
+/* Shell: relative wrapper so the absolute label overlay can use top/bottom: 0 */
+.timeline-scale-shell {
   position: relative;
   width: 100%;
-  height: 22px;
 }
 
-.timeline-scale-row + .timeline-scale-row {
-  border-top: 1px solid #d5cfc6;
-}
-
-/* UTC row — visually primary (no extra treatment needed) */
-.timeline-scale-row-utc {}
-
-/* Local row — visually subordinate */
-.timeline-scale-row-local {
-  background: #ede8e1;
-}
-
-/* Row identity label (right-aligned, subtle) */
-.timeline-scale-row-label {
+/*
+ * Label overlay: position:absolute, pinned to left edge.
+ * Does NOT narrow the marker rows — marker left-% values stay in the same
+ * coordinate space as #timelineTracks bars and #timelineNowLine.
+ */
+.timeline-scale-labels {
   position: absolute;
-  right: 4px;
+  left: 0;
   top: 0;
   bottom: 0;
+  width: 52px;
   display: flex;
-  align-items: center;
-  font-size: 8px;
-  font-weight: 700;
-  color: #b5afa8;
-  letter-spacing: 0.05em;
-  z-index: 2;
+  flex-direction: column;
+  background: #d5d0c9;
+  border-right: 1px solid #b8b3ac;
+  z-index: 3;
   pointer-events: none;
   user-select: none;
 }
 
+/* Secondary (bottom) ruler — slightly quieter label column */
+.timeline-scale-secondary .timeline-scale-labels {
+  background: #ccc9c2;
+}
+
+/* Styling follows position (primary = top, secondary = bottom), not timezone */
+.timeline-scale-row-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #3a3632;
+}
+
+.timeline-scale-secondary .timeline-scale-row-label {
+  font-weight: 600;
+  color: #7a7570;
+}
+
+.timeline-scale-row-label-sub {
+  font-size: 8px;
+  font-weight: 400;
+  color: #9a958f;
+  line-height: 1;
+}
+
+/* Marker pane: full container width — no offset */
+.timeline-scale-markers {
+  width: 100%;
+}
+
+/* One marker row per shell */
+.timeline-scale-row {
+  position: relative;
+  width: 100%;
+  height: 18px;
+}
+
+/* Primary (top) ruler markers — full contrast */
 .timeline-hour-marker {
   position: absolute;
   top: 0;
   height: 100%;
   border-left: 1px solid #c5bfb6;
   font-size: 10px;
-  color: #666;
+  color: #555;
   padding-left: 4px;
-  line-height: 22px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .timeline-hour-marker.hour-major {
   border-left: 1px solid #9a9488;
   font-weight: 600;
+  color: #333;
 }
 
-/* Local row markers are quieter than UTC */
-.timeline-scale-row-local .timeline-hour-marker {
+/* Secondary (bottom) ruler markers — visibly quieter */
+.timeline-scale-secondary .timeline-hour-marker {
   color: #8a8480;
   font-size: 9px;
 }
 
-.timeline-scale-row-local .timeline-hour-marker.hour-major {
-  color: #737069;
+.timeline-scale-secondary .timeline-hour-marker.hour-major {
+  color: #706b66;
   border-left-color: #b5afa8;
+  font-weight: 600;
+}
+
+/* ── Sub-hour tick marks ────────────────────────────────────────────────── */
+/* Bottom-anchored so they don't overlap the text labels at the top.        */
+.timeline-tick {
+  position: absolute;
+  bottom: 0;
+  border-left: 1px solid #ccc7bf;
+  pointer-events: none;
+}
+
+.timeline-tick-half {
+  height: 55%; /* :30 — medium tick */
+}
+
+.timeline-tick-quarter {
+  height: 35%; /* :15 and :45 — short tick */
+}
+
+/* Secondary ruler: quieter tick colours */
+.timeline-scale-secondary .timeline-tick {
+  border-left-color: #d4cfc9;
+}
+
+/* Bottom ruler element — sits below tracks, flush with container bottom */
+.timeline-scale-bottom {
+  border-top: 1px solid #d5cfc6;
+  border-bottom: none;
 }
 
 .timeline-tracks {
