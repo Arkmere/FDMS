@@ -8378,8 +8378,8 @@ function renderTimelineScale() {
   let topText, topSub, topGetLabel;
   if (swapped && renderLocal) {
     const ol = getTimezoneOffsetLabel();
-    topText = 'LOCAL';
-    topSub = ol !== 'UTC' ? `(${ol})` : null;
+    topText = ol === '+1' ? 'BST (+1)' : (ol === 'UTC' ? 'GMT' : `LOCAL (${ol})`);
+    topSub = null;
     topGetLabel = localHourLabel;
   } else {
     topText = 'UTC';
@@ -8446,8 +8446,8 @@ function renderTimelineScaleBottom() {
     botGetLabel = utcHourLabel;
   } else {
     const ol = getTimezoneOffsetLabel();
-    botText = 'LOCAL';
-    botSub = ol !== 'UTC' ? `(${ol})` : null;
+    botText = ol === '+1' ? 'BST (+1)' : (ol === 'UTC' ? 'GMT' : `LOCAL (${ol})`);
+    botSub = null;
     botGetLabel = localHourLabel;
   }
 
