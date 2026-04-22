@@ -3,10 +3,11 @@
 Last updated: 2026-04-22 (Europe/London)
 
 Current headline status:
-- UTC-first timing hardening now passes manual smoke for the tested strip lifecycle paths.
-- Dual UTC/local timeline ruler implemented (display-only; UTC authority unchanged).
-- Internal timeline header strip removed; rulers now form the top/bottom boundaries of the timeline area.
+- UTC-first timing hardening passes manual smoke for the tested strip lifecycle paths.
+- Dual UTC/local timeline ruler is implemented as a display-only enhancement; UTC authority is unchanged.
+- The internal timeline header strip has been removed; rulers now form the top/bottom boundaries of the timeline area.
 - `main` is current locally and matches `origin/main`.
+- The next active feature workstream is **Formation continuation / expansion**.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -170,9 +171,10 @@ Storage format:
 canonical operational fields: HH:MM
 exact WTC anchor: HH:MM:SS
 
-Canonical rule: program time is UTC.
-Local time is only a presentation/input layer.
+Canonical rule:
 
+program time is UTC
+local time is only a presentation/input layer
 2.3 Booking / strip link invariants
 
 Booking/strip linkage is bidirectional when valid:
@@ -240,9 +242,9 @@ per-element editing
 inheritance semantics
 WTC current / max semantics implemented
 
-Formations are usable, but formation continuation / expansion remains a V1 workstream.
+Formations are usable, but formation continuation / expansion remains a V1 workstream and is now the next active feature area.
 
-4) Settled post-10.1 timing / interaction baseline
+4) Settled timing / interaction baseline
 
 The following cluster is complete and should not be casually reopened unless Stuart reports a regression.
 
@@ -342,6 +344,27 @@ estimate mode otherwise
 explicit operator toggle survives re-renders for the session
 manual inline ATA and ALFT survive Complete correctly
 OVR terminology normalized to EOFT / AOFT and ELFT / ALFT where applicable
+4.11 UTC-first timing hardening status
+
+The UTC-first timing blocker is considered closed for the tested strip lifecycle paths.
+
+Settled rule:
+
+UTC is authoritative
+all stored strip times are UTC
+local is presentation/input only
+local input must convert back to UTC before save
+4.12 Timeline status
+
+The Day Timeline display enhancement is now implemented and considered complete for V1 presentation purposes:
+
+dual UTC/local ruler implemented
+secondary ruler can be hidden when operationally same as UTC
+top/bottom order can be swapped
+internal timeline header strip removed
+top and bottom rulers define the timeline boundaries
+quarter-hour and half-hour ticks implemented
+timeline remains display-only; UTC authority unchanged
 5) Lifecycle model (current accepted baseline)
 
 The lifecycle tranche is established and must be treated as the current product model.
@@ -678,27 +701,24 @@ Historical lifecycle data is retained where needed for audit/export, but no dedi
 
 9.6 API / VKB integration not in current baseline
 
-Full Vectair-backed API / VKB integration is not part of the current functional baseline. It is now explicitly a V2 workstream.
+Full Vectair-backed API / VKB integration is not part of the current functional baseline. It is explicitly a V2 workstream.
 
 9.7 METAR Builder not yet implemented
 
-METAR Builder is now in V1 scope but not yet implemented.
+METAR Builder is in V1 scope but not yet implemented.
 
 9.8 Desktop productization not yet implemented
 
-The installed-desktop target is now part of V1 scope, but the current runtime remains the development harness / localStorage model.
+The installed-desktop target is part of V1 scope, but the current runtime remains the development harness / localStorage model.
 
 10) Roadmap classification
 
-The roadmap is now classified into:
+The roadmap is classified into:
 
 V1 required workstreams
 V2 workstreams
 rolling / lower-priority updates
 10.1 V1 required workstreams
-
-These are part of the current V1 target:
-
 A. Desktop Productization Workstream
 
 Scope includes:
@@ -713,23 +733,23 @@ cross-platform packaging discipline
 migration from browser/localStorage-era state into app-managed state
 B. DST-aware Auto timezone (Europe/London)
 
-This is a V1 correctness item.
+This was a V1 correctness item.
 
-Status update
+Status update:
 
-The core UTC-first timing hardening pass is now complete for the tested strip lifecycle flows. The original “DST-aware Auto timezone” label should now be understood as largely implemented at the correctness level for current browser-era runtime behavior, with any remaining timezone-related work now primarily UX/polish unless Stuart reports a regression.
-
+the core UTC-first timing hardening pass is complete for the tested strip lifecycle flows
+remaining timezone-related work is now primarily display/configurability/polish unless Stuart reports a regression
 C. Formation continuation / expansion
 
 Formations are usable but not considered fully complete for V1.
 
+This is now the next active feature workstream.
+
 D. Create From workflow
 
-The older “Duplicate → Create from…” concept is now promoted into V1 scope as the Create From workflow.
+The older “Duplicate → Create from…” concept is promoted into V1 scope as the Create From workflow.
 
 E. METAR Builder
-
-New V1 workstream.
 
 Purpose:
 
@@ -757,22 +777,22 @@ Deleted Strip retention configurability
 Historical lifecycle event analysis
 Callsign family grouping (Ticket 6c)
 Notification / reminder system
-Dual UTC/local timeline ruler
-local secondary ruler below primary UTC ruler by default
-hide secondary local ruler if operationally same as UTC
-swap top/bottom ruler order option
-display-only enhancement; must not alter UTC authority or timeline bar positioning
+Dynamic local timezone abbreviation rendering for timeline ruler labels
+replace hardcoded local label text such as BST (+1) with dynamically derived local timezone abbreviations tied to Flite’s operational timezone source
+preferred future behavior:
+derive abbreviation from the same timezone source used for UTC↔local conversion
+support seasonal/localized changes automatically where appropriate
+fall back to offset-based text if no reliable abbreviation is available
 11) Recommended implementation order
 11.1 V1 programme structure
 
-V1 should now be understood as three parallel tracks:
+V1 should be understood as three parallel tracks:
 
 Track A — Desktop Productization
 
 Begin early at the architecture/planning level and continue through release hardening.
 
 Track B — Core Feature Completion
-DST-aware Auto timezone
 Formation continuation / expansion
 Create From workflow
 METAR Builder
@@ -795,7 +815,15 @@ METAR Builder
 implement installed-desktop packaging path
 implement migration into app-managed state
 cross-platform hardening and launch-readiness pass
-11.3 Deferred from immediate next-up status
+11.3 Immediate next-up status
+
+The next active feature workstream is:
+
+Formation continuation / expansion
+
+Desktop productization remains the biggest overall launch-risk track, but the next feature work should focus on formations.
+
+11.4 Deferred from immediate next-up status
 
 The following are not the next active tranche now:
 
@@ -803,14 +831,6 @@ Ticket 6c — Callsign family grouping
 historical lifecycle-event analytics
 
 They remain valid backlog items but are no longer the immediate next recommended work.
-
-11.4 Timing-adjacent queue position
-
-The next queued timing-adjacent UX item is:
-
-dual UTC/local timeline ruler enhancement
-
-This was explicitly deferred until after UTC-first timing hardening passed smoke. It remains queued, but it is not a blocker and not part of the just-completed timing correctness tranche.
 
 12) Manual verification posture
 
@@ -835,7 +855,10 @@ No extra scaffolding unless specifically requested.
 The current accepted functional baseline is:
 
 post-10.1 timing / inline-time cluster complete
-UTC-first timing hardening for the tested strip lifecycle flows is now passing
+UTC-first timing hardening for the tested strip lifecycle flows is passing
+dual UTC/local timeline ruler is implemented
+timeline header strip has been removed
+timeline display is considered complete for V1 presentation purposes
 Cancelled Sorties is a current-state cancelled view
 cancelled strips are fully editable
 cancelled strips can be reinstated to PLANNED using offset-aware timing rules
@@ -845,10 +868,9 @@ Movement History / Cancelled Sorties / Deleted Strips form the three-view lifecy
 Ticket 6b cancellation reporting is complete
 Ticket 6c is deferred
 product name is now Vectair Flite
-documentation is now an explicit maintained workstream
+documentation is an explicit maintained workstream
 V1 scope includes desktop productization, formation continuation/expansion, Create From workflow, and METAR Builder
 V2 scope includes API / VKB integration and booking confirmation / pilot briefing / GAR note
-the dual UTC/local timeline ruler is queued as a post-hardening display enhancement
 
 This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.
 
@@ -863,23 +885,25 @@ DP-02 — Windows icon assets (blocker found and resolved)
 
 First real Windows runtime blocker encountered during DP-02 validation:
 
-tauri-build requires src-tauri/icons/icon.ico (and the standard PNG set) to generate the Windows Resource file (.rc) embedded in the binary.
-The src-tauri/icons/ directory was absent from the repository.
-Build failed with: icons/icon.ico not found
+tauri-build requires src-tauri/icons/icon.ico (and the standard PNG set) to generate the Windows Resource file (.rc) embedded in the binary
+the src-tauri/icons/ directory was absent from the repository
+build failed with: icons/icon.ico not found
 
 Resolution (2026-04-03):
 
-Created src-tauri/icons/ and committed the minimum required placeholder icon set:
+created src-tauri/icons/ and committed the minimum required placeholder icon set:
 icon.ico — ICO container embedding 32 × 32 and 256 × 256 PNG images
 32x32.png — 32 × 32 RGB placeholder
 128x128.png — 128 × 128 RGB placeholder
 128x128@2x.png — 256 × 256 RGB placeholder (2 × HiDPI)
 icon.png — 512 × 512 RGB placeholder
-All files are structurally valid (correct PNG signature / ICO header) but contain only a solid neutral-gray fill. Final branding/icon design is explicitly deferred.
-No app logic, storage model, or desktop architecture was changed.
+all files are structurally valid (correct PNG signature / ICO header) but contain only a solid neutral-gray fill
+final branding/icon design is explicitly deferred
+no app logic, storage model, or desktop architecture was changed
 
-Next step: continue DP-02 Windows validation/retest loop and clear the remaining corrective defects before any DP-03 work begins.
+Next step:
 
+continue DP-02 Windows validation/retest loop and clear the remaining corrective defects before any DP-03 work begins
 DP-02 — Windows interactive validation (corrective tranche, 2026-04-08)
 
 Windows interactive validation against 11 items produced mixed results on branch claude/protect-baseline-PM0XU. The following defects were identified and fixed in-branch in a narrow corrective tranche (no DP-03 scope, no storage changes):
@@ -916,13 +940,16 @@ Root cause summary
 
 The codebase mixed two time models:
 
-Canonical model in src/js/datamodel.js: getOperationalTimezoneOffsetHours() resolves Europe/London seasonally (BST = +1, GMT = 0) for config values 0 or 1; uses explicit offset directly for other values.
-Legacy paths still active:
+canonical model in src/js/datamodel.js: getOperationalTimezoneOffsetHours() resolves Europe/London seasonally (BST = +1, GMT = 0) for config values 0 or 1; uses explicit offset directly for other values
+legacy paths still active:
 initClock() in app.js read raw config.timezoneOffsetHours directly (bypassing seasonal resolution)
 getTimeWithOffset() / addMinutesToTime() in datamodel.js used browser-local Date methods rather than UTC methods
 
-This caused BST-season disagreement: the banner local clock showed the raw stored offset, while modal UTC↔Local conversion correctly showed seasonal behavior. Default planned times were also skewed by host machine local time rather than UTC.
+This caused BST-season disagreement:
 
+the banner local clock showed the raw stored offset
+modal UTC↔Local conversion correctly showed seasonal behavior
+default planned times were skewed by host machine local time rather than UTC
 Files changed
 src/js/datamodel.js
 getTimeWithOffset(offsetMinutes):
@@ -958,9 +985,9 @@ roundActiveStampToMinute() and getExactActiveTimestamp() in src/js/ui_liveboard.
 File changed
 src/js/ui_liveboard.js
 roundActiveStampToMinute(date):
-replaced getSeconds() / setMinutes() / getHours() / getMinutes() with UTC equivalents
+replaced local-time methods with UTC equivalents
 getExactActiveTimestamp(date):
-replaced getHours() / getMinutes() / getSeconds() with UTC equivalents
+replaced local-time methods with UTC equivalents
 
 No surrounding transition logic (transitionToActive, transitionToCompleted) was modified in this tranche.
 
@@ -977,7 +1004,7 @@ no regression in lifecycle semantics
 18) UTC authority enforcement in ui_liveboard.js — final cleanup (2026-04-21)
 Purpose
 
-After sections 16 and 17, the app still had residual ui_liveboard.js paths that bypassed the UTC-first model. These were not architectural flaws; they were remaining exceptions.
+After sections 16 and 17, the app still had residual ui_liveboard.js paths that bypassed the UTC-first model. These were remaining exceptions, not architectural flaws.
 
 Canonical rule reaffirmed:
 
@@ -989,9 +1016,9 @@ Root cause
 
 The remaining incorrect paths were all in src/js/ui_liveboard.js:
 
-shouldShowNewFormTimeModeToggle() still used raw cfg.timezoneOffsetHours rather than the canonical helper.
-general Save & Complete still generated fallback currentTime from local/system time.
-LOC Save & Complete still generated fallback currentTime from local/system time.
+shouldShowNewFormTimeModeToggle() still used raw cfg.timezoneOffsetHours rather than the canonical helper
+general Save & Complete still generated fallback currentTime from local/system time
+LOC Save & Complete still generated fallback currentTime from local/system time
 File changed
 src/js/ui_liveboard.js
 import list:
@@ -1004,7 +1031,7 @@ LOC Save & Complete handler:
 changed fallback currentTime from local getHours()/getMinutes() to UTC getUTCHours()/getUTCMinutes()
 Important diagnostic conclusion
 
-The strip-face rendering path displays stored values directly; it is not converting UTC values to local on the strip face. Therefore, remaining visual timing errors at this stage were write-path problems, not strip-face presentation illusions.
+The strip-face rendering path displays stored values directly; it does not convert UTC values to local on the strip face. Therefore, the remaining visual timing errors at that stage were write-path problems, not strip-face presentation illusions.
 
 Smoke results
 
@@ -1020,93 +1047,41 @@ Save & Complete LOC: pass
 Local input converts back to UTC on save: pass
 Outcome
 
-The timing blocker for the tested strip lifecycle paths is now considered closed for this tranche.
-
-Deferred / queued next item
-
-The UTC-first timing blocker is closed. The dual UTC/local timeline ruler has now been implemented as the follow-on display enhancement (see section 19).
+The timing blocker for the tested strip lifecycle paths is considered closed for this tranche.
 
 19) Dual UTC/local timeline ruler — implementation record (2026-04-21)
 Purpose
 
-Display-only enhancement to the Day Timeline ruler. Adds an optional secondary local-time ruler row beneath (or above) the primary UTC ruler. Does not alter UTC authority, timeline bar positioning, or now-line behavior.
+Display-only enhancement to the Day Timeline ruler. Adds an optional secondary local-time ruler row while preserving UTC authority.
 
 Files changed
-
 src/js/datamodel.js
-  Added three new config defaults:
-    timelineShowLocalRuler: true
-    timelineHideLocalRulerIfSame: true
-    timelineSwapUtcLocalRulers: false
 
+Added config defaults:
+
+timelineShowLocalRuler: true
+timelineHideLocalRulerIfSame: true
+timelineSwapUtcLocalRulers: false
 src/js/ui_liveboard.js
-  Added getOperationalTimezoneOffsetHours to import block.
-  Refactored renderTimelineScale() to build two .timeline-scale-row containers
-  (UTC and LOCAL) instead of appending markers directly to #timelineScale.
-  UTC labels: HH:00 unchanged.
-  Local labels: generated via canonical convertUTCToLocal(), never via raw
-    cfg.timezoneOffsetHours.
-  Distinctness check: getOperationalTimezoneOffsetHours() !== 0 (canonical,
-    not raw config read).
-  Ordering: swapped config controls which row is appended first.
-  updateTimelineNowLine(), renderTimelineTracks() are unchanged.
-
+added canonical local-distinctness logic for ruler visibility
+local ruler labels generated via canonical conversion, never raw offset math
+ruler order can be swapped
+updateTimelineNowLine() and renderTimelineTracks() unchanged
 src/index.html
-  Added three checkboxes in the "Day View / Timeline Settings" admin panel:
-    configTimelineShowLocalRuler
-    configTimelineHideLocalRulerIfSame
-    configTimelineSwapUtcLocalRulers
 
+Added admin controls:
+
+configTimelineShowLocalRuler
+configTimelineHideLocalRulerIfSame
+configTimelineSwapUtcLocalRulers
 src/js/app.js
-  Added element references for three new checkboxes.
-  Added all three IDs to CHECKBOX_IDS for dirty-state tracking.
-  Load path: reads all three from currentConfig.
-  Save path: reads checkbox states, passes to updateConfig().
-  renderTimeline() is called after save (existing pattern, unchanged).
-
+wired load/save/dirty-state handling for the new ruler settings
 src/css/vectair.css
-  Removed fixed height: 24px from .timeline-scale (rows define height now).
-  Changed .timeline-hour-marker line-height from 24px to 22px.
-  Added .timeline-scale-row, .timeline-scale-row-utc, .timeline-scale-row-local,
-    .timeline-scale-row-label, and local-row marker overrides.
-  UTC row: no extra treatment (primary by default).
-  Local row: slightly darker background (#ede8e1), quieter text and border colours.
-  Row labels ("UTC" / "LOCAL") right-aligned, 8px, very subtle colour.
-
-New timeline ruler settings
-
-timelineShowLocalRuler (bool, default true)
-  Show secondary local ruler row.
-
-timelineHideLocalRulerIfSame (bool, default true)
-  Suppress local ruler when getOperationalTimezoneOffsetHours() === 0.
-
-timelineSwapUtcLocalRulers (bool, default false)
-  When true: local row on top, UTC row on bottom.
-
-Smoke tests (manual — pending Stuart verification)
-
-Default display
-  UTC ruler renders on top with HH:00 labels.
-  Local ruler renders below, labels from convertUTCToLocal().
-  Local row is visually quieter.
-
-Hide-if-same (UTC-equivalent state, offset = 0)
-  timelineHideLocalRulerIfSame enabled → local ruler absent.
-
-BST-distinct (offset = +1)
-  UTC and local rulers differ by one hour.
-
-Swap order
-  timelineSwapUtcLocalRulers enabled → local on top, UTC below.
-  Timeline bars and now-line positions unchanged.
-
-Persistence
-  Save config → reload → settings restored correctly.
-
+added dual-ruler styling and visual hierarchy
 UTC authority confirmation
 
-This tranche is display-only.
+Display-only.
+
 No movement time fields were changed.
 No bar span calculations were changed.
 No now-line calculations were changed.
@@ -1115,77 +1090,76 @@ UTC remains the sole time storage and positioning authority.
 20) Dual ruler layout correction + header strip removal (2026-04-22)
 Purpose
 
-Layout/display refinement only. Corrects the ruler stacking model and
-removes the now-redundant internal timeline header strip.
+Layout/display refinement only. Corrects the ruler stacking model and removes the redundant internal timeline header strip.
 
 Problems fixed
-
-Previous implementation stacked both rulers at the top of the timeline
-area, leaving no bottom ruler.
-
-Ruler styling was timezone-identity-based (UTC vs LOCAL classes) rather
-than position-based (top vs bottom), so swapping broke the visual hierarchy.
-
-The internal "DAY TIMELINE (UTC)" header strip and its right-aligned UTC
-clock were redundant now that the top ruler provides the time context.
-
+previous implementation stacked both rulers at the top of the timeline area
+ruler styling was timezone-identity-based instead of position-based
+the internal “DAY TIMELINE (UTC)” header strip and its right-aligned UTC clock were redundant
 Files changed
-
 src/js/ui_liveboard.js
-  Replaced renderTimelineScale() with three components:
-    buildRulerShell(labelText, labelSub, posClass, startHour, endHour, getHourLabel)
-      Builds a single-row ruler (label overlay + full-width marker row).
-      posClass is 'timeline-scale-primary' or 'timeline-scale-secondary'.
-    renderTimelineScale()
-      Renders only the top ruler into #timelineScale.
-      Top ruler always gets primary styling.
-      Which timezone is on top follows timelineSwapUtcLocalRulers.
-    renderTimelineScaleBottom()
-      Renders the bottom ruler into a dynamically managed #timelineScaleBottom.
-      Inserts the element before #timelineNowLine inside #timelineContainer.
-      Bottom ruler always gets secondary styling.
-      Removed entirely (element deleted) when no secondary ruler is needed.
-  Updated renderTimeline() to call renderTimelineScaleBottom() and clean
-  up #timelineScaleBottom when the timeline is disabled.
-
+introduced buildRulerShell(...) to build a single-row ruler
+top ruler rendered by renderTimelineScale()
+bottom ruler rendered by renderTimelineScaleBottom()
+bottom ruler inserted dynamically inside #timelineContainer
+removed entirely when no secondary ruler is needed
 src/css/vectair.css
-  .timeline-header: display:none — redundant strip removed.
-  Replaced timezone-identity classes (.timeline-scale-row-label-utc,
-    .timeline-scale-row-label-local, .timeline-scale-row-local) with
-    position-based classes (.timeline-scale-primary, .timeline-scale-secondary).
-  .timeline-scale-secondary: quieter label column background and marker colours.
-  .timeline-scale-bottom: border-bottom:none (container bottom edge suffices).
-  All other dual-ruler structure (shell, label overlay, marker pane) unchanged.
-
+.timeline-header { display: none; }
+replaced timezone-identity styling with position-based styling:
+.timeline-scale-primary
+.timeline-scale-secondary
 Internal container layout (post-change)
-
-  #timelineContainer (position:relative, same footprint/style)
-    #timelineScale             ← top ruler, primary styling
-    #timelineTracks            ← bars, unchanged
-    #timelineScaleBottom       ← bottom ruler, secondary styling (dynamic)
-    #timelineNowLine           ← position:absolute, spans full container height
-
+#timelineContainer
+  #timelineScale        ← top ruler
+  #timelineTracks       ← bars
+  #timelineScaleBottom  ← bottom ruler (dynamic)
+  #timelineNowLine      ← absolute, spans full container height
 Alignment guarantee
 
-  Marker rows in both rulers are full-width (same coordinate space as
-  #timelineTracks and #timelineNowLine). The label overlay (position:absolute,
-  52 px, left-anchored) does not narrow the marker field.
+Marker rows in both rulers remain in the same horizontal coordinate space as:
 
-Styling rule (position-based, not timezone-based)
+#timelineTracks
+#timelineNowLine
 
-  Top ruler  → .timeline-scale-primary  (full contrast, regardless of UTC/LOCAL)
-  Bottom ruler → .timeline-scale-secondary (quieter, regardless of UTC/LOCAL)
-  Label text is still accurate (UTC or LOCAL / LOCAL (+offset)).
+The label overlay does not narrow the marker field.
 
-Smoke results (pending Stuart verification)
+Styling rule
+top ruler → primary styling
+bottom ruler → secondary styling
 
-  A. Default: UTC top (primary), LOCAL bottom (secondary), no header strip, bars in middle.
-  B. Swap: LOCAL top (primary styling), UTC bottom (secondary styling), bars unchanged.
-  C. Alignment: both rulers align with bars and now-line.
-  D. Hide-if-same: local ruler removed cleanly, no empty lower band.
-  E. BST-distinct: both rulers, correct offset, position-based styling applied.
-  F. Readability: no overlap, no wrap, compact label column.
+Styling follows position, not timezone identity.
 
 UTC authority confirmation
 
 Display-only. UTC authority, bar placement, and now-line placement unchanged.
+
+21) Timeline ruler compacting + tick refinement (2026-04-22)
+Purpose
+
+Final visual refinement of the timeline rulers after the dual-ruler implementation.
+
+Delivered
+top and bottom rulers packed flush to the inner top/bottom edges of the timeline container
+ruler row heights reduced for a more compact presentation
+quarter-hour and half-hour ticks added:
+full divider at whole hour
+medium tick at :30
+smaller ticks at :15 and :45
+Files changed
+src/css/vectair.css
+removed vertical padding from .timeline-container
+reduced ruler row height
+added tick classes and secondary-row quieter styling
+src/js/ui_liveboard.js
+added intermediate tick generation at:
+0.25
+0.5
+0.75
+kept the same coordinate-space basis as hour markers, bars, and now-line
+Outcome
+
+Timeline presentation is now considered complete for V1.
+
+Deferred follow-on
+
+For V1, local descriptor text remains hardcoded to a compact label style where needed. Dynamic local timezone abbreviation rendering is deferred to the post-launch backlog.
