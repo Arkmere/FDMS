@@ -2063,67 +2063,124 @@ tr.strip.ft-ovr > td {
   /* height is auto — rows define it */
 }
 
-/* ── Dual-ruler row containers ─────────────────────────────── */
+/* ── Dual-ruler shell / label-overlay / marker-rows ───────────────────── */
+
+/*
+ * Shell: relative-positioned wrapper so the absolute label overlay can use
+ * top/bottom: 0 to match the combined height of the marker rows.
+ */
+.timeline-scale-shell {
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * Labels column: absolute overlay pinned to the left edge.
+ * Does NOT narrow the marker rows — marker left-% values stay in the same
+ * coordinate space as #timelineTracks bars and #timelineNowLine.
+ */
+.timeline-scale-labels {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  background: #d5d0c9;
+  border-right: 1px solid #b8b3ac;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+}
+
+.timeline-scale-row-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.timeline-scale-row-label + .timeline-scale-row-label {
+  border-top: 1px solid #c0bbb4;
+}
+
+/* UTC label — visually primary */
+.timeline-scale-row-label-utc {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #3a3632;
+}
+
+/* Local label — visually subordinate */
+.timeline-scale-row-label-local {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #7a7570;
+}
+
+.timeline-scale-row-label-sub {
+  font-size: 8px;
+  font-weight: 400;
+  color: #9a958f;
+  line-height: 1;
+}
+
+/* Markers wrapper: full container width — no offset */
+.timeline-scale-markers {
+  width: 100%;
+}
+
+/* Individual marker rows */
 .timeline-scale-row {
   position: relative;
   width: 100%;
-  height: 22px;
+  height: 26px;
 }
 
 .timeline-scale-row + .timeline-scale-row {
   border-top: 1px solid #d5cfc6;
 }
 
-/* UTC row — visually primary (no extra treatment needed) */
-.timeline-scale-row-utc {}
-
-/* Local row — visually subordinate */
+/* Local row — visually subordinate background */
 .timeline-scale-row-local {
   background: #ede8e1;
 }
 
-/* Row identity label (right-aligned, subtle) */
-.timeline-scale-row-label {
-  position: absolute;
-  right: 4px;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  font-size: 8px;
-  font-weight: 700;
-  color: #b5afa8;
-  letter-spacing: 0.05em;
-  z-index: 2;
-  pointer-events: none;
-  user-select: none;
-}
-
+/* UTC hour markers — primary contrast */
 .timeline-hour-marker {
   position: absolute;
   top: 0;
   height: 100%;
   border-left: 1px solid #c5bfb6;
   font-size: 10px;
-  color: #666;
+  color: #555;
   padding-left: 4px;
-  line-height: 22px;
+  line-height: 26px;
+  white-space: nowrap;
 }
 
 .timeline-hour-marker.hour-major {
   border-left: 1px solid #9a9488;
   font-weight: 600;
+  color: #333;
 }
 
-/* Local row markers are quieter than UTC */
+/* Local row markers — quieter than UTC */
 .timeline-scale-row-local .timeline-hour-marker {
   color: #8a8480;
   font-size: 9px;
 }
 
 .timeline-scale-row-local .timeline-hour-marker.hour-major {
-  color: #737069;
+  color: #706b66;
   border-left-color: #b5afa8;
+  font-weight: 600;
 }
 
 .timeline-tracks {
