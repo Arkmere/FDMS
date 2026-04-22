@@ -8332,6 +8332,16 @@ function buildRulerShell(labelText, labelSub, posClass, startHour, endHour, getH
     marker.style.left = `${leftPercent}%`;
     marker.textContent = getHourLabel(hour);
     row.appendChild(marker);
+
+    // Sub-hour ticks within each complete hour interval (:15, :30, :45)
+    if (hour < endHour) {
+      for (const [frac, cls] of [[0.25, 'quarter'], [0.5, 'half'], [0.75, 'quarter']]) {
+        const tick = document.createElement('div');
+        tick.className = `timeline-tick timeline-tick-${cls}`;
+        tick.style.left = `${((hour - startHour + frac) / totalHours) * 100}%`;
+        row.appendChild(tick);
+      }
+    }
   }
 
   markersWrapper.appendChild(row);
