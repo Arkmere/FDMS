@@ -1635,6 +1635,10 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
  * Returns { _error, message } if a validation error is found.
  */
 function readFormationFromModal(baseCallsign, countInputId, containerId) {
+  // If the formation-enabled checkbox exists and is unchecked, no formation
+  const enabledCheckbox = document.getElementById(countInputId.replace("Count", "Enabled"));
+  if (enabledCheckbox && !enabledCheckbox.checked) return null;
+
   const countInput = document.getElementById(countInputId);
   const rawCount = parseInt(countInput?.value || "0", 10);
   const count = Math.min(Math.max(rawCount, 0), 12);
@@ -3622,14 +3626,21 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           <span class="expander-hint">(optional – multi-aircraft)</span>
         </button>
         <div id="newFormationSection" class="modal-expander-panel" hidden>
-          <div class="modal-section-grid">
-            <div class="modal-field">
-              <label class="modal-label">Number of Aircraft</label>
-              <input id="newFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
-              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Callsigns default to auto-generated but are editable.</div>
-            </div>
+          <div class="modal-field formation-toggle-row">
+            <label class="formation-toggle-label">
+              <input type="checkbox" id="newFormationEnabled" />
+              Movement is a formation
+            </label>
           </div>
-          <div id="newFormationElementsContainer"></div>
+          <div id="newFormationBody" hidden>
+            <div class="modal-section-grid">
+              <div class="modal-field">
+                <label class="modal-label">Number of Aircraft</label>
+                <input id="newFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
+              </div>
+            </div>
+            <div id="newFormationElementsContainer"></div>
+          </div>
         </div>
       </section>
     </div>
@@ -3836,16 +3847,28 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   document.getElementById('newType')?.addEventListener('input', maybeAutofillWtc);
   document.getElementById('newFlightType')?.addEventListener('change', maybeAutofillWtc);
 
-  // Wire formation count input — rebuild element rows when count or base callsign changes
+  // Wire formation section — explicit toggle then count/callsign rebuild
   const getNewFlightCallsign = () =>
     (document.getElementById("newCallsignCode")?.value?.trim() || "") +
     (document.getElementById("newFlightNumber")?.value?.trim() || "");
+
+  const newFormationCheckbox = document.getElementById("newFormationEnabled");
+  const newFormationBody = document.getElementById("newFormationBody");
+  newFormationCheckbox?.addEventListener("change", () => {
+    const enabled = newFormationCheckbox.checked;
+    newFormationBody.hidden = !enabled;
+    if (enabled) {
+      const countInput = document.getElementById("newFormationCount");
+      countInput.value = "2";
+      buildFormationElementRows(2, getNewFlightCallsign(), "newFormationElementsContainer", []);
+    } else {
+      document.getElementById("newFormationElementsContainer").innerHTML = "";
+    }
+  });
+
   wireFormationCountInput("newFormationCount", "newFormationElementsContainer", getNewFlightCallsign, []);
-  // Also rebuild rows when callsign code changes (element labels update)
-  // Only rebuild if rows have already been rendered (formation section was explicitly used)
   callsignCodeInput?.addEventListener("input", () => {
-    const container = document.getElementById("newFormationElementsContainer");
-    if (!container?.querySelector('[data-el-callsign="0"]')) return;
+    if (!newFormationCheckbox?.checked) return;
     const count = parseInt(document.getElementById("newFormationCount")?.value || "2", 10);
     if (count >= 2) buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", []);
   });
@@ -4591,14 +4614,21 @@ function openNewLocFlightModal() {
           <span class="expander-hint">(optional – multi-aircraft)</span>
         </button>
         <div id="newLocFormationSection" class="modal-expander-panel" hidden>
-          <div class="modal-section-grid">
-            <div class="modal-field">
-              <label class="modal-label">Number of Aircraft</label>
-              <input id="newLocFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
-              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Callsigns default to auto-generated but are editable.</div>
-            </div>
+          <div class="modal-field formation-toggle-row">
+            <label class="formation-toggle-label">
+              <input type="checkbox" id="newLocFormationEnabled" />
+              Movement is a formation
+            </label>
           </div>
-          <div id="newLocFormationElementsContainer"></div>
+          <div id="newLocFormationBody" hidden>
+            <div class="modal-section-grid">
+              <div class="modal-field">
+                <label class="modal-label">Number of Aircraft</label>
+                <input id="newLocFormationCount" class="modal-input" type="number" value="2" min="2" max="12" style="width:80px;" />
+              </div>
+            </div>
+            <div id="newLocFormationElementsContainer"></div>
+          </div>
         </div>
       </section>
     </div>
@@ -4762,14 +4792,28 @@ function openNewLocFlightModal() {
   if (callsignCodeInput) callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
   if (flightNumberInput) flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
 
-  // Wire formation section
+  // Wire formation section — explicit toggle then count/callsign rebuild
   const getLocCallsign = () =>
     (document.getElementById("newLocCallsignCode")?.value?.trim() || "") +
     (document.getElementById("newLocFlightNumber")?.value?.trim() || "");
+
+  const newLocFormationCheckbox = document.getElementById("newLocFormationEnabled");
+  const newLocFormationBody = document.getElementById("newLocFormationBody");
+  newLocFormationCheckbox?.addEventListener("change", () => {
+    const enabled = newLocFormationCheckbox.checked;
+    newLocFormationBody.hidden = !enabled;
+    if (enabled) {
+      const countInput = document.getElementById("newLocFormationCount");
+      countInput.value = "2";
+      buildFormationElementRows(2, getLocCallsign(), "newLocFormationElementsContainer", []);
+    } else {
+      document.getElementById("newLocFormationElementsContainer").innerHTML = "";
+    }
+  });
+
   wireFormationCountInput("newLocFormationCount", "newLocFormationElementsContainer", getLocCallsign, []);
   callsignCodeInput?.addEventListener("input", () => {
-    const container = document.getElementById("newLocFormationElementsContainer");
-    if (!container?.querySelector('[data-el-callsign="0"]')) return;
+    if (!newLocFormationCheckbox?.checked) return;
     const count = parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10);
     if (count >= 2) buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", []);
   });
@@ -5350,18 +5394,22 @@ function openEditMovementModal(m) {
           <span class="expander-hint">${m.formation ? `(${m.formation.elements?.length || 0} aircraft)` : "(optional – multi-aircraft)"}</span>
         </button>
         <div id="editFormationSection" class="modal-expander-panel" ${m.formation ? "" : "hidden"}>
-          <div class="modal-section-grid">
-            <div class="modal-field">
-              <label class="modal-label">Number of Aircraft</label>
-              <input id="editFormationCount" class="modal-input" type="number"
-                value="${m.formation?.elements?.length || 2}" min="2" max="12" style="width:80px;" />
-              <div style="font-size:11px;color:#666;margin-top:4px;">2–12 aircraft. Set below 2 or use Remove to clear formation.</div>
-            </div>
-            ${m.formation ? `<div class="modal-field" style="display:flex;align-items:flex-end;">
-              <button type="button" class="btn btn-ghost js-remove-formation" style="color:#d32f2f;font-size:12px;">Remove Formation</button>
-            </div>` : ""}
+          <div class="modal-field formation-toggle-row">
+            <label class="formation-toggle-label">
+              <input type="checkbox" id="editFormationEnabled" ${m.formation ? "checked" : ""} />
+              Movement is a formation
+            </label>
           </div>
-          <div id="editFormationElementsContainer"></div>
+          <div id="editFormationBody" ${m.formation ? "" : "hidden"}>
+            <div class="modal-section-grid">
+              <div class="modal-field">
+                <label class="modal-label">Number of Aircraft</label>
+                <input id="editFormationCount" class="modal-input" type="number"
+                  value="${m.formation?.elements?.length || 2}" min="2" max="12" style="width:80px;" />
+              </div>
+            </div>
+            <div id="editFormationElementsContainer"></div>
+          </div>
         </div>
       </section>
 
@@ -5565,25 +5613,38 @@ function openEditMovementModal(m) {
     });
   });
 
-  // Wire formation section — pre-populate element rows and bind count input
+  // Wire formation section — explicit toggle then count/callsign rebuild
   const getEditCallsign = () =>
     (document.getElementById("editCallsignCode")?.value?.trim() || "") +
     (document.getElementById("editFlightNumber")?.value?.trim() || "");
   const existingElements = m.formation?.elements || [];
-  const initialEditCount = existingElements.length || 1;
-  buildFormationElementRows(initialEditCount, getEditCallsign(), "editFormationElementsContainer", existingElements);
-  wireFormationCountInput("editFormationCount", "editFormationElementsContainer", getEditCallsign, existingElements);
-  callsignCodeInput?.addEventListener("input", () => {
-    const count = parseInt(document.getElementById("editFormationCount")?.value || "1", 10);
-    if (count > 1) buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", existingElements);
+  const initialEditCount = existingElements.length || 2;
+
+  // Pre-populate rows if editing a movement that already has a formation
+  if (m.formation) {
+    buildFormationElementRows(initialEditCount, getEditCallsign(), "editFormationElementsContainer", existingElements);
+  }
+
+  const editFormationCheckbox = document.getElementById("editFormationEnabled");
+  const editFormationBody = document.getElementById("editFormationBody");
+  editFormationCheckbox?.addEventListener("change", () => {
+    const enabled = editFormationCheckbox.checked;
+    editFormationBody.hidden = !enabled;
+    if (enabled) {
+      const countInput = document.getElementById("editFormationCount");
+      const count = Math.max(parseInt(countInput.value || "2", 10), 2);
+      countInput.value = String(count);
+      buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", existingElements);
+    } else {
+      document.getElementById("editFormationElementsContainer").innerHTML = "";
+    }
   });
 
-  // "Remove Formation" button — set count to 1 and clear container
-  document.querySelector(".js-remove-formation")?.addEventListener("click", () => {
-    const countInput = document.getElementById("editFormationCount");
-    if (countInput) countInput.value = "1";
-    buildFormationElementRows(1, getEditCallsign(), "editFormationElementsContainer", []);
-    showToast("Formation removed — click Save Changes to persist", "info");
+  wireFormationCountInput("editFormationCount", "editFormationElementsContainer", getEditCallsign, existingElements);
+  callsignCodeInput?.addEventListener("input", () => {
+    if (!editFormationCheckbox?.checked) return;
+    const count = parseInt(document.getElementById("editFormationCount")?.value || "2", 10);
+    if (count >= 2) buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", existingElements);
   });
 
   // Auto-fill Remarks and Warnings from registration data
