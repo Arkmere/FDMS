@@ -1630,6 +1630,31 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
 }
 
 /**
+ * Snapshot currently rendered formation row values into a session draft array.
+ * Only updates slots 0..count-1; higher-ordinal slots are left untouched so
+ * their values survive a count reduction and can be restored on count increase.
+ * @param {Array}  draft       - Mutable per-modal-session draft (sparse, indices 0–11)
+ * @param {string} containerId - ID of the element rows container
+ * @param {number} count       - Number of currently visible rows
+ */
+function snapshotFormationDraft(draft, containerId, count) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  for (let i = 0; i < count; i++) {
+    const callsignEl = container.querySelector(`[data-el-callsign="${i}"]`);
+    if (!callsignEl) continue;
+    draft[i] = {
+      callsign: callsignEl.value.trim(),
+      reg:      container.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()  || "",
+      type:     container.querySelector(`[data-el-type="${i}"]`)?.value?.trim() || "",
+      wtc:      container.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "",
+      depAd:    container.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
+      arrAd:    container.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
+    };
+  }
+}
+
+/**
  * Read formation data from a modal's formation inputs.
  * Returns null if count < 2 or no rows rendered (no formation).
  * Returns { _error, message } if a validation error is found.
@@ -3847,30 +3872,51 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   document.getElementById('newType')?.addEventListener('input', maybeAutofillWtc);
   document.getElementById('newFlightType')?.addEventListener('change', maybeAutofillWtc);
 
-  // Wire formation section — explicit toggle then count/callsign rebuild
+  // Wire formation section — draft-backed toggle and count/callsign rebuild
   const getNewFlightCallsign = () =>
     (document.getElementById("newCallsignCode")?.value?.trim() || "") +
     (document.getElementById("newFlightNumber")?.value?.trim() || "");
 
+  // Per-session draft: sparse array keyed by element ordinal (0–11)
+  const newFormationDraft = [];
+  let newFormationVisibleCount = 2;
+
   const newFormationCheckbox = document.getElementById("newFormationEnabled");
   const newFormationBody = document.getElementById("newFormationBody");
+
   newFormationCheckbox?.addEventListener("change", () => {
-    const enabled = newFormationCheckbox.checked;
-    newFormationBody.hidden = !enabled;
-    if (enabled) {
-      const countInput = document.getElementById("newFormationCount");
-      countInput.value = "2";
-      buildFormationElementRows(2, getNewFlightCallsign(), "newFormationElementsContainer", []);
+    if (!newFormationCheckbox.checked) {
+      snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
+      newFormationBody.hidden = true;
     } else {
-      document.getElementById("newFormationElementsContainer").innerHTML = "";
+      newFormationBody.hidden = false;
+      const hasDraft = newFormationDraft.some(s => s !== undefined);
+      if (!hasDraft) {
+        const countInput = document.getElementById("newFormationCount");
+        countInput.value = "2";
+        newFormationVisibleCount = 2;
+        buildFormationElementRows(2, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+      } else {
+        const count = Math.min(Math.max(parseInt(document.getElementById("newFormationCount")?.value || "2", 10), 2), 12);
+        newFormationVisibleCount = count;
+        buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+      }
     }
   });
 
-  wireFormationCountInput("newFormationCount", "newFormationElementsContainer", getNewFlightCallsign, []);
+  document.getElementById("newFormationCount")?.addEventListener("input", () => {
+    if (!newFormationCheckbox?.checked) return;
+    const countInput = document.getElementById("newFormationCount");
+    const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
+    snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
+    buildFormationElementRows(newCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+    newFormationVisibleCount = newCount;
+  });
+
   callsignCodeInput?.addEventListener("input", () => {
     if (!newFormationCheckbox?.checked) return;
-    const count = parseInt(document.getElementById("newFormationCount")?.value || "2", 10);
-    if (count >= 2) buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", []);
+    snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
+    buildFormationElementRows(newFormationVisibleCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
   });
 
   // Auto-fill Remarks and Warnings from registration data (FDMS_REGISTRATIONS.csv col 15 & 16)
@@ -4792,30 +4838,50 @@ function openNewLocFlightModal() {
   if (callsignCodeInput) callsignCodeInput.addEventListener("input", updateCallsignDerivedFields);
   if (flightNumberInput) flightNumberInput.addEventListener("input", updateCallsignDerivedFields);
 
-  // Wire formation section — explicit toggle then count/callsign rebuild
+  // Wire formation section — draft-backed toggle and count/callsign rebuild
   const getLocCallsign = () =>
     (document.getElementById("newLocCallsignCode")?.value?.trim() || "") +
     (document.getElementById("newLocFlightNumber")?.value?.trim() || "");
 
+  const newLocFormationDraft = [];
+  let newLocFormationVisibleCount = 2;
+
   const newLocFormationCheckbox = document.getElementById("newLocFormationEnabled");
   const newLocFormationBody = document.getElementById("newLocFormationBody");
+
   newLocFormationCheckbox?.addEventListener("change", () => {
-    const enabled = newLocFormationCheckbox.checked;
-    newLocFormationBody.hidden = !enabled;
-    if (enabled) {
-      const countInput = document.getElementById("newLocFormationCount");
-      countInput.value = "2";
-      buildFormationElementRows(2, getLocCallsign(), "newLocFormationElementsContainer", []);
+    if (!newLocFormationCheckbox.checked) {
+      snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
+      newLocFormationBody.hidden = true;
     } else {
-      document.getElementById("newLocFormationElementsContainer").innerHTML = "";
+      newLocFormationBody.hidden = false;
+      const hasDraft = newLocFormationDraft.some(s => s !== undefined);
+      if (!hasDraft) {
+        const countInput = document.getElementById("newLocFormationCount");
+        countInput.value = "2";
+        newLocFormationVisibleCount = 2;
+        buildFormationElementRows(2, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+      } else {
+        const count = Math.min(Math.max(parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10), 2), 12);
+        newLocFormationVisibleCount = count;
+        buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+      }
     }
   });
 
-  wireFormationCountInput("newLocFormationCount", "newLocFormationElementsContainer", getLocCallsign, []);
+  document.getElementById("newLocFormationCount")?.addEventListener("input", () => {
+    if (!newLocFormationCheckbox?.checked) return;
+    const countInput = document.getElementById("newLocFormationCount");
+    const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
+    snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
+    buildFormationElementRows(newCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+    newLocFormationVisibleCount = newCount;
+  });
+
   callsignCodeInput?.addEventListener("input", () => {
     if (!newLocFormationCheckbox?.checked) return;
-    const count = parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10);
-    if (count >= 2) buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", []);
+    snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
+    buildFormationElementRows(newLocFormationVisibleCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
   });
 
   // Wire collapsible section expanders
@@ -5613,38 +5679,58 @@ function openEditMovementModal(m) {
     });
   });
 
-  // Wire formation section — explicit toggle then count/callsign rebuild
+  // Wire formation section — draft-backed toggle and count/callsign rebuild
   const getEditCallsign = () =>
     (document.getElementById("editCallsignCode")?.value?.trim() || "") +
     (document.getElementById("editFlightNumber")?.value?.trim() || "");
   const existingElements = m.formation?.elements || [];
   const initialEditCount = existingElements.length || 2;
 
-  // Pre-populate rows if editing a movement that already has a formation
+  // Seed draft from existing formation elements so toggle off/on is non-destructive from the start
+  const editFormationDraft = existingElements.map(el => ({ ...el }));
+  let editFormationVisibleCount = initialEditCount;
+
+  // Render rows immediately when editing a movement that already has a formation
   if (m.formation) {
-    buildFormationElementRows(initialEditCount, getEditCallsign(), "editFormationElementsContainer", existingElements);
+    buildFormationElementRows(initialEditCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
   }
 
   const editFormationCheckbox = document.getElementById("editFormationEnabled");
   const editFormationBody = document.getElementById("editFormationBody");
+
   editFormationCheckbox?.addEventListener("change", () => {
-    const enabled = editFormationCheckbox.checked;
-    editFormationBody.hidden = !enabled;
-    if (enabled) {
-      const countInput = document.getElementById("editFormationCount");
-      const count = Math.max(parseInt(countInput.value || "2", 10), 2);
-      countInput.value = String(count);
-      buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", existingElements);
+    if (!editFormationCheckbox.checked) {
+      snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
+      editFormationBody.hidden = true;
     } else {
-      document.getElementById("editFormationElementsContainer").innerHTML = "";
+      editFormationBody.hidden = false;
+      const hasDraft = editFormationDraft.some(s => s !== undefined);
+      if (!hasDraft) {
+        const countInput = document.getElementById("editFormationCount");
+        countInput.value = "2";
+        editFormationVisibleCount = 2;
+        buildFormationElementRows(2, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+      } else {
+        const count = Math.min(Math.max(parseInt(document.getElementById("editFormationCount")?.value || "2", 10), 2), 12);
+        editFormationVisibleCount = count;
+        buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+      }
     }
   });
 
-  wireFormationCountInput("editFormationCount", "editFormationElementsContainer", getEditCallsign, existingElements);
+  document.getElementById("editFormationCount")?.addEventListener("input", () => {
+    if (!editFormationCheckbox?.checked) return;
+    const countInput = document.getElementById("editFormationCount");
+    const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
+    snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
+    buildFormationElementRows(newCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+    editFormationVisibleCount = newCount;
+  });
+
   callsignCodeInput?.addEventListener("input", () => {
     if (!editFormationCheckbox?.checked) return;
-    const count = parseInt(document.getElementById("editFormationCount")?.value || "2", 10);
-    if (count >= 2) buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", existingElements);
+    snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
+    buildFormationElementRows(editFormationVisibleCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
   });
 
   // Auto-fill Remarks and Warnings from registration data
