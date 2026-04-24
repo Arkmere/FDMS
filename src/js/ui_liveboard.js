@@ -1684,8 +1684,12 @@ function snapshotFormationDraft(draft, containerId, count) {
  * Read formation data from a modal's formation inputs.
  * Returns null if count < 2 or no rows rendered (no formation).
  * Returns { _error, message } if a validation error is found.
+ * @param {string} baseCallsign  - Master callsign (e.g. "MERSY")
+ * @param {string} countInputId  - ID of the count input element
+ * @param {string} containerId   - ID of the element rows container
+ * @param {object} masterShared  - Shared defaults from the master strip fields
  */
-function readFormationFromModal(baseCallsign, countInputId, containerId) {
+function readFormationFromModal(baseCallsign, countInputId, containerId, masterShared = {}) {
   // If the formation-enabled checkbox exists and is unchecked, no formation
   const enabledCheckbox = document.getElementById(countInputId.replace("Count", "Enabled"));
   if (enabledCheckbox && !enabledCheckbox.checked) return null;
@@ -1698,6 +1702,15 @@ function readFormationFromModal(baseCallsign, countInputId, containerId) {
   // Return null if no element rows have been rendered (section never expanded/used)
   const container = document.getElementById(containerId);
   if (!container || !container.querySelector('[data-el-callsign="0"]')) return null;
+
+  const shared = {
+    depAd:      (masterShared.depAd      || "").trim().toUpperCase(),
+    arrAd:      (masterShared.arrAd      || "").trim().toUpperCase(),
+    flightType: masterShared.flightType  || "",
+    tngCount:   masterShared.tngCount    || 0,
+    osCount:    masterShared.osCount     || 0,
+    fisCount:   masterShared.fisCount    || 0
+  };
 
   const elements = [];
   for (let i = 0; i < count; i++) {
@@ -1721,17 +1734,31 @@ function readFormationFromModal(baseCallsign, countInputId, containerId) {
       return { _error: true, message: `Element ${i + 1}: Arr AD "${arrAdRaw}" must be a 4-character ICAO code (A–Z, 0–9).` };
     }
 
+    // Resolved element aerodrome values (element input wins; fall back to shared default)
+    const resolvedDepAd = depAdRaw || shared.depAd;
+    const resolvedArrAd = arrAdRaw || shared.arrAd;
+
+    // Track element-level overrides — only fields that differ from shared defaults
+    const overrides = {};
+    if (depAdRaw && depAdRaw !== shared.depAd) overrides.depAd = depAdRaw;
+    if (arrAdRaw && arrAdRaw !== shared.arrAd) overrides.arrAd = arrAdRaw;
+
     elements.push({
+      ordinal:   i + 1,
       callsign,
       reg, type,
       wtc: wtcRaw,
       status: "PLANNED",
-      depAd: depAdRaw, arrAd: arrAdRaw,
-      depActual: "", arrActual: ""
+      depAd: resolvedDepAd,
+      arrAd: resolvedArrAd,
+      depActual: "", arrActual: "",
+      overrides
     });
   }
   const { wtcCurrent, wtcMax } = computeFormationWTC(elements);
   return {
+    baseCallsign: baseCallsign || "",
+    shared,
     label:      `${baseCallsign || "Formation"} flight of ${count}`,
     wtcCurrent,
     wtcMax,
@@ -4298,7 +4325,15 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     // Validate and read formation (must happen before enrichMovementData)
     const newFormationBase = (document.getElementById("newCallsignCode")?.value?.trim() || "") +
                              (document.getElementById("newFlightNumber")?.value?.trim() || "");
-    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer");
+    const newFormationShared = {
+      depAd:      document.getElementById("newDepAd")?.value?.trim().toUpperCase()    || "",
+      arrAd:      document.getElementById("newArrAd")?.value?.trim().toUpperCase()    || "",
+      flightType: document.getElementById("newFlightType")?.value                     || "",
+      tngCount:   parseInt(document.getElementById("newTng")?.value      || "0", 10) || 0,
+      osCount:    parseInt(document.getElementById("newOsCount")?.value  || "0", 10) || 0,
+      fisCount:   parseInt(document.getElementById("newFisCount")?.value || "0", 10) || 0
+    };
+    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer", newFormationShared);
     if (newFormation?._error) { showToast(newFormation.message, 'error'); return; }
     movement.formation = newFormation;
 
@@ -5035,7 +5070,17 @@ function openNewLocFlightModal() {
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
     }
 
-    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    const osCountValue  = parseInt(document.getElementById("newLocOsCount")?.value  || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
+    const locFormationShared = {
+      depAd:      "EGOW",
+      arrAd:      "EGOW",
+      flightType: "LOC",
+      tngCount:   parseInt(tng, 10) || 0,
+      osCount:    osCountValue,
+      fisCount:   fisCountValue
+    };
+    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locFormationShared);
     if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
 
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -5066,8 +5111,6 @@ function openNewLocFlightModal() {
     const priorityLetterValue = priorityLetterRaw === "-" ? "" : priorityLetterRaw;
     const remarksValue = document.getElementById("newLocRemarks")?.value || "";
     const warningsValue = document.getElementById("newLocWarnings")?.value || "";
-    const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
-    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
     const squawkValue = document.getElementById("newLocSquawk")?.value || "";
     const routeValue = document.getElementById("newLocRoute")?.value || "";
     const clearanceValue = document.getElementById("newLocClearance")?.value || "";
@@ -5193,7 +5236,17 @@ function openNewLocFlightModal() {
       if (locScArrActual) locScArrActual = convertLocalToUTC(locScArrActual);
     }
 
-    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer");
+    const osCountValue  = parseInt(document.getElementById("newLocOsCount")?.value  || "0", 10);
+    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
+    const locCpFormationShared = {
+      depAd:      "EGOW",
+      arrAd:      "EGOW",
+      flightType: "LOC",
+      tngCount:   parseInt(tng, 10) || 0,
+      osCount:    osCountValue,
+      fisCount:   fisCountValue
+    };
+    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locCpFormationShared);
     if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -5224,8 +5277,6 @@ function openNewLocFlightModal() {
     const priorityLetterValue = locCpPriorityRaw === "-" ? "" : locCpPriorityRaw;
     const remarksValue = document.getElementById("newLocRemarks")?.value || "";
     const warningsValue = document.getElementById("newLocWarnings")?.value || "";
-    const osCountValue = parseInt(document.getElementById("newLocOsCount")?.value || "0", 10);
-    const fisCountValue = parseInt(document.getElementById("newLocFisCount")?.value || "0", 10);
     const squawkValue = document.getElementById("newLocSquawk")?.value || "";
     const routeValue = document.getElementById("newLocRoute")?.value || "";
     const clearanceValue = document.getElementById("newLocClearance")?.value || "";
@@ -6053,7 +6104,15 @@ function openEditMovementModal(m) {
     // Validate and read formation
     const editFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
                        (document.getElementById("editFlightNumber")?.value?.trim() || "");
-    const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer");
+    const editFmShared = {
+      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()     || "",
+      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()     || "",
+      flightType: document.getElementById("editFlightType")?.value                      || "",
+      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)  || 0,
+      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)  || 0,
+      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)  || 0
+    };
+    const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer", editFmShared);
     if (editFm?._error) { showToast(editFm.message, 'error'); return; }
     updates.formation = editFm;
 
@@ -6247,7 +6306,15 @@ function openEditMovementModal(m) {
     // Validate and read formation
     const saveCpFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
                          (document.getElementById("editFlightNumber")?.value?.trim() || "");
-    const saveCpFm = readFormationFromModal(saveCpFmBase, "editFormationCount", "editFormationElementsContainer");
+    const saveCpFmShared = {
+      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()     || "",
+      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()     || "",
+      flightType: document.getElementById("editFlightType")?.value                      || "",
+      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)  || 0,
+      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)  || 0,
+      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)  || 0
+    };
+    const saveCpFm = readFormationFromModal(saveCpFmBase, "editFormationCount", "editFormationElementsContainer", saveCpFmShared);
     if (saveCpFm?._error) { showToast(saveCpFm.message, 'error'); return; }
     updates.formation = saveCpFm;
 
