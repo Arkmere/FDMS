@@ -529,7 +529,7 @@ function ensureInitialised() {
     // Also apply Sprint 9 migration defaults for new fields.
     let needsSave = false;
     movements.forEach(m => {
-      if (m.formation) { m.formation = normalizeFormation(m.formation); needsSave = true; }
+      if (m.formation) { m.formation = normalizeFormation(m.formation, m); needsSave = true; }
       // Sprint 9: ZZZZ companion text fields
       if (m.depAdText === undefined)       { m.depAdText       = ''; needsSave = true; }
       if (m.arrAdText === undefined)       { m.arrAdText       = ''; needsSave = true; }
@@ -1213,7 +1213,7 @@ export function computeFormationWTC(elements) {
  * @param {object|null} formation
  * @returns {object|null}
  */
-function normalizeFormation(formation) {
+function normalizeFormation(formation, movement = null) {
   if (!formation || typeof formation !== "object") return null;
   if (!Array.isArray(formation.elements)) formation.elements = [];
 
@@ -1230,49 +1230,65 @@ function normalizeFormation(formation) {
   }
 
   // Migration: ensure shared defaults layer exists.
+  // Prefer the parent movement as the authoritative source for shared values.
+  const movementShared = movement ? {
+    depAd:      movement.depAd || "",
+    arrAd:      movement.arrAd || "",
+    flightType: movement.flightType || "",
+    tngCount:   Number.isFinite(Number(movement.tngCount)) ? Number(movement.tngCount) : 0,
+    osCount:    Number.isFinite(Number(movement.osCount)) ? Number(movement.osCount) : 0,
+    fisCount:   Number.isFinite(Number(movement.fisCount)) ? Number(movement.fisCount) : 0
+  } : null;
+
   if (!formation.shared || typeof formation.shared !== "object") {
     const firstEl = formation.elements[0] || {};
     formation.shared = {
-      depAd:      firstEl.depAd      || "",
-      arrAd:      firstEl.arrAd      || "",
-      flightType: "",
-      tngCount:   0,
-      osCount:    0,
-      fisCount:   0
+      depAd:      movementShared?.depAd      || firstEl.depAd || "",
+      arrAd:      movementShared?.arrAd      || firstEl.arrAd || "",
+      flightType: movementShared?.flightType || "",
+      tngCount:   movementShared?.tngCount   ?? 0,
+      osCount:    movementShared?.osCount    ?? 0,
+      fisCount:   movementShared?.fisCount   ?? 0
     };
   } else {
-    // Forward-compat: fill any missing shared fields.
-    formation.shared.depAd      = formation.shared.depAd      ?? "";
-    formation.shared.arrAd      = formation.shared.arrAd      ?? "";
-    formation.shared.flightType = formation.shared.flightType ?? "";
-    formation.shared.tngCount   = formation.shared.tngCount   ?? 0;
-    formation.shared.osCount    = formation.shared.osCount    ?? 0;
-    formation.shared.fisCount   = formation.shared.fisCount   ?? 0;
+    // Forward-compat: fill any missing shared fields, again preferring movement values.
+    formation.shared.depAd      = formation.shared.depAd      ?? movementShared?.depAd      ?? "";
+    formation.shared.arrAd      = formation.shared.arrAd      ?? movementShared?.arrAd      ?? "";
+    formation.shared.flightType = formation.shared.flightType ?? movementShared?.flightType ?? "";
+    formation.shared.tngCount   = formation.shared.tngCount   ?? movementShared?.tngCount   ?? 0;
+    formation.shared.osCount    = formation.shared.osCount    ?? movementShared?.osCount    ?? 0;
+    formation.shared.fisCount   = formation.shared.fisCount   ?? movementShared?.fisCount   ?? 0;
   }
 
   // Ensure each element has required fields; add ordinal and overrides.
   formation.elements = formation.elements.map((el, idx) => {
-    const normalized = {
+    const depAd = el.depAd || formation.shared.depAd || "";
+    const arrAd = el.arrAd || formation.shared.arrAd || "";
+
+    const overrides = { ...(el.overrides || {}) };
+    if (depAd && depAd !== formation.shared.depAd) overrides.depAd = depAd;
+    if (arrAd && arrAd !== formation.shared.arrAd) overrides.arrAd = arrAd;
+
+    return {
       ordinal:    el.ordinal    || idx + 1,
       callsign:   el.callsign   || `ELEMENT ${idx + 1}`,
       reg:        el.reg        || "",
       type:       el.type       || "",
       wtc:        el.wtc        || "",
       status:     el.status     || "PLANNED",
-      depAd:      el.depAd      || "",
-      arrAd:      el.arrAd      || "",
+      depAd,
+      arrAd,
       depActual:  el.depActual  || "",
       arrActual:  el.arrActual  || "",
-      overrides:  el.overrides  || {}
+      overrides
     };
-    return normalized;
   });
 
   // Recompute derived WTC fields
   const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements);
-  formation.label      = formation.label || `Formation of ${formation.elements.length}`;
   formation.wtcCurrent = wtcCurrent;
-  formation.wtcMax     = wtcMax;
+  formation.wtcMax = wtcMax;
+
   return formation;
 }
 
