@@ -3913,11 +3913,19 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     newFormationVisibleCount = newCount;
   });
 
-  callsignCodeInput?.addEventListener("input", () => {
+    const refreshNewFormationCallsigns = () => {
     if (!newFormationCheckbox?.checked) return;
     snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
-    buildFormationElementRows(newFormationVisibleCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
-  });
+    buildFormationElementRows(
+      newFormationVisibleCount,
+      getNewFlightCallsign(),
+      "newFormationElementsContainer",
+      newFormationDraft
+    );
+  };
+
+  callsignCodeInput?.addEventListener("input", refreshNewFormationCallsigns);
+  flightNumberInput?.addEventListener("input", refreshNewFormationCallsigns);
 
   // Auto-fill Remarks and Warnings from registration data (FDMS_REGISTRATIONS.csv col 15 & 16)
   const remarksInput = document.getElementById('rwRemarks');
@@ -4878,11 +4886,19 @@ function openNewLocFlightModal() {
     newLocFormationVisibleCount = newCount;
   });
 
-  callsignCodeInput?.addEventListener("input", () => {
+    const refreshNewLocFormationCallsigns = () => {
     if (!newLocFormationCheckbox?.checked) return;
     snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
-    buildFormationElementRows(newLocFormationVisibleCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
-  });
+    buildFormationElementRows(
+      newLocFormationVisibleCount,
+      getLocCallsign(),
+      "newLocFormationElementsContainer",
+      newLocFormationDraft
+    );
+  };
+
+  callsignCodeInput?.addEventListener("input", refreshNewLocFormationCallsigns);
+  flightNumberInput?.addEventListener("input", refreshNewLocFormationCallsigns);
 
   // Wire collapsible section expanders
   document.querySelectorAll('.modal-expander').forEach(btn => {
@@ -5727,11 +5743,19 @@ function openEditMovementModal(m) {
     editFormationVisibleCount = newCount;
   });
 
-  callsignCodeInput?.addEventListener("input", () => {
+    const refreshEditFormationCallsigns = () => {
     if (!editFormationCheckbox?.checked) return;
     snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
-    buildFormationElementRows(editFormationVisibleCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
-  });
+    buildFormationElementRows(
+      editFormationVisibleCount,
+      getEditCallsign(),
+      "editFormationElementsContainer",
+      editFormationDraft
+    );
+  };
+
+  callsignCodeInput?.addEventListener("input", refreshEditFormationCallsigns);
+  flightNumberInput?.addEventListener("input", refreshEditFormationCallsigns);;
 
   // Auto-fill Remarks and Warnings from registration data
   const editRemarksInput = document.getElementById('editRwRemarks');
