@@ -1611,7 +1611,7 @@ function fmnIsDefaultCallsign(callsign, base, ordinal) {
          callsign === (base ? `${base} ${ordinal}` : `ELEMENT ${ordinal}`);
 }
 
-function buildFormationElementRows(count, baseCallsign, containerId, existingElements) {
+function buildFormationElementRows(count, baseCallsign, containerId, existingElements, enrichOpts = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
   // Formation requires >= 2 elements; clamp to [2, 12]
@@ -1653,6 +1653,99 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
   container.querySelectorAll("[data-el-wtc], [data-el-dep-ad], [data-el-arr-ad]").forEach(inp => {
     inp.addEventListener("input", () => { inp.value = inp.value.toUpperCase(); });
   });
+
+  // Wire lookup-based enrichment if a flight-type context was supplied
+  if (enrichOpts) {
+    wireFormationElementEnrichment(container, clamped, enrichOpts);
+  }
+}
+
+/**
+ * Wire lookup-based autofill to each element row inside a formation table.
+ * Mirrors the enrichment already used in the normal modal (reg → type, type → WTC,
+ * callsign → fixed-CS registration) so formation rows behave like ordinary strips.
+ * Non-destructive: only fills fields that are currently empty.
+ * @param {HTMLElement} container  - The rendered element-rows container
+ * @param {number}      count      - Number of rows to wire (already clamped)
+ * @param {object}      opts       - { flightType: string }
+ */
+function wireFormationElementEnrichment(container, count, opts) {
+  if (!container) return;
+  const flightType = opts?.flightType || 'DEP';
+
+  for (let i = 0; i < count; i++) {
+    const callsignInput = container.querySelector(`[data-el-callsign="${i}"]`);
+    const regInput      = container.querySelector(`[data-el-reg="${i}"]`);
+    const typeInput     = container.querySelector(`[data-el-type="${i}"]`);
+    const wtcInput      = container.querySelector(`[data-el-wtc="${i}"]`);
+    if (!callsignInput) continue;
+
+    // Compute WTC from the element's type; only writes if WTC field is still empty
+    const autofillElWtc = () => {
+      if (!typeInput || !wtcInput || wtcInput.value.trim()) return;
+      const type = typeInput.value.trim();
+      if (!type) return;
+      const sys = (getConfig().wtcSystem || 'ICAO');
+      const raw = getWTC(type, flightType, sys) || '';
+      const m = raw.trim().toUpperCase().match(/^[A-Z]+/);
+      const ch = m ? m[0] : '';
+      if (ch) wtcInput.value = ch;
+    };
+
+    // Enrich element row from its registration (type autofill, then WTC)
+    const applyElRegEnrichment = () => {
+      if (!regInput || !typeInput) return;
+      const reg = regInput.value.trim();
+      if (!reg) return;
+      const regData = lookupRegistration(reg);
+      if (regData) {
+        const vkbType = regData['TYPE'];
+        if (vkbType && vkbType !== '-' && vkbType !== '' && !typeInput.value.trim()) {
+          typeInput.value = vkbType;
+        }
+      } else if (!typeInput.value.trim()) {
+        const inferred = inferTypeFromReg(reg);
+        if (inferred) typeInput.value = inferred;
+      }
+      autofillElWtc();
+    };
+
+    // Enrich element row from its callsign via fixed-callsign → registration → type → WTC
+    const applyElCallsignEnrichment = () => {
+      if (!callsignInput || !regInput || regInput.value.trim()) return;
+      const cs = callsignInput.value.trim();
+      if (!cs) return;
+      const regData = lookupRegistrationByFixedCallsign(cs);
+      if (regData) {
+        const registration = regData['REGISTRATION'] || '';
+        if (registration && registration !== '-') {
+          regInput.value = normalizeEuCivilRegistration(registration);
+          applyElRegEnrichment();
+        }
+      }
+    };
+
+    // type → WTC
+    typeInput?.addEventListener('input',  autofillElWtc);
+    typeInput?.addEventListener('change', autofillElWtc);
+
+    // reg → type + WTC
+    regInput?.addEventListener('input',  applyElRegEnrichment);
+    regInput?.addEventListener('change', applyElRegEnrichment);
+    regInput?.addEventListener('blur',   applyElRegEnrichment);
+
+    // callsign → reg → type + WTC (for fixed callsigns)
+    callsignInput?.addEventListener('change', applyElCallsignEnrichment);
+    callsignInput?.addEventListener('blur',   applyElCallsignEnrichment);
+
+    // Apply enrichment immediately for any values already present in the row
+    // (e.g. when rebuilding from draft that has reg/type but not WTC)
+    if (regInput?.value?.trim()) {
+      applyElRegEnrichment();
+    } else {
+      applyElCallsignEnrichment();
+    }
+  }
 }
 
 /**
@@ -1774,14 +1867,14 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
  * @param {function} getCallsign   - Returns current base callsign string
  * @param {Array}  existingElements - Existing elements (for pre-population)
  */
-function wireFormationCountInput(countInputId, containerId, getCallsign, existingElements) {
+function wireFormationCountInput(countInputId, containerId, getCallsign, existingElements, enrichOpts = null) {
   const countInput = document.getElementById(countInputId);
   if (!countInput) return;
   countInput.addEventListener("input", () => {
     let count = parseInt(countInput.value || "0", 10);
     // Clamp to [2, 12]; values < 2 clear rows (no formation)
     count = Math.min(Math.max(count, 0), 12);
-    buildFormationElementRows(count, getCallsign(), containerId, existingElements);
+    buildFormationElementRows(count, getCallsign(), containerId, existingElements, enrichOpts);
   });
 }
 
@@ -3951,11 +4044,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const countInput = document.getElementById("newFormationCount");
         countInput.value = "2";
         newFormationVisibleCount = 2;
-        buildFormationElementRows(2, base, "newFormationElementsContainer", newFormationDraft);
+        buildFormationElementRows(2, base, "newFormationElementsContainer", newFormationDraft, { flightType });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newFormationCount")?.value || "2", 10), 2), 12);
         newFormationVisibleCount = count;
-        buildFormationElementRows(count, base, "newFormationElementsContainer", newFormationDraft);
+        buildFormationElementRows(count, base, "newFormationElementsContainer", newFormationDraft, { flightType });
       }
     }
   });
@@ -3965,7 +4058,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const countInput = document.getElementById("newFormationCount");
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
-    buildFormationElementRows(newCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+    buildFormationElementRows(newCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft, { flightType });
     newFormationVisibleCount = newCount;
   });
 
@@ -3980,7 +4073,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         slot.callsign = fmnElementCallsign(newBase, i + 1);
       }
     }
-    buildFormationElementRows(newFormationVisibleCount, newBase, "newFormationElementsContainer", newFormationDraft);
+    buildFormationElementRows(newFormationVisibleCount, newBase, "newFormationElementsContainer", newFormationDraft, { flightType });
     newFormationLastBase = newBase;
   };
 
@@ -4939,11 +5032,11 @@ function openNewLocFlightModal() {
         const countInput = document.getElementById("newLocFormationCount");
         countInput.value = "2";
         newLocFormationVisibleCount = 2;
-        buildFormationElementRows(2, base, "newLocFormationElementsContainer", newLocFormationDraft);
+        buildFormationElementRows(2, base, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10), 2), 12);
         newLocFormationVisibleCount = count;
-        buildFormationElementRows(count, base, "newLocFormationElementsContainer", newLocFormationDraft);
+        buildFormationElementRows(count, base, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
       }
     }
   });
@@ -4953,7 +5046,7 @@ function openNewLocFlightModal() {
     const countInput = document.getElementById("newLocFormationCount");
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
-    buildFormationElementRows(newCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+    buildFormationElementRows(newCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
     newLocFormationVisibleCount = newCount;
   });
 
@@ -4968,7 +5061,7 @@ function openNewLocFlightModal() {
         slot.callsign = fmnElementCallsign(newBase, i + 1);
       }
     }
-    buildFormationElementRows(newLocFormationVisibleCount, newBase, "newLocFormationElementsContainer", newLocFormationDraft);
+    buildFormationElementRows(newLocFormationVisibleCount, newBase, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
     newLocFormationLastBase = newBase;
   };
 
@@ -5800,7 +5893,7 @@ function openEditMovementModal(m) {
 
   // Render rows immediately when editing a movement that already has a formation
   if (m.formation) {
-    buildFormationElementRows(initialEditCount, editFormationLastBase, "editFormationElementsContainer", editFormationDraft);
+    buildFormationElementRows(initialEditCount, editFormationLastBase, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
   }
 
   const editFormationCheckbox = document.getElementById("editFormationEnabled");
@@ -5819,11 +5912,11 @@ function openEditMovementModal(m) {
         const countInput = document.getElementById("editFormationCount");
         countInput.value = "2";
         editFormationVisibleCount = 2;
-        buildFormationElementRows(2, base, "editFormationElementsContainer", editFormationDraft);
+        buildFormationElementRows(2, base, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("editFormationCount")?.value || "2", 10), 2), 12);
         editFormationVisibleCount = count;
-        buildFormationElementRows(count, base, "editFormationElementsContainer", editFormationDraft);
+        buildFormationElementRows(count, base, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
       }
     }
   });
@@ -5833,7 +5926,7 @@ function openEditMovementModal(m) {
     const countInput = document.getElementById("editFormationCount");
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
-    buildFormationElementRows(newCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+    buildFormationElementRows(newCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
     editFormationVisibleCount = newCount;
   });
 
@@ -5848,7 +5941,7 @@ function openEditMovementModal(m) {
         slot.callsign = fmnElementCallsign(newBase, i + 1);
       }
     }
-    buildFormationElementRows(editFormationVisibleCount, newBase, "editFormationElementsContainer", editFormationDraft);
+    buildFormationElementRows(editFormationVisibleCount, newBase, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
     editFormationLastBase = newBase;
   };
 
