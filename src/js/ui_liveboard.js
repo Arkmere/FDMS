@@ -1587,6 +1587,30 @@ function matchesFilters(m) {
  * @param {string} containerId     - ID of the container div
  * @param {Array}  existingElements - Pre-populate from existing formation
  */
+/** Render the no-space formation element callsign for a base and 1-based ordinal. */
+function fmnElementCallsign(base, ordinal) {
+  return base ? `${base}${ordinal}` : `ELEMENT ${ordinal}`;
+}
+
+/**
+ * Infer the base/master from a numbered element callsign, e.g. "MERSY3" → "MERSY".
+ * Returns the input unchanged if no trailing digits are found.
+ */
+function fmnInferBase(callsign) {
+  return (callsign || "").replace(/\d+$/, "").trim();
+}
+
+/**
+ * Return true if callsign appears to be auto-generated (not manually edited).
+ * Accepts both the current no-space format (BASE1) and legacy spaced format (BASE 1)
+ * so that existing saved formations are handled correctly.
+ */
+function fmnIsDefaultCallsign(callsign, base, ordinal) {
+  if (!callsign) return true;
+  return callsign === fmnElementCallsign(base, ordinal) ||
+         callsign === (base ? `${base} ${ordinal}` : `ELEMENT ${ordinal}`);
+}
+
 function buildFormationElementRows(count, baseCallsign, containerId, existingElements) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -1595,6 +1619,8 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
   if (clamped < 2) { container.innerHTML = ""; return; }
 
   const existing = Array.isArray(existingElements) ? existingElements : [];
+  // When no base is provided, infer one from the first existing element (element-first workflow)
+  const effectiveBase = baseCallsign || (existing[0]?.callsign ? fmnInferBase(existing[0].callsign) : "");
   let html = `<div class="formation-table-wrap"><table class="formation-table" style="margin-top:6px;">
     <thead>
       <tr>
@@ -1610,7 +1636,7 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
 
   for (let i = 0; i < clamped; i++) {
     const el = existing[i] || {};
-    const defaultCallsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
+    const defaultCallsign = fmnElementCallsign(effectiveBase, i + 1);
     html += `<tr>
       <td><input class="fmn-el-input" data-el-callsign="${i}" value="${escapeHtml(el.callsign || defaultCallsign)}" placeholder="Callsign" style="width:90px;" /></td>
       <td><input class="fmn-el-input" data-el-reg="${i}"      value="${escapeHtml(el.reg      || "")}" placeholder="Reg" /></td>
@@ -1675,7 +1701,7 @@ function readFormationFromModal(baseCallsign, countInputId, containerId) {
 
   const elements = [];
   for (let i = 0; i < count; i++) {
-    const defaultCallsign = baseCallsign ? `${baseCallsign} ${i + 1}` : `ELEMENT ${i + 1}`;
+    const defaultCallsign = fmnElementCallsign(baseCallsign, i + 1);
     const callsign = container?.querySelector(`[data-el-callsign="${i}"]`)?.value?.trim() || defaultCallsign;
     const reg    = container?.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()   || "";
     const type   = container?.querySelector(`[data-el-type="${i}"]`)?.value?.trim()  || "";
@@ -3880,6 +3906,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   // Per-session draft: sparse array keyed by element ordinal (0–11)
   const newFormationDraft = [];
   let newFormationVisibleCount = 2;
+  let newFormationLastBase = getNewFlightCallsign();
 
   const newFormationCheckbox = document.getElementById("newFormationEnabled");
   const newFormationBody = document.getElementById("newFormationBody");
@@ -3890,16 +3917,18 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       newFormationBody.hidden = true;
     } else {
       newFormationBody.hidden = false;
+      const base = getNewFlightCallsign();
+      newFormationLastBase = base;
       const hasDraft = newFormationDraft.some(s => s !== undefined);
       if (!hasDraft) {
         const countInput = document.getElementById("newFormationCount");
         countInput.value = "2";
         newFormationVisibleCount = 2;
-        buildFormationElementRows(2, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+        buildFormationElementRows(2, base, "newFormationElementsContainer", newFormationDraft);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newFormationCount")?.value || "2", 10), 2), 12);
         newFormationVisibleCount = count;
-        buildFormationElementRows(count, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft);
+        buildFormationElementRows(count, base, "newFormationElementsContainer", newFormationDraft);
       }
     }
   });
@@ -3915,13 +3944,17 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
     const refreshNewFormationCallsigns = () => {
     if (!newFormationCheckbox?.checked) return;
+    const oldBase = newFormationLastBase;
+    const newBase = getNewFlightCallsign();
     snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
-    buildFormationElementRows(
-      newFormationVisibleCount,
-      getNewFlightCallsign(),
-      "newFormationElementsContainer",
-      newFormationDraft
-    );
+    for (let i = 0; i < newFormationDraft.length; i++) {
+      const slot = newFormationDraft[i];
+      if (slot && fmnIsDefaultCallsign(slot.callsign, oldBase, i + 1)) {
+        slot.callsign = fmnElementCallsign(newBase, i + 1);
+      }
+    }
+    buildFormationElementRows(newFormationVisibleCount, newBase, "newFormationElementsContainer", newFormationDraft);
+    newFormationLastBase = newBase;
   };
 
   callsignCodeInput?.addEventListener("input", refreshNewFormationCallsigns);
@@ -4853,6 +4886,7 @@ function openNewLocFlightModal() {
 
   const newLocFormationDraft = [];
   let newLocFormationVisibleCount = 2;
+  let newLocFormationLastBase = getLocCallsign();
 
   const newLocFormationCheckbox = document.getElementById("newLocFormationEnabled");
   const newLocFormationBody = document.getElementById("newLocFormationBody");
@@ -4863,16 +4897,18 @@ function openNewLocFlightModal() {
       newLocFormationBody.hidden = true;
     } else {
       newLocFormationBody.hidden = false;
+      const base = getLocCallsign();
+      newLocFormationLastBase = base;
       const hasDraft = newLocFormationDraft.some(s => s !== undefined);
       if (!hasDraft) {
         const countInput = document.getElementById("newLocFormationCount");
         countInput.value = "2";
         newLocFormationVisibleCount = 2;
-        buildFormationElementRows(2, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+        buildFormationElementRows(2, base, "newLocFormationElementsContainer", newLocFormationDraft);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10), 2), 12);
         newLocFormationVisibleCount = count;
-        buildFormationElementRows(count, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft);
+        buildFormationElementRows(count, base, "newLocFormationElementsContainer", newLocFormationDraft);
       }
     }
   });
@@ -4888,13 +4924,17 @@ function openNewLocFlightModal() {
 
     const refreshNewLocFormationCallsigns = () => {
     if (!newLocFormationCheckbox?.checked) return;
+    const oldBase = newLocFormationLastBase;
+    const newBase = getLocCallsign();
     snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
-    buildFormationElementRows(
-      newLocFormationVisibleCount,
-      getLocCallsign(),
-      "newLocFormationElementsContainer",
-      newLocFormationDraft
-    );
+    for (let i = 0; i < newLocFormationDraft.length; i++) {
+      const slot = newLocFormationDraft[i];
+      if (slot && fmnIsDefaultCallsign(slot.callsign, oldBase, i + 1)) {
+        slot.callsign = fmnElementCallsign(newBase, i + 1);
+      }
+    }
+    buildFormationElementRows(newLocFormationVisibleCount, newBase, "newLocFormationElementsContainer", newLocFormationDraft);
+    newLocFormationLastBase = newBase;
   };
 
   callsignCodeInput?.addEventListener("input", refreshNewLocFormationCallsigns);
@@ -5705,10 +5745,11 @@ function openEditMovementModal(m) {
   // Seed draft from existing formation elements so toggle off/on is non-destructive from the start
   const editFormationDraft = existingElements.map(el => ({ ...el }));
   let editFormationVisibleCount = initialEditCount;
+  let editFormationLastBase = getEditCallsign();
 
   // Render rows immediately when editing a movement that already has a formation
   if (m.formation) {
-    buildFormationElementRows(initialEditCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+    buildFormationElementRows(initialEditCount, editFormationLastBase, "editFormationElementsContainer", editFormationDraft);
   }
 
   const editFormationCheckbox = document.getElementById("editFormationEnabled");
@@ -5720,16 +5761,18 @@ function openEditMovementModal(m) {
       editFormationBody.hidden = true;
     } else {
       editFormationBody.hidden = false;
+      const base = getEditCallsign();
+      editFormationLastBase = base;
       const hasDraft = editFormationDraft.some(s => s !== undefined);
       if (!hasDraft) {
         const countInput = document.getElementById("editFormationCount");
         countInput.value = "2";
         editFormationVisibleCount = 2;
-        buildFormationElementRows(2, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+        buildFormationElementRows(2, base, "editFormationElementsContainer", editFormationDraft);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("editFormationCount")?.value || "2", 10), 2), 12);
         editFormationVisibleCount = count;
-        buildFormationElementRows(count, getEditCallsign(), "editFormationElementsContainer", editFormationDraft);
+        buildFormationElementRows(count, base, "editFormationElementsContainer", editFormationDraft);
       }
     }
   });
@@ -5745,17 +5788,21 @@ function openEditMovementModal(m) {
 
     const refreshEditFormationCallsigns = () => {
     if (!editFormationCheckbox?.checked) return;
+    const oldBase = editFormationLastBase;
+    const newBase = getEditCallsign();
     snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
-    buildFormationElementRows(
-      editFormationVisibleCount,
-      getEditCallsign(),
-      "editFormationElementsContainer",
-      editFormationDraft
-    );
+    for (let i = 0; i < editFormationDraft.length; i++) {
+      const slot = editFormationDraft[i];
+      if (slot && fmnIsDefaultCallsign(slot.callsign, oldBase, i + 1)) {
+        slot.callsign = fmnElementCallsign(newBase, i + 1);
+      }
+    }
+    buildFormationElementRows(editFormationVisibleCount, newBase, "editFormationElementsContainer", editFormationDraft);
+    editFormationLastBase = newBase;
   };
 
   callsignCodeInput?.addEventListener("input", refreshEditFormationCallsigns);
-  flightNumberInput?.addEventListener("input", refreshEditFormationCallsigns);;
+  flightNumberInput?.addEventListener("input", refreshEditFormationCallsigns);
 
   // Auto-fill Remarks and Warnings from registration data
   const editRemarksInput = document.getElementById('editRwRemarks');
