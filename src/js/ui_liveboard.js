@@ -1774,6 +1774,40 @@ function snapshotFormationDraft(draft, containerId, count) {
 }
 
 /**
+ * Seed element 1 from master-strip values into a fresh formation draft.
+ * Only called when hasDraft is false — master-first workflow where the operator
+ * filled the master strip before enabling formation mode.
+ *
+ * - Element 0 (ordinal 1): master reg/type/wtc + shared depAd/arrAd
+ * - Elements 1..count-1: generated callsigns + shared depAd/arrAd; aircraft-specific blank
+ *
+ * Does NOT overwrite slots that are already populated (guards against accidental
+ * double-call, though callers are responsible for the hasDraft check).
+ *
+ * @param {Array}  draft  - Mutable draft array (empty on entry)
+ * @param {number} count  - Number of elements to seed (>= 2)
+ * @param {string} base   - Base callsign (e.g. "MERSY")
+ * @param {object} seed   - { reg, type, wtc, depAd, arrAd } from master strip
+ */
+function seedFormationDraftFromMaster(draft, count, base, seed) {
+  const reg   = seed.reg   || "";
+  const type  = seed.type  || "";
+  const wtc   = seed.wtc   || "";
+  const depAd = seed.depAd || "";
+  const arrAd = seed.arrAd || "";
+  // Element 1: master aircraft data + shared route
+  if (draft[0] === undefined) {
+    draft[0] = { callsign: fmnElementCallsign(base, 1), reg, type, wtc, depAd, arrAd };
+  }
+  // Elements 2..N: shared route only; aircraft-specific fields blank
+  for (let i = 1; i < count; i++) {
+    if (draft[i] === undefined) {
+      draft[i] = { callsign: fmnElementCallsign(base, i + 1), reg: "", type: "", wtc: "", depAd, arrAd };
+    }
+  }
+}
+
+/**
  * Read formation data from a modal's formation inputs.
  * Returns null if count < 2 or no rows rendered (no formation).
  * Returns { _error, message } if a validation error is found.
@@ -4044,6 +4078,13 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const countInput = document.getElementById("newFormationCount");
         countInput.value = "2";
         newFormationVisibleCount = 2;
+        seedFormationDraftFromMaster(newFormationDraft, 2, base, {
+          reg:   document.getElementById("newReg")?.value?.trim()                       || "",
+          type:  document.getElementById("newType")?.value?.trim()                      || "",
+          wtc:   document.getElementById("newWtc")?.value?.trim().toUpperCase()         || "",
+          depAd: document.getElementById("newDepAd")?.value?.trim().toUpperCase()       || "",
+          arrAd: document.getElementById("newArrAd")?.value?.trim().toUpperCase()       || "",
+        });
         buildFormationElementRows(2, base, "newFormationElementsContainer", newFormationDraft, { flightType });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newFormationCount")?.value || "2", 10), 2), 12);
@@ -5032,6 +5073,13 @@ function openNewLocFlightModal() {
         const countInput = document.getElementById("newLocFormationCount");
         countInput.value = "2";
         newLocFormationVisibleCount = 2;
+        seedFormationDraftFromMaster(newLocFormationDraft, 2, base, {
+          reg:   document.getElementById("newLocReg")?.value?.trim()                    || "",
+          type:  document.getElementById("newLocType")?.value?.trim()                   || "",
+          wtc:   document.getElementById("newLocWtc")?.value?.trim().toUpperCase()      || "",
+          depAd: "EGOW",
+          arrAd: "EGOW",
+        });
         buildFormationElementRows(2, base, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10), 2), 12);
@@ -5912,6 +5960,13 @@ function openEditMovementModal(m) {
         const countInput = document.getElementById("editFormationCount");
         countInput.value = "2";
         editFormationVisibleCount = 2;
+        seedFormationDraftFromMaster(editFormationDraft, 2, base, {
+          reg:   document.getElementById("editReg")?.value?.trim()                          || "",
+          type:  document.getElementById("editType")?.value?.trim()                         || "",
+          wtc:   document.getElementById("editWtcDisplay")?.value?.trim().toUpperCase()     || "",
+          depAd: document.getElementById("editDepAd")?.value?.trim().toUpperCase()          || "",
+          arrAd: document.getElementById("editArrAd")?.value?.trim().toUpperCase()          || "",
+        });
         buildFormationElementRows(2, base, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("editFormationCount")?.value || "2", 10), 2), 12);
