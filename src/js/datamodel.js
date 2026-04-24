@@ -176,36 +176,57 @@ const demoMovementsSeed = [
     pob: 7,
     remarks: "Formation departure to Shawbury, one a/c to remain O/S",
     formation: {
+      baseCallsign: "CNNCT",
+      shared: {
+        depAd:      "EGOW",
+        arrAd:      "EGOS",
+        flightType: "DEP",
+        tngCount:   0,
+        osCount:    0,
+        fisCount:   0
+      },
       label: "CNNCT flight of 3",
       wtcCurrent: "M",
       wtcMax: "M",
       elements: [
         {
-          callsign: "CNNCT 1",
-          reg: "ZZ400",
-          type: "EH10",
-          wtc: "M",
-          status: "ACTIVE",
+          ordinal:   1,
+          callsign:  "CNNCT 1",
+          reg:       "ZZ400",
+          type:      "EH10",
+          wtc:       "M",
+          status:    "ACTIVE",
+          depAd:     "EGOW",
+          arrAd:     "EGOS",
           depActual: "13:15",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         },
         {
-          callsign: "CNNCT 2",
-          reg: "ZZ401",
-          type: "LYNX",
-          wtc: "L",
-          status: "ACTIVE",
+          ordinal:   2,
+          callsign:  "CNNCT 2",
+          reg:       "ZZ401",
+          type:      "LYNX",
+          wtc:       "L",
+          status:    "ACTIVE",
+          depAd:     "EGOW",
+          arrAd:     "EGOS",
           depActual: "13:15",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         },
         {
-          callsign: "CNNCT 3",
-          reg: "ZZ402",
-          type: "LYNX",
-          wtc: "L",
-          status: "PLANNED",
+          ordinal:   3,
+          callsign:  "CNNCT 3",
+          reg:       "ZZ402",
+          type:      "LYNX",
+          wtc:       "L",
+          status:    "PLANNED",
+          depAd:     "EGOW",
+          arrAd:     "EGOS",
           depActual: "",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         }
       ]
     }
@@ -275,36 +296,57 @@ const demoMovementsSeed = [
     pob: 6,
     remarks: "Three-ship display detail",
     formation: {
+      baseCallsign: "MEMORIAL",
+      shared: {
+        depAd:      "EGOW",
+        arrAd:      "EGOW",
+        flightType: "LOC",
+        tngCount:   0,
+        osCount:    0,
+        fisCount:   0
+      },
       label: "MEMORIAL flight of 3",
       wtcCurrent: "M",
       wtcMax: "M",
       elements: [
         {
-          callsign: "MEMORIAL 1",
-          reg: "AB910",
-          type: "SPIT",
-          wtc: "L",
-          status: "ACTIVE",
+          ordinal:   1,
+          callsign:  "MEMORIAL 1",
+          reg:       "AB910",
+          type:      "SPIT",
+          wtc:       "L",
+          status:    "ACTIVE",
+          depAd:     "EGOW",
+          arrAd:     "EGOW",
           depActual: "15:05",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         },
         {
-          callsign: "MEMORIAL 2",
-          reg: "LF363",
-          type: "HURI",
-          wtc: "L",
-          status: "ACTIVE",
+          ordinal:   2,
+          callsign:  "MEMORIAL 2",
+          reg:       "LF363",
+          type:      "HURI",
+          wtc:       "L",
+          status:    "ACTIVE",
+          depAd:     "EGOW",
+          arrAd:     "EGOW",
           depActual: "15:05",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         },
         {
-          callsign: "MEMORIAL 3",
-          reg: "PA474",
-          type: "LANC",
-          wtc: "M",
-          status: "ACTIVE",
+          ordinal:   3,
+          callsign:  "MEMORIAL 3",
+          reg:       "PA474",
+          type:      "LANC",
+          wtc:       "M",
+          status:    "ACTIVE",
+          depAd:     "EGOW",
+          arrAd:     "EGOW",
           depActual: "15:05",
-          arrActual: ""
+          arrActual: "",
+          overrides: {}
         }
       ]
     }
@@ -1175,18 +1217,56 @@ function normalizeFormation(formation) {
   if (!formation || typeof formation !== "object") return null;
   if (!Array.isArray(formation.elements)) formation.elements = [];
 
-  // Ensure each element has required fields (backward-compat: add missing fields)
-  formation.elements = formation.elements.map((el, idx) => ({
-    callsign:   el.callsign  || `ELEMENT ${idx + 1}`,
-    reg:        el.reg       || "",
-    type:       el.type      || "",
-    wtc:        el.wtc       || "",
-    status:     el.status    || "PLANNED",
-    depAd:      el.depAd     || "",
-    arrAd:      el.arrAd     || "",
-    depActual:  el.depActual || "",
-    arrActual:  el.arrActual || ""
-  }));
+  // Migration: ensure baseCallsign exists (infer from label or first element).
+  if (!formation.baseCallsign) {
+    const labelMatch = (formation.label || "").match(/^(\S+)\s+flight of/i);
+    if (labelMatch) {
+      formation.baseCallsign = labelMatch[1];
+    } else if (formation.elements.length > 0 && formation.elements[0].callsign) {
+      formation.baseCallsign = formation.elements[0].callsign.replace(/\s*\d+$/, "").trim();
+    } else {
+      formation.baseCallsign = "";
+    }
+  }
+
+  // Migration: ensure shared defaults layer exists.
+  if (!formation.shared || typeof formation.shared !== "object") {
+    const firstEl = formation.elements[0] || {};
+    formation.shared = {
+      depAd:      firstEl.depAd      || "",
+      arrAd:      firstEl.arrAd      || "",
+      flightType: "",
+      tngCount:   0,
+      osCount:    0,
+      fisCount:   0
+    };
+  } else {
+    // Forward-compat: fill any missing shared fields.
+    formation.shared.depAd      = formation.shared.depAd      ?? "";
+    formation.shared.arrAd      = formation.shared.arrAd      ?? "";
+    formation.shared.flightType = formation.shared.flightType ?? "";
+    formation.shared.tngCount   = formation.shared.tngCount   ?? 0;
+    formation.shared.osCount    = formation.shared.osCount    ?? 0;
+    formation.shared.fisCount   = formation.shared.fisCount   ?? 0;
+  }
+
+  // Ensure each element has required fields; add ordinal and overrides.
+  formation.elements = formation.elements.map((el, idx) => {
+    const normalized = {
+      ordinal:    el.ordinal    || idx + 1,
+      callsign:   el.callsign   || `ELEMENT ${idx + 1}`,
+      reg:        el.reg        || "",
+      type:       el.type       || "",
+      wtc:        el.wtc        || "",
+      status:     el.status     || "PLANNED",
+      depAd:      el.depAd      || "",
+      arrAd:      el.arrAd      || "",
+      depActual:  el.depActual  || "",
+      arrActual:  el.arrActual  || "",
+      overrides:  el.overrides  || {}
+    };
+    return normalized;
+  });
 
   // Recompute derived WTC fields
   const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements);
