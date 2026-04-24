@@ -1808,6 +1808,71 @@ function seedFormationDraftFromMaster(draft, count, base, seed) {
 }
 
 /**
+ * FR-08: Element-first master synthesis.
+ * Inspect visible formation element rows and fill any blank master-strip fields.
+ * Non-destructive — never overwrites a field that already has a non-empty value.
+ *
+ * Aircraft-specific seed (reg, type) comes exclusively from element 1.
+ * Route seed (depAd, arrAd) is only applied when ALL visible rows agree on the
+ * same non-empty value; any disagreement leaves the master field unchanged.
+ * Base callsign is inferred from element 1's callsign via fmnInferBase() (FR-04 helper).
+ *
+ * @param {string} containerId - ID of the element rows container
+ * @param {number} count       - Number of currently visible rows
+ * @param {object} masterIds   - Master-strip input IDs; null entries are skipped
+ *   { callsignCodeId, flightNumberId, regId, typeId, depAdId, arrAdId }
+ */
+function fmnSynthesizeMasterFromElements(containerId, count, masterIds) {
+  const container = document.getElementById(containerId);
+  if (!container || count < 1 || !masterIds) return;
+
+  // Base callsign: infer from element 1 via fmnInferBase() (FR-04 helper)
+  const el0Callsign = container.querySelector('[data-el-callsign="0"]')?.value?.trim() || "";
+  const inferredBase = el0Callsign ? fmnInferBase(el0Callsign) : "";
+
+  // Aircraft-specific: element 1 is the sole authoritative source
+  const el0Reg  = container.querySelector('[data-el-reg="0"]')?.value?.trim()  || "";
+  const el0Type = container.querySelector('[data-el-type="0"]')?.value?.trim() || "";
+
+  // Route: common value only when ALL visible rows agree on the same non-empty value
+  let commonDepAd = null;
+  let commonArrAd = null;
+  let depAdAgreed = true;
+  let arrAdAgreed = true;
+  for (let i = 0; i < count; i++) {
+    const dep = container.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
+    const arr = container.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "";
+    if (i === 0) { commonDepAd = dep; commonArrAd = arr; }
+    else { if (dep !== commonDepAd) depAdAgreed = false; if (arr !== commonArrAd) arrAdAgreed = false; }
+  }
+
+  // Fill blank master fields — never overwrites an already-populated field
+  const fillIfBlank = (inputId, value) => {
+    if (!inputId || !value) return;
+    const el = document.getElementById(inputId);
+    if (el && !el.value.trim()) {
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+
+  // Base callsign: only when both code and number fields are currently blank
+  if (masterIds.callsignCodeId && masterIds.flightNumberId && inferredBase) {
+    const codeEl = document.getElementById(masterIds.callsignCodeId);
+    const numEl  = document.getElementById(masterIds.flightNumberId);
+    if (codeEl && numEl && !codeEl.value.trim() && !numEl.value.trim()) {
+      codeEl.value = inferredBase;
+      codeEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  fillIfBlank(masterIds.regId,  el0Reg);
+  fillIfBlank(masterIds.typeId, el0Type);
+  if (depAdAgreed && commonDepAd) fillIfBlank(masterIds.depAdId, commonDepAd);
+  if (arrAdAgreed && commonArrAd) fillIfBlank(masterIds.arrAdId, commonArrAd);
+}
+
+/**
  * Read formation data from a modal's formation inputs.
  * Returns null if count < 2 or no rows rendered (no formation).
  * Returns { _error, message } if a validation error is found.
@@ -4065,6 +4130,25 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   const newFormationCheckbox = document.getElementById("newFormationEnabled");
   const newFormationBody = document.getElementById("newFormationBody");
 
+  // FR-08: Master-strip field IDs for element-first blank-fill synthesis
+  const newFlightMasterIds = {
+    callsignCodeId: "newCallsignCode",
+    flightNumberId: "newFlightNumber",
+    regId:   "newReg",
+    typeId:  "newType",
+    depAdId: "newDepAd",
+    arrAdId: "newArrAd",
+  };
+  // Delegated listener: re-run synthesis whenever any element input blurs or changes
+  newFormationBody?.addEventListener("blur", e => {
+    if (e.target.matches && e.target.matches('.fmn-el-input'))
+      fmnSynthesizeMasterFromElements("newFormationElementsContainer", newFormationVisibleCount, newFlightMasterIds);
+  }, true);
+  newFormationBody?.addEventListener("change", e => {
+    if (e.target.matches && e.target.matches('.fmn-el-input'))
+      fmnSynthesizeMasterFromElements("newFormationElementsContainer", newFormationVisibleCount, newFlightMasterIds);
+  });
+
   newFormationCheckbox?.addEventListener("change", () => {
     if (!newFormationCheckbox.checked) {
       snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
@@ -4086,10 +4170,12 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           arrAd: document.getElementById("newArrAd")?.value?.trim().toUpperCase()       || "",
         });
         buildFormationElementRows(2, base, "newFormationElementsContainer", newFormationDraft, { flightType });
+        fmnSynthesizeMasterFromElements("newFormationElementsContainer", 2, newFlightMasterIds);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newFormationCount")?.value || "2", 10), 2), 12);
         newFormationVisibleCount = count;
         buildFormationElementRows(count, base, "newFormationElementsContainer", newFormationDraft, { flightType });
+        fmnSynthesizeMasterFromElements("newFormationElementsContainer", count, newFlightMasterIds);
       }
     }
   });
@@ -4100,6 +4186,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
     buildFormationElementRows(newCount, getNewFlightCallsign(), "newFormationElementsContainer", newFormationDraft, { flightType });
+    fmnSynthesizeMasterFromElements("newFormationElementsContainer", newCount, newFlightMasterIds);
     newFormationVisibleCount = newCount;
   });
 
@@ -4115,6 +4202,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       }
     }
     buildFormationElementRows(newFormationVisibleCount, newBase, "newFormationElementsContainer", newFormationDraft, { flightType });
+    fmnSynthesizeMasterFromElements("newFormationElementsContainer", newFormationVisibleCount, newFlightMasterIds);
     newFormationLastBase = newBase;
   };
 
@@ -5060,6 +5148,25 @@ function openNewLocFlightModal() {
   const newLocFormationCheckbox = document.getElementById("newLocFormationEnabled");
   const newLocFormationBody = document.getElementById("newLocFormationBody");
 
+  // FR-08: Master-strip field IDs for element-first blank-fill synthesis
+  // LOC dep/arr AD is always EGOW — those fields are not user-editable on the master strip
+  const locMasterIds = {
+    callsignCodeId: "newLocCallsignCode",
+    flightNumberId: "newLocFlightNumber",
+    regId:   "newLocReg",
+    typeId:  "newLocType",
+    depAdId: null,
+    arrAdId: null,
+  };
+  newLocFormationBody?.addEventListener("blur", e => {
+    if (e.target.matches && e.target.matches('.fmn-el-input'))
+      fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", newLocFormationVisibleCount, locMasterIds);
+  }, true);
+  newLocFormationBody?.addEventListener("change", e => {
+    if (e.target.matches && e.target.matches('.fmn-el-input'))
+      fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", newLocFormationVisibleCount, locMasterIds);
+  });
+
   newLocFormationCheckbox?.addEventListener("change", () => {
     if (!newLocFormationCheckbox.checked) {
       snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
@@ -5081,10 +5188,12 @@ function openNewLocFlightModal() {
           arrAd: "EGOW",
         });
         buildFormationElementRows(2, base, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
+        fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", 2, locMasterIds);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("newLocFormationCount")?.value || "2", 10), 2), 12);
         newLocFormationVisibleCount = count;
         buildFormationElementRows(count, base, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
+        fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", count, locMasterIds);
       }
     }
   });
@@ -5095,6 +5204,7 @@ function openNewLocFlightModal() {
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
     buildFormationElementRows(newCount, getLocCallsign(), "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
+    fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", newCount, locMasterIds);
     newLocFormationVisibleCount = newCount;
   });
 
@@ -5110,6 +5220,7 @@ function openNewLocFlightModal() {
       }
     }
     buildFormationElementRows(newLocFormationVisibleCount, newBase, "newLocFormationElementsContainer", newLocFormationDraft, { flightType: 'LOC' });
+    fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", newLocFormationVisibleCount, locMasterIds);
     newLocFormationLastBase = newBase;
   };
 
@@ -5947,6 +6058,27 @@ function openEditMovementModal(m) {
   const editFormationCheckbox = document.getElementById("editFormationEnabled");
   const editFormationBody = document.getElementById("editFormationBody");
 
+  // FR-08: Element-first synthesis — only wire when creating a fresh formation (no existing one)
+  // If m.formation already exists its draft is pre-populated, so master fields are already set
+  const editMasterIds = !m.formation ? {
+    callsignCodeId: "editCallsignCode",
+    flightNumberId: "editFlightNumber",
+    regId:   "editReg",
+    typeId:  "editType",
+    depAdId: "editDepAd",
+    arrAdId: "editArrAd",
+  } : null;
+  if (editMasterIds) {
+    editFormationBody?.addEventListener("blur", e => {
+      if (e.target.matches && e.target.matches('.fmn-el-input'))
+        fmnSynthesizeMasterFromElements("editFormationElementsContainer", editFormationVisibleCount, editMasterIds);
+    }, true);
+    editFormationBody?.addEventListener("change", e => {
+      if (e.target.matches && e.target.matches('.fmn-el-input'))
+        fmnSynthesizeMasterFromElements("editFormationElementsContainer", editFormationVisibleCount, editMasterIds);
+    });
+  }
+
   editFormationCheckbox?.addEventListener("change", () => {
     if (!editFormationCheckbox.checked) {
       snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
@@ -5968,10 +6100,12 @@ function openEditMovementModal(m) {
           arrAd: document.getElementById("editArrAd")?.value?.trim().toUpperCase()          || "",
         });
         buildFormationElementRows(2, base, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
+        if (editMasterIds) fmnSynthesizeMasterFromElements("editFormationElementsContainer", 2, editMasterIds);
       } else {
         const count = Math.min(Math.max(parseInt(document.getElementById("editFormationCount")?.value || "2", 10), 2), 12);
         editFormationVisibleCount = count;
         buildFormationElementRows(count, base, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
+        if (editMasterIds) fmnSynthesizeMasterFromElements("editFormationElementsContainer", count, editMasterIds);
       }
     }
   });
@@ -5982,6 +6116,7 @@ function openEditMovementModal(m) {
     const newCount = Math.min(Math.max(parseInt(countInput.value || "2", 10), 2), 12);
     snapshotFormationDraft(editFormationDraft, "editFormationElementsContainer", editFormationVisibleCount);
     buildFormationElementRows(newCount, getEditCallsign(), "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
+    if (editMasterIds) fmnSynthesizeMasterFromElements("editFormationElementsContainer", newCount, editMasterIds);
     editFormationVisibleCount = newCount;
   });
 
@@ -5997,6 +6132,7 @@ function openEditMovementModal(m) {
       }
     }
     buildFormationElementRows(editFormationVisibleCount, newBase, "editFormationElementsContainer", editFormationDraft, { flightType: m.flightType });
+    if (editMasterIds) fmnSynthesizeMasterFromElements("editFormationElementsContainer", editFormationVisibleCount, editMasterIds);
     editFormationLastBase = newBase;
   };
 
