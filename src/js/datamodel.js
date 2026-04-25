@@ -1266,17 +1266,25 @@ export function isOverflight(m) {
  * Compute wtcCurrent and wtcMax from a formation elements array.
  * wtcCurrent = max WTC among PLANNED or ACTIVE elements only.
  * wtcMax     = max WTC across all elements regardless of status.
- * @param {Array} elements - Formation element objects
+ *
+ * Each element's effective WTC is resolved as:
+ *   el.wtc  (element override/own value) if non-empty,
+ *   otherwise shared.wtc (formation-level shared default).
+ * This ensures elements that inherit shared WTC contribute correctly.
+ *
+ * @param {Array}  elements - Formation element objects
+ * @param {object} shared   - Formation shared defaults (provides wtc fallback)
  * @returns {{ wtcCurrent: string, wtcMax: string }}
  */
-export function computeFormationWTC(elements) {
+export function computeFormationWTC(elements, shared = {}) {
   if (!Array.isArray(elements) || elements.length === 0) {
     return { wtcCurrent: "", wtcMax: "" };
   }
+  const sharedWtc = ((shared && shared.wtc) || "").toUpperCase().trim();
   let current = "";
   let max = "";
   for (const el of elements) {
-    const wtc = (el.wtc || "").toUpperCase().trim();
+    const wtc = (el.wtc || "").toUpperCase().trim() || sharedWtc;
     if (!wtc) continue;
     max = maxWtcString(max, wtc);
     const st = (el.status || "").toUpperCase();
@@ -1379,8 +1387,8 @@ function normalizeFormation(formation, movement = null) {
     };
   });
 
-  // Recompute derived WTC fields
-  const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements);
+  // Recompute derived WTC fields from resolved element state (shared fallback applied)
+  const { wtcCurrent, wtcMax } = computeFormationWTC(formation.elements, formation.shared);
   formation.wtcCurrent = wtcCurrent;
   formation.wtcMax = wtcMax;
 
@@ -1406,8 +1414,8 @@ export function updateFormationElement(id, elementIndex, patch) {
 
   Object.assign(movement.formation.elements[elementIndex], patch);
 
-  // Recompute formation WTC
-  const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements);
+  // Recompute formation WTC from resolved element state (shared fallback applied)
+  const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements, movement.formation.shared);
   movement.formation.wtcCurrent = wtcCurrent;
   movement.formation.wtcMax     = wtcMax;
 
@@ -1458,7 +1466,7 @@ export function cascadeFormationStatus(id, newStatus) {
   });
 
   if (changed) {
-    const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements);
+    const { wtcCurrent, wtcMax } = computeFormationWTC(movement.formation.elements, movement.formation.shared);
     movement.formation.wtcCurrent = wtcCurrent;
     movement.formation.wtcMax     = wtcMax;
     saveToStorage();

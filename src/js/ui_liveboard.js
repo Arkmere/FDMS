@@ -2023,7 +2023,7 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
       overrides
     });
   }
-  const { wtcCurrent, wtcMax } = computeFormationWTC(elements);
+  const { wtcCurrent, wtcMax } = computeFormationWTC(elements, shared);
   return {
     baseCallsign: baseCallsign || "",
     shared,
@@ -7068,7 +7068,7 @@ function openDuplicateMovementModal(m) {
               depActual: "",
               arrActual: ""
             }));
-            const { wtcCurrent, wtcMax } = computeFormationWTC(resetElements);
+            const { wtcCurrent, wtcMax } = computeFormationWTC(resetElements, m.formation.shared);
             return { ...m.formation, elements: resetElements, wtcCurrent, wtcMax };
           })()
         : null
