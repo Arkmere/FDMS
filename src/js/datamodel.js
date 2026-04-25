@@ -1113,12 +1113,59 @@ function asNonNegInt(v) {
 }
 
 /**
+ * Nominal runway base for a single flight type string.
+ * OVR = 0, LOC = 2, DEP/ARR = 1, unknown = 0.
+ * @param {string} ft - Uppercase flight type
+ * @returns {number}
+ */
+function _nominalBase(ft) {
+  return ft === "LOC" ? 2 : ft === "DEP" ? 1 : ft === "ARR" ? 1 : 0;
+}
+
+/**
+ * Compute nominal runway movement contribution for a formation by summing
+ * the resolved contribution of each element.
+ *
+ * Resolution order for movement-related fields per element:
+ *   1. el.overrides.<field>  — element-specific override
+ *   2. m.<field>             — master strip value (shared default)
+ *
+ * For non-formation movements, falls back to single-strip nominal counting.
+ * Formula per element: _nominalBase(ft) + (2 × tngCount) + osCount
+ *
+ * @param {object} m - Movement object (formation or non-formation)
+ * @returns {number}
+ */
+export function getResolvedFormationMovements(m) {
+  const formation = m.formation;
+  if (!formation || !Array.isArray(formation.elements) || formation.elements.length === 0) {
+    const ft = String(m.flightType || "").toUpperCase();
+    return _nominalBase(ft) + (2 * asNonNegInt(m.tngCount)) + asNonNegInt(m.osCount);
+  }
+
+  const parentFt = String(m.flightType || "").toUpperCase();
+  let total = 0;
+  for (const el of formation.elements) {
+    const ov  = el.overrides || {};
+    const ft  = String("flightType" in ov ? ov.flightType : parentFt).toUpperCase();
+    const tng = asNonNegInt("tngCount" in ov ? ov.tngCount : m.tngCount);
+    const os  = asNonNegInt("osCount"  in ov ? ov.osCount  : m.osCount);
+    total += _nominalBase(ft) + (2 * tng) + os;
+  }
+  return total;
+}
+
+/**
  * Runway movement-equivalent contribution of one movement.
  * NOMINAL (plan-based) counting — used by reporting.js for Monthly Return.
  * OVR returns 0 (overflights excluded from runway totals; counted separately).
  * DEP/ARR contribute 1 base + counter additions.
  * LOC contributes 2 base + counter additions.
  * Formula: base + (2 × tngCount) + (1 × osCount)
+ *
+ * For formations, delegates to getResolvedFormationMovements() which sums
+ * the resolved contribution of each element rather than counting the master
+ * strip as a single aircraft.
  *
  * NOTE: For Live Board daily totals use egowRunwayContribution() instead,
  * which only counts realized EGOW events.
@@ -1127,29 +1174,29 @@ function asNonNegInt(v) {
  * @returns {number}
  */
 export function runwayMovementContribution(m) {
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    return getResolvedFormationMovements(m);
+  }
+
   const ft = String(m.flightType || "").toUpperCase();
   const tng = asNonNegInt(m.tngCount);
   const os  = asNonNegInt(m.osCount);
-
-  const base =
-    ft === "LOC" ? 2 :
-    ft === "DEP" ? 1 :
-    ft === "ARR" ? 1 :
-    ft === "OVR" ? 0 :
-    0;
-
-  return base + (2 * tng) + os;
+  return _nominalBase(ft) + (2 * tng) + os;
 }
 
 /**
  * Event-based runway contribution for Live Board daily totals.
  * Only counts EGOW events that have actually occurred.
  *
- * Rules:
+ * Rules (non-formation):
  *   DEP  = 1 if depActual exists, else 0
  *   ARR  = 1 if arrActual exists, else 0
  *   LOC  = (depActual ? 1 : 0) + (2 × tngCount) + osCount + (arrActual ? 1 : 0)
  *   OVR  = 0 always
+ *
+ * For formations, each element's contribution is resolved and summed.
+ * Per-element actual times are used when available; master strip times are the
+ * fallback (covers the common case where all aircraft depart/arrive together).
  *
  * T&G and O/S contribute regardless of actual times (they are discrete logged events).
  *
@@ -1157,6 +1204,10 @@ export function runwayMovementContribution(m) {
  * @returns {number}
  */
 export function egowRunwayContribution(m) {
+  if (m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0) {
+    return _formationEgowContribution(m);
+  }
+
   const ft  = String(m.flightType || "").toUpperCase();
   const tng = asNonNegInt(m.tngCount);
   const os  = asNonNegInt(m.osCount);
@@ -1168,6 +1219,36 @@ export function egowRunwayContribution(m) {
   if (ft === "ARR") return hasArr ? 1 : 0;
   if (ft === "LOC") return (hasDep ? 1 : 0) + (2 * tng) + os + (hasArr ? 1 : 0);
   return 0;
+}
+
+/**
+ * EGOW contribution for a formation: sum resolved per-element contributions.
+ * Uses master strip actual times as the shared fallback when an element does
+ * not carry its own depActual / arrActual.
+ * @param {object} m - Formation movement
+ * @returns {number}
+ */
+function _formationEgowContribution(m) {
+  const parentFt = String(m.flightType || "").toUpperCase();
+  let total = 0;
+  for (const el of m.formation.elements) {
+    const ov  = el.overrides || {};
+    const ft  = String("flightType" in ov ? ov.flightType : parentFt).toUpperCase();
+    const tng = asNonNegInt("tngCount" in ov ? ov.tngCount : m.tngCount);
+    const os  = asNonNegInt("osCount"  in ov ? ov.osCount  : m.osCount);
+
+    // Element-level actual times where available; master strip as shared fallback.
+    const depActual = (el.depActual && String(el.depActual).trim()) || m.depActual || "";
+    const arrActual = (el.arrActual && String(el.arrActual).trim()) || m.arrActual || "";
+    const hasDep = !!(depActual && String(depActual).trim());
+    const hasArr = !!(arrActual && String(arrActual).trim());
+
+    if (ft === "OVR") continue;
+    if (ft === "DEP") { total += hasDep ? 1 : 0; continue; }
+    if (ft === "ARR") { total += hasArr ? 1 : 0; continue; }
+    if (ft === "LOC") { total += (hasDep ? 1 : 0) + (2 * tng) + os + (hasArr ? 1 : 0); }
+  }
+  return total;
 }
 
 /**
