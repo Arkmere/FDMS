@@ -1683,6 +1683,8 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
     <thead>
       <tr>
         <th>Callsign</th>
+        <th title="Attribution callsign — underlying aircraft identity for stats (e.g. UAM03)">Attr CS</th>
+        <th title="Pilot name for this element">Pilot</th>
         <th>Reg</th>
         <th>Type</th>
         <th>WTC</th>
@@ -1697,6 +1699,8 @@ function buildFormationElementRows(count, baseCallsign, containerId, existingEle
     const defaultCallsign = fmnElementCallsign(effectiveBase, i + 1);
     html += `<tr>
       <td><input class="fmn-el-input" data-el-callsign="${i}" value="${escapeHtml(el.callsign || defaultCallsign)}" placeholder="Callsign" style="width:90px;" /></td>
+      <td><input class="fmn-el-input fmn-el-attr-cs" data-el-attr-cs="${i}" value="${escapeHtml(el.underlyingCallsign || "")}" placeholder="e.g. UAM03" style="width:76px;" /></td>
+      <td><input class="fmn-el-input fmn-el-pilot"   data-el-pilot="${i}"   value="${escapeHtml(el.pilotName         || "")}" placeholder="Pilot name" style="width:90px;" /></td>
       <td><input class="fmn-el-input" data-el-reg="${i}"      value="${escapeHtml(el.reg      || "")}" placeholder="Reg" /></td>
       <td><input class="fmn-el-input" data-el-type="${i}"     value="${escapeHtml(el.type     || "")}" placeholder="Type" /></td>
       <td><input class="fmn-el-input" data-el-wtc="${i}"      value="${escapeHtml(el.wtc      || "")}" placeholder="L/M/H" style="width:52px;" /></td>
@@ -1823,12 +1827,14 @@ function snapshotFormationDraft(draft, containerId, count) {
     // Preserve existing override state: it was marked by user edits, not DOM values.
     const existingOverrides = draft[i]?.overrides || {};
     draft[i] = {
-      callsign: callsignEl.value.trim(),
-      reg:      container.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()  || "",
-      type:     container.querySelector(`[data-el-type="${i}"]`)?.value?.trim() || "",
-      wtc:      container.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "",
-      depAd:    container.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
-      arrAd:    container.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
+      callsign:           callsignEl.value.trim(),
+      underlyingCallsign: container.querySelector(`[data-el-attr-cs="${i}"]`)?.value?.trim() || "",
+      pilotName:          container.querySelector(`[data-el-pilot="${i}"]`)?.value?.trim()   || "",
+      reg:                container.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()     || "",
+      type:               container.querySelector(`[data-el-type="${i}"]`)?.value?.trim()    || "",
+      wtc:                container.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "",
+      depAd:              container.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
+      arrAd:              container.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
       overrides: existingOverrides,
     };
   }
@@ -1858,12 +1864,12 @@ function seedFormationDraftFromMaster(draft, count, base, seed) {
   const arrAd = seed.arrAd || "";
   // Element 1: master aircraft data + shared route — all fields treated as inheriting (no overrides)
   if (draft[0] === undefined) {
-    draft[0] = { callsign: fmnElementCallsign(base, 1), reg, type, wtc, depAd, arrAd, overrides: {} };
+    draft[0] = { callsign: fmnElementCallsign(base, 1), underlyingCallsign: "", pilotName: "", reg, type, wtc, depAd, arrAd, overrides: {} };
   }
   // Elements 2..N: shared route only; aircraft-specific fields blank — all fields still inheriting
   for (let i = 1; i < count; i++) {
     if (draft[i] === undefined) {
-      draft[i] = { callsign: fmnElementCallsign(base, i + 1), reg: "", type: "", wtc: "", depAd, arrAd, overrides: {} };
+      draft[i] = { callsign: fmnElementCallsign(base, i + 1), underlyingCallsign: "", pilotName: "", reg: "", type: "", wtc: "", depAd, arrAd, overrides: {} };
     }
   }
 }
@@ -1972,7 +1978,9 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
   const elements = [];
   for (let i = 0; i < count; i++) {
     const defaultCallsign = fmnElementCallsign(baseCallsign, i + 1);
-    const callsign = container?.querySelector(`[data-el-callsign="${i}"]`)?.value?.trim() || defaultCallsign;
+    const callsign           = container?.querySelector(`[data-el-callsign="${i}"]`)?.value?.trim() || defaultCallsign;
+    const underlyingCallsign = container?.querySelector(`[data-el-attr-cs="${i}"]`)?.value?.trim()  || "";
+    const pilotName          = container?.querySelector(`[data-el-pilot="${i}"]`)?.value?.trim()    || "";
     const reg    = container?.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()   || "";
     const type   = container?.querySelector(`[data-el-type="${i}"]`)?.value?.trim()  || "";
     const wtcRaw = container?.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "";
@@ -2016,6 +2024,8 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
     elements.push({
       ordinal:   i + 1,
       callsign,
+      underlyingCallsign,
+      pilotName,
       reg, type,
       wtc: wtcRaw,
       status: "PLANNED",
@@ -2180,6 +2190,9 @@ function resolveElementForDisplay(el, shared, m) {
   return {
     ordinal: el.ordinal,
     callsign: el.callsign,
+    // FR-14: per-element identity for attribution
+    underlyingCallsign: el.underlyingCallsign || "",
+    pilotName:          el.pilotName          || "",
     reg, type, wtc, depAd, arrAd, flightType,
     tngCount, osCount, fisCount, movements,
     status: el.status,
@@ -2311,6 +2324,20 @@ function renderFormationDetails(m) {
       <tr${rowClass}>
         <td class="fmn-ordinal">${r.ordinal}</td>
         <td>${escapeHtml(r.callsign)}</td>
+        <td>
+          <input class="fmn-el-input fmn-el-attr-cs" type="text"
+            value="${escapeHtml(r.underlyingCallsign)}"
+            placeholder="e.g. UAM03"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
+        </td>
+        <td>
+          <input class="fmn-el-input fmn-el-pilot" type="text"
+            value="${escapeHtml(r.pilotName)}"
+            placeholder="Pilot name"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
+        </td>
         <td>${cellVal(r.reg,  inh.reg)}</td>
         <td>${cellVal(r.type, inh.type)}</td>
         <td>${cellVal(r.wtc,  inh.wtc)}</td>
@@ -2405,6 +2432,8 @@ function renderFormationDetails(m) {
             <tr>
               <th>#</th>
               <th>Callsign</th>
+              <th title="Attribution callsign — underlying aircraft identity for stats">Attr CS</th>
+              <th title="Pilot name for this element">Pilot</th>
               <th>Reg</th>
               <th>Type</th>
               <th>WTC</th>
@@ -7730,15 +7759,18 @@ export function initLiveBoard() {
     const row = btn.closest("tr");
     if (!row) return;
 
-    const statusSel       = row.querySelector(".fmn-el-select");
-    const outcomeSel      = row.querySelector(".fmn-el-outcome");
-    const depAdInputs     = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
-    const depInput        = row.querySelector(".fmn-el-dep");
-    const arrInput        = row.querySelector(".fmn-el-arr");
-    const actDestAdInput  = row.querySelector(".fmn-el-act-dest-ad");
+    const statusSel        = row.querySelector(".fmn-el-select");
+    const outcomeSel       = row.querySelector(".fmn-el-outcome");
+    const depAdInputs      = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
+    const depInput         = row.querySelector(".fmn-el-dep");
+    const arrInput         = row.querySelector(".fmn-el-arr");
+    const actDestAdInput   = row.querySelector(".fmn-el-act-dest-ad");
     const actDestTextInput = row.querySelector(".fmn-el-act-dest-text");
     const outcomeTimeInput = row.querySelector(".fmn-el-outcome-time");
-    const reasonInput     = row.querySelector(".fmn-el-reason");
+    const reasonInput      = row.querySelector(".fmn-el-reason");
+    // FR-14: per-element identity inputs
+    const attrCsInput      = row.querySelector(".fmn-el-attr-cs");
+    const pilotInput       = row.querySelector(".fmn-el-pilot");
 
     // Validate and build patch
     const rawStatus      = statusSel?.value  || "PLANNED";
@@ -7784,6 +7816,9 @@ export function initLiveBoard() {
       outcomeTime: rawOutcomeTime
         ? (validateTime(rawOutcomeTime).normalized || rawOutcomeTime)
         : "",
+      // FR-14: per-element identity fields
+      underlyingCallsign: (attrCsInput?.value || "").trim(),
+      pilotName:          (pilotInput?.value  || "").trim(),
     };
 
     if (depInput?.value?.trim()) {
