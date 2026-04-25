@@ -1296,6 +1296,25 @@ export function computeFormationWTC(elements, shared = {}) {
 }
 
 /**
+ * Derive a conservative summary status from formation element states.
+ * Priority: ACTIVE > PLANNED > COMPLETED > CANCELLED > mixed-terminal → COMPLETED.
+ * "Mixed terminal" means some elements COMPLETED and some CANCELLED.
+ * Returns "PLANNED" for empty/invalid input.
+ * @param {Array} elements
+ * @returns {string} PLANNED | ACTIVE | COMPLETED | CANCELLED
+ */
+export function derivedFormationStatus(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) return "PLANNED";
+  const statuses = elements.map(el => (el.status || "PLANNED").toUpperCase());
+  if (statuses.some(s => s === "ACTIVE"))           return "ACTIVE";
+  if (statuses.some(s => s === "PLANNED"))          return "PLANNED";
+  if (statuses.every(s => s === "COMPLETED"))       return "COMPLETED";
+  if (statuses.every(s => s === "CANCELLED"))       return "CANCELLED";
+  // Mixed terminal: some COMPLETED + some CANCELLED → treat as partially completed
+  return "COMPLETED";
+}
+
+/**
  * Normalize a formation object loaded from storage.
  * Ensures required fields exist and recomputes WTC.
  * Returns null if the argument is falsy.
@@ -1383,6 +1402,12 @@ function normalizeFormation(formation, movement = null) {
       arrAd,
       depActual:  el.depActual  || "",
       arrActual:  el.arrActual  || "",
+      // FR-13: per-element outcome fields mirror the master movement pattern
+      outcomeStatus:         el.outcomeStatus         || "NORMAL",
+      outcomeReason:         el.outcomeReason         || "",
+      actualDestinationAd:   el.actualDestinationAd   || "",
+      actualDestinationText: el.actualDestinationText || "",
+      outcomeTime:           el.outcomeTime           || "",
       overrides
     };
   });
@@ -1410,6 +1435,23 @@ export function updateFormationElement(id, elementIndex, patch) {
   }
   if (elementIndex < 0 || elementIndex >= movement.formation.elements.length) {
     return null;
+  }
+
+  // Keep override tracking consistent when AD fields are patched so that
+  // re-renders immediately show the correct inherited vs. overridden state.
+  const shared = movement.formation.shared || {};
+  const el = movement.formation.elements[elementIndex];
+  if ('depAd' in patch || 'arrAd' in patch) {
+    const ov = { ...(el.overrides || {}) };
+    if ('depAd' in patch) {
+      if (patch.depAd && patch.depAd !== shared.depAd) ov.depAd = patch.depAd;
+      else delete ov.depAd;
+    }
+    if ('arrAd' in patch) {
+      if (patch.arrAd && patch.arrAd !== shared.arrAd) ov.arrAd = patch.arrAd;
+      else delete ov.arrAd;
+    }
+    el.overrides = ov;
   }
 
   Object.assign(movement.formation.elements[elementIndex], patch);
@@ -1453,12 +1495,16 @@ export function cascadeFormationStatus(id, newStatus) {
   let changed = false;
   movement.formation.elements.forEach(el => {
     if (newStatus === "COMPLETED") {
+      // Only advance elements still in-progress; leave CANCELLED untouched.
       if (el.status === "PLANNED" || el.status === "ACTIVE") {
         el.status = "COMPLETED";
         changed = true;
       }
     } else { // CANCELLED
-      if (el.status !== "CANCELLED") {
+      // Conservative: only cancel elements that haven't already reached a
+      // terminal state. COMPLETED elements are preserved — they represent
+      // aircraft that finished before the formation was cancelled.
+      if (el.status === "PLANNED" || el.status === "ACTIVE") {
         el.status = "CANCELLED";
         changed = true;
       }
