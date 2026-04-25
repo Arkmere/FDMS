@@ -1611,6 +1611,62 @@ function fmnIsDefaultCallsign(callsign, base, ordinal) {
          callsign === (base ? `${base} ${ordinal}` : `ELEMENT ${ordinal}`);
 }
 
+// FR-09: Field-level inheritance helpers
+// Conservative field set: callsign is intentionally excluded.
+const FMN_INHERITABLE_FIELDS = ['depAd', 'arrAd', 'reg', 'type', 'wtc'];
+
+// Map field name → the data-attribute suffix used in element row inputs.
+function fmnFieldDataAttr(field) {
+  return { depAd: 'dep-ad', arrAd: 'arr-ad', reg: 'reg', type: 'type', wtc: 'wtc' }[field] || null;
+}
+
+// Extract { field, idx } from an element-row input's dataset, or null if not an inheritable field.
+function fmnInputInfo(input) {
+  const ds = input?.dataset;
+  if (!ds) return null;
+  if ('elDepAd' in ds) return { field: 'depAd', idx: parseInt(ds.elDepAd, 10) };
+  if ('elArrAd' in ds) return { field: 'arrAd', idx: parseInt(ds.elArrAd, 10) };
+  if ('elReg'   in ds) return { field: 'reg',   idx: parseInt(ds.elReg,   10) };
+  if ('elType'  in ds) return { field: 'type',  idx: parseInt(ds.elType,  10) };
+  if ('elWtc'   in ds) return { field: 'wtc',   idx: parseInt(ds.elWtc,   10) };
+  return null;
+}
+
+// Return true when the field on draftSlot has NOT been explicitly overridden by the user.
+function fmnIsFieldInherited(draftSlot, field) {
+  if (!draftSlot) return true;
+  return !draftSlot.overrides || !(field in draftSlot.overrides);
+}
+
+// Mark field as user-overridden on draftSlot and update its stored value.
+function fmnSetElementOverride(draftSlot, field, value) {
+  if (!draftSlot) return;
+  if (!draftSlot.overrides) draftSlot.overrides = {};
+  draftSlot.overrides[field] = value;
+  draftSlot[field] = value;
+}
+
+// Normalise a field value consistently with how it is stored (uppercase for AD/WTC).
+function fmnNormaliseFieldValue(field, raw) {
+  return ['depAd', 'arrAd', 'wtc'].includes(field) ? (raw || '').trim().toUpperCase() : (raw || '').trim();
+}
+
+// When master field value changes, push newValue to every still-inheriting element row
+// (both draft slots and rendered DOM inputs).
+function fmnPropagateToInheriting(draft, visibleCount, field, newValue, containerId) {
+  const container = document.getElementById(containerId);
+  const attr = fmnFieldDataAttr(field);
+  for (let i = 0; i < visibleCount; i++) {
+    const slot = draft[i];
+    if (slot && !fmnIsFieldInherited(slot, field)) continue; // field is overridden on this element
+    if (slot) slot[field] = newValue;
+    if (container && attr) {
+      const input = container.querySelector(`[data-el-${attr}="${i}"]`);
+      if (input) input.value = newValue;
+    }
+  }
+}
+
 function buildFormationElementRows(count, baseCallsign, containerId, existingElements, enrichOpts = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -1762,6 +1818,8 @@ function snapshotFormationDraft(draft, containerId, count) {
   for (let i = 0; i < count; i++) {
     const callsignEl = container.querySelector(`[data-el-callsign="${i}"]`);
     if (!callsignEl) continue;
+    // Preserve existing override state: it was marked by user edits, not DOM values.
+    const existingOverrides = draft[i]?.overrides || {};
     draft[i] = {
       callsign: callsignEl.value.trim(),
       reg:      container.querySelector(`[data-el-reg="${i}"]`)?.value?.trim()  || "",
@@ -1769,6 +1827,7 @@ function snapshotFormationDraft(draft, containerId, count) {
       wtc:      container.querySelector(`[data-el-wtc="${i}"]`)?.value?.trim().toUpperCase() || "",
       depAd:    container.querySelector(`[data-el-dep-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
       arrAd:    container.querySelector(`[data-el-arr-ad="${i}"]`)?.value?.trim().toUpperCase() || "",
+      overrides: existingOverrides,
     };
   }
 }
@@ -1795,14 +1854,14 @@ function seedFormationDraftFromMaster(draft, count, base, seed) {
   const wtc   = seed.wtc   || "";
   const depAd = seed.depAd || "";
   const arrAd = seed.arrAd || "";
-  // Element 1: master aircraft data + shared route
+  // Element 1: master aircraft data + shared route — all fields treated as inheriting (no overrides)
   if (draft[0] === undefined) {
-    draft[0] = { callsign: fmnElementCallsign(base, 1), reg, type, wtc, depAd, arrAd };
+    draft[0] = { callsign: fmnElementCallsign(base, 1), reg, type, wtc, depAd, arrAd, overrides: {} };
   }
-  // Elements 2..N: shared route only; aircraft-specific fields blank
+  // Elements 2..N: shared route only; aircraft-specific fields blank — all fields still inheriting
   for (let i = 1; i < count; i++) {
     if (draft[i] === undefined) {
-      draft[i] = { callsign: fmnElementCallsign(base, i + 1), reg: "", type: "", wtc: "", depAd, arrAd };
+      draft[i] = { callsign: fmnElementCallsign(base, i + 1), reg: "", type: "", wtc: "", depAd, arrAd, overrides: {} };
     }
   }
 }
@@ -1880,8 +1939,9 @@ function fmnSynthesizeMasterFromElements(containerId, count, masterIds) {
  * @param {string} countInputId  - ID of the count input element
  * @param {string} containerId   - ID of the element rows container
  * @param {object} masterShared  - Shared defaults from the master strip fields
+ * @param {Array}  draft         - Session draft (optional); used for FR-09 override tracking
  */
-function readFormationFromModal(baseCallsign, countInputId, containerId, masterShared = {}) {
+function readFormationFromModal(baseCallsign, countInputId, containerId, masterShared = {}, draft = null) {
   // If the formation-enabled checkbox exists and is unchecked, no formation
   const enabledCheckbox = document.getElementById(countInputId.replace("Count", "Enabled"));
   if (enabledCheckbox && !enabledCheckbox.checked) return null;
@@ -1898,6 +1958,9 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
   const shared = {
     depAd:      (masterShared.depAd      || "").trim().toUpperCase(),
     arrAd:      (masterShared.arrAd      || "").trim().toUpperCase(),
+    reg:        (masterShared.reg        || "").trim(),
+    type:       (masterShared.type       || "").trim(),
+    wtc:        (masterShared.wtc        || "").trim().toUpperCase(),
     flightType: masterShared.flightType  || "",
     tngCount:   masterShared.tngCount    || 0,
     osCount:    masterShared.osCount     || 0,
@@ -1930,10 +1993,23 @@ function readFormationFromModal(baseCallsign, countInputId, containerId, masterS
     const resolvedDepAd = depAdRaw || shared.depAd;
     const resolvedArrAd = arrAdRaw || shared.arrAd;
 
-    // Track element-level overrides — only fields that differ from shared defaults
+    // Track element-level overrides.
+    // depAd/arrAd: override when non-empty and differs from shared (value comparison).
+    // reg/type/wtc: use draft override state when available; else fall back to value comparison.
     const overrides = {};
     if (depAdRaw && depAdRaw !== shared.depAd) overrides.depAd = depAdRaw;
     if (arrAdRaw && arrAdRaw !== shared.arrAd) overrides.arrAd = arrAdRaw;
+    const draftSlot = draft ? draft[i] : null;
+    if (draftSlot?.overrides) {
+      if ('reg'  in draftSlot.overrides && reg)    overrides.reg  = reg;
+      if ('type' in draftSlot.overrides && type)   overrides.type = type;
+      if ('wtc'  in draftSlot.overrides && wtcRaw) overrides.wtc  = wtcRaw;
+    } else {
+      // No draft available — compare to shared values as fallback
+      if (reg    && reg    !== shared.reg)  overrides.reg  = reg;
+      if (type   && type   !== shared.type) overrides.type = type;
+      if (wtcRaw && wtcRaw !== shared.wtc)  overrides.wtc  = wtcRaw;
+    }
 
     elements.push({
       ordinal:   i + 1,
@@ -4149,6 +4225,31 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       fmnSynthesizeMasterFromElements("newFormationElementsContainer", newFormationVisibleCount, newFlightMasterIds);
   });
 
+  // FR-09: Mark element fields as user-overridden the moment the user types in them.
+  // Using `input` so propagation from master cannot overwrite an in-progress edit.
+  newFormationBody?.addEventListener("input", e => {
+    const info = fmnInputInfo(e.target);
+    if (!info || isNaN(info.idx)) return;
+    const slot = newFormationDraft[info.idx];
+    if (slot) fmnSetElementOverride(slot, info.field, fmnNormaliseFieldValue(info.field, e.target.value));
+  });
+
+  // FR-09: Propagate master-strip field changes to still-inheriting element rows.
+  const fmnWireNewMasterPropagation = (inputId, field) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      if (!newFormationCheckbox?.checked) return;
+      fmnPropagateToInheriting(newFormationDraft, newFormationVisibleCount, field,
+        fmnNormaliseFieldValue(field, input.value), "newFormationElementsContainer");
+    });
+  };
+  fmnWireNewMasterPropagation('newDepAd', 'depAd');
+  fmnWireNewMasterPropagation('newArrAd', 'arrAd');
+  fmnWireNewMasterPropagation('newReg',   'reg');
+  fmnWireNewMasterPropagation('newType',  'type');
+  fmnWireNewMasterPropagation('newWtc',   'wtc');
+
   newFormationCheckbox?.addEventListener("change", () => {
     if (!newFormationCheckbox.checked) {
       snapshotFormationDraft(newFormationDraft, "newFormationElementsContainer", newFormationVisibleCount);
@@ -4550,12 +4651,15 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     const newFormationShared = {
       depAd:      document.getElementById("newDepAd")?.value?.trim().toUpperCase()    || "",
       arrAd:      document.getElementById("newArrAd")?.value?.trim().toUpperCase()    || "",
+      reg:        document.getElementById("newReg")?.value?.trim()                    || "",
+      type:       document.getElementById("newType")?.value?.trim()                   || "",
+      wtc:        document.getElementById("newWtc")?.value?.trim().toUpperCase()      || "",
       flightType: document.getElementById("newFlightType")?.value                     || "",
       tngCount:   parseInt(document.getElementById("newTng")?.value      || "0", 10) || 0,
       osCount:    parseInt(document.getElementById("newOsCount")?.value  || "0", 10) || 0,
       fisCount:   parseInt(document.getElementById("newFisCount")?.value || "0", 10) || 0
     };
-    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer", newFormationShared);
+    const newFormation = readFormationFromModal(newFormationBase, "newFormationCount", "newFormationElementsContainer", newFormationShared, newFormationDraft);
     if (newFormation?._error) { showToast(newFormation.message, 'error'); return; }
     movement.formation = newFormation;
 
@@ -5167,6 +5271,29 @@ function openNewLocFlightModal() {
       fmnSynthesizeMasterFromElements("newLocFormationElementsContainer", newLocFormationVisibleCount, locMasterIds);
   });
 
+  // FR-09: Mark element fields as user-overridden the moment the user types in them.
+  newLocFormationBody?.addEventListener("input", e => {
+    const info = fmnInputInfo(e.target);
+    if (!info || isNaN(info.idx)) return;
+    const slot = newLocFormationDraft[info.idx];
+    if (slot) fmnSetElementOverride(slot, info.field, fmnNormaliseFieldValue(info.field, e.target.value));
+  });
+
+  // FR-09: Propagate LOC master-strip field changes to still-inheriting element rows.
+  // depAd/arrAd are always EGOW on LOC so only reg/type/wtc are propagated.
+  const fmnWireLocMasterPropagation = (inputId, field) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      if (!newLocFormationCheckbox?.checked) return;
+      fmnPropagateToInheriting(newLocFormationDraft, newLocFormationVisibleCount, field,
+        fmnNormaliseFieldValue(field, input.value), "newLocFormationElementsContainer");
+    });
+  };
+  fmnWireLocMasterPropagation('newLocReg',  'reg');
+  fmnWireLocMasterPropagation('newLocType', 'type');
+  fmnWireLocMasterPropagation('newLocWtc',  'wtc');
+
   newLocFormationCheckbox?.addEventListener("change", () => {
     if (!newLocFormationCheckbox.checked) {
       snapshotFormationDraft(newLocFormationDraft, "newLocFormationElementsContainer", newLocFormationVisibleCount);
@@ -5327,12 +5454,15 @@ function openNewLocFlightModal() {
     const locFormationShared = {
       depAd:      "EGOW",
       arrAd:      "EGOW",
+      reg:        document.getElementById("newLocReg")?.value?.trim()                    || "",
+      type:       document.getElementById("newLocType")?.value?.trim()                   || "",
+      wtc:        document.getElementById("newLocWtc")?.value?.trim().toUpperCase()      || "",
       flightType: "LOC",
       tngCount:   parseInt(tng, 10) || 0,
       osCount:    osCountValue,
       fisCount:   fisCountValue
     };
-    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locFormationShared);
+    const locFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locFormationShared, newLocFormationDraft);
     if (locFormation?._error) { showToast(locFormation.message, 'error'); return; }
 
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -5493,12 +5623,15 @@ function openNewLocFlightModal() {
     const locCpFormationShared = {
       depAd:      "EGOW",
       arrAd:      "EGOW",
+      reg:        document.getElementById("newLocReg")?.value?.trim()                    || "",
+      type:       document.getElementById("newLocType")?.value?.trim()                   || "",
+      wtc:        document.getElementById("newLocWtc")?.value?.trim().toUpperCase()      || "",
       flightType: "LOC",
       tngCount:   parseInt(tng, 10) || 0,
       osCount:    osCountValue,
       fisCount:   fisCountValue
     };
-    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locCpFormationShared);
+    const locCpFormation = readFormationFromModal(callsign, "newLocFormationCount", "newLocFormationElementsContainer", locCpFormationShared, newLocFormationDraft);
     if (locCpFormation?._error) { showToast(locCpFormation.message, 'error'); return; }
 
     const regValue = document.getElementById("newLocReg")?.value || "";
@@ -6045,8 +6178,9 @@ function openEditMovementModal(m) {
   const existingElements = m.formation?.elements || [];
   const initialEditCount = existingElements.length || 2;
 
-  // Seed draft from existing formation elements so toggle off/on is non-destructive from the start
-  const editFormationDraft = existingElements.map(el => ({ ...el }));
+  // Seed draft from existing formation elements so toggle off/on is non-destructive from the start.
+  // Deep-copy overrides so FR-09 inheritance state is correctly restored from saved formation.
+  const editFormationDraft = existingElements.map(el => ({ ...el, overrides: { ...(el.overrides || {}) } }));
   let editFormationVisibleCount = initialEditCount;
   let editFormationLastBase = getEditCallsign();
 
@@ -6078,6 +6212,30 @@ function openEditMovementModal(m) {
         fmnSynthesizeMasterFromElements("editFormationElementsContainer", editFormationVisibleCount, editMasterIds);
     });
   }
+
+  // FR-09: Mark element fields as user-overridden the moment the user types in them.
+  editFormationBody?.addEventListener("input", e => {
+    const info = fmnInputInfo(e.target);
+    if (!info || isNaN(info.idx)) return;
+    const slot = editFormationDraft[info.idx];
+    if (slot) fmnSetElementOverride(slot, info.field, fmnNormaliseFieldValue(info.field, e.target.value));
+  });
+
+  // FR-09: Propagate master-strip field changes to still-inheriting element rows.
+  const fmnWireEditMasterPropagation = (inputId, field) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      if (!editFormationCheckbox?.checked) return;
+      fmnPropagateToInheriting(editFormationDraft, editFormationVisibleCount, field,
+        fmnNormaliseFieldValue(field, input.value), "editFormationElementsContainer");
+    });
+  };
+  fmnWireEditMasterPropagation('editDepAd',      'depAd');
+  fmnWireEditMasterPropagation('editArrAd',      'arrAd');
+  fmnWireEditMasterPropagation('editReg',        'reg');
+  fmnWireEditMasterPropagation('editType',       'type');
+  fmnWireEditMasterPropagation('editWtcDisplay', 'wtc');
 
   editFormationCheckbox?.addEventListener("change", () => {
     if (!editFormationCheckbox.checked) {
@@ -6389,14 +6547,17 @@ function openEditMovementModal(m) {
     const editFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
                        (document.getElementById("editFlightNumber")?.value?.trim() || "");
     const editFmShared = {
-      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()     || "",
-      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()     || "",
-      flightType: document.getElementById("editFlightType")?.value                      || "",
-      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)  || 0,
-      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)  || 0,
-      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)  || 0
+      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()      || "",
+      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()      || "",
+      reg:        document.getElementById("editReg")?.value?.trim()                      || "",
+      type:       document.getElementById("editType")?.value?.trim()                     || "",
+      wtc:        document.getElementById("editWtcDisplay")?.value?.trim().toUpperCase() || "",
+      flightType: document.getElementById("editFlightType")?.value                       || "",
+      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)   || 0,
+      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)   || 0,
+      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)   || 0
     };
-    const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer", editFmShared);
+    const editFm = readFormationFromModal(editFmBase, "editFormationCount", "editFormationElementsContainer", editFmShared, editFormationDraft);
     if (editFm?._error) { showToast(editFm.message, 'error'); return; }
     updates.formation = editFm;
 
@@ -6591,14 +6752,17 @@ function openEditMovementModal(m) {
     const saveCpFmBase = (document.getElementById("editCallsignCode")?.value?.trim() || "") +
                          (document.getElementById("editFlightNumber")?.value?.trim() || "");
     const saveCpFmShared = {
-      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()     || "",
-      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()     || "",
-      flightType: document.getElementById("editFlightType")?.value                      || "",
-      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)  || 0,
-      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)  || 0,
-      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)  || 0
+      depAd:      document.getElementById("editDepAd")?.value?.trim().toUpperCase()      || "",
+      arrAd:      document.getElementById("editArrAd")?.value?.trim().toUpperCase()      || "",
+      reg:        document.getElementById("editReg")?.value?.trim()                      || "",
+      type:       document.getElementById("editType")?.value?.trim()                     || "",
+      wtc:        document.getElementById("editWtcDisplay")?.value?.trim().toUpperCase() || "",
+      flightType: document.getElementById("editFlightType")?.value                       || "",
+      tngCount:   parseInt(document.getElementById("editTng")?.value      || "0", 10)   || 0,
+      osCount:    parseInt(document.getElementById("editOsCount")?.value  || "0", 10)   || 0,
+      fisCount:   parseInt(document.getElementById("editFisCount")?.value || "0", 10)   || 0
     };
-    const saveCpFm = readFormationFromModal(saveCpFmBase, "editFormationCount", "editFormationElementsContainer", saveCpFmShared);
+    const saveCpFm = readFormationFromModal(saveCpFmBase, "editFormationCount", "editFormationElementsContainer", saveCpFmShared, editFormationDraft);
     if (saveCpFm?._error) { showToast(saveCpFm.message, 'error'); return; }
     updates.formation = saveCpFm;
 

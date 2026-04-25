@@ -1232,8 +1232,11 @@ function normalizeFormation(formation, movement = null) {
   // Migration: ensure shared defaults layer exists.
   // Prefer the parent movement as the authoritative source for shared values.
   const movementShared = movement ? {
-    depAd:      movement.depAd || "",
-    arrAd:      movement.arrAd || "",
+    depAd:      movement.depAd    || "",
+    arrAd:      movement.arrAd    || "",
+    reg:        movement.reg      || "",
+    type:       movement.type     || "",
+    wtc:        movement.wtc      || "",
     flightType: movement.flightType || "",
     tngCount:   Number.isFinite(Number(movement.tngCount)) ? Number(movement.tngCount) : 0,
     osCount:    Number.isFinite(Number(movement.osCount)) ? Number(movement.osCount) : 0,
@@ -1245,6 +1248,9 @@ function normalizeFormation(formation, movement = null) {
     formation.shared = {
       depAd:      movementShared?.depAd      || firstEl.depAd || "",
       arrAd:      movementShared?.arrAd      || firstEl.arrAd || "",
+      reg:        movementShared?.reg        || firstEl.reg   || "",
+      type:       movementShared?.type       || firstEl.type  || "",
+      wtc:        movementShared?.wtc        || firstEl.wtc   || "",
       flightType: movementShared?.flightType || "",
       tngCount:   movementShared?.tngCount   ?? 0,
       osCount:    movementShared?.osCount    ?? 0,
@@ -1254,6 +1260,9 @@ function normalizeFormation(formation, movement = null) {
     // Forward-compat: fill any missing shared fields, again preferring movement values.
     formation.shared.depAd      = formation.shared.depAd      ?? movementShared?.depAd      ?? "";
     formation.shared.arrAd      = formation.shared.arrAd      ?? movementShared?.arrAd      ?? "";
+    formation.shared.reg        = formation.shared.reg        ?? movementShared?.reg        ?? "";
+    formation.shared.type       = formation.shared.type       ?? movementShared?.type       ?? "";
+    formation.shared.wtc        = formation.shared.wtc        ?? movementShared?.wtc        ?? "";
     formation.shared.flightType = formation.shared.flightType ?? movementShared?.flightType ?? "";
     formation.shared.tngCount   = formation.shared.tngCount   ?? movementShared?.tngCount   ?? 0;
     formation.shared.osCount    = formation.shared.osCount    ?? movementShared?.osCount    ?? 0;
@@ -1268,6 +1277,11 @@ function normalizeFormation(formation, movement = null) {
     const overrides = { ...(el.overrides || {}) };
     if (depAd && depAd !== formation.shared.depAd) overrides.depAd = depAd;
     if (arrAd && arrAd !== formation.shared.arrAd) overrides.arrAd = arrAd;
+    // Migration: if element has reg/type/wtc that differ from shared and aren't yet
+    // tracked as overrides, mark them now (handles pre-FR-09 formations).
+    if (el.reg  && !overrides.reg  && el.reg  !== formation.shared.reg)  overrides.reg  = el.reg;
+    if (el.type && !overrides.type && el.type !== formation.shared.type) overrides.type = el.type;
+    if (el.wtc  && !overrides.wtc  && el.wtc  !== formation.shared.wtc)  overrides.wtc  = el.wtc;
 
     return {
       ordinal:    el.ordinal    || idx + 1,
