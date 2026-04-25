@@ -2303,7 +2303,8 @@ function renderFormationDetails(m) {
 
     // FR-13: highlight rows where the element has diverged from normal/shared state
     const isDiverged = (el.status !== (f.elements[0]?.status || "PLANNED")) ||
-                       (r.outcomeStatus && r.outcomeStatus !== "NORMAL");
+                       (r.outcomeStatus && r.outcomeStatus !== "NORMAL") ||
+                       Boolean(r.actualDestinationAd);
     const rowClass = isDiverged ? " class=\"fmn-el-diverged\"" : "";
 
     return `
@@ -2359,6 +2360,25 @@ function renderFormationDetails(m) {
             ${outcomeOptions}
           </select>
         </td>
+        <td class="fmn-act-dest-cell">
+          <input class="fmn-el-input fmn-el-act-dest-ad" type="text"
+            value="${escapeHtml(r.actualDestinationAd)}"
+            placeholder="ICAO" maxlength="4"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Actual destination AD for ${escapeHtml(el.callsign)}" />
+          <input class="fmn-el-input fmn-el-act-dest-text" type="text"
+            value="${escapeHtml(r.actualDestinationText)}"
+            placeholder="Description (opt.)"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Actual destination description for ${escapeHtml(el.callsign)}" />
+        </td>
+        <td>
+          <input class="fmn-el-input fmn-el-outcome-time" type="text"
+            value="${escapeHtml(r.outcomeTime)}"
+            placeholder="HHMM" maxlength="5"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Outcome time for ${escapeHtml(el.callsign)}" />
+        </td>
         <td class="fmn-reason-cell">
           <input class="fmn-el-input fmn-el-reason" type="text"
             value="${escapeHtml(r.outcomeReason)}"
@@ -2398,6 +2418,8 @@ function renderFormationDetails(m) {
               <th>FIS</th>
               <th>Mvts</th>
               <th>Outcome</th>
+              <th>Act Dest</th>
+              <th>Out Time</th>
               <th>Reason</th>
               <th></th>
             </tr>
@@ -7708,19 +7730,25 @@ export function initLiveBoard() {
     const row = btn.closest("tr");
     if (!row) return;
 
-    const statusSel   = row.querySelector(".fmn-el-select");
-    const outcomeSel  = row.querySelector(".fmn-el-outcome");
-    const depAdInputs = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
-    const depInput    = row.querySelector(".fmn-el-dep");
-    const arrInput    = row.querySelector(".fmn-el-arr");
-    const reasonInput = row.querySelector(".fmn-el-reason");
+    const statusSel       = row.querySelector(".fmn-el-select");
+    const outcomeSel      = row.querySelector(".fmn-el-outcome");
+    const depAdInputs     = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
+    const depInput        = row.querySelector(".fmn-el-dep");
+    const arrInput        = row.querySelector(".fmn-el-arr");
+    const actDestAdInput  = row.querySelector(".fmn-el-act-dest-ad");
+    const actDestTextInput = row.querySelector(".fmn-el-act-dest-text");
+    const outcomeTimeInput = row.querySelector(".fmn-el-outcome-time");
+    const reasonInput     = row.querySelector(".fmn-el-reason");
 
     // Validate and build patch
-    const rawStatus  = statusSel?.value  || "PLANNED";
-    const rawOutcome = outcomeSel?.value || "NORMAL";
-    const rawDepAd   = (depAdInputs[0]?.value || "").toUpperCase().trim();
-    const rawArrAd   = (depAdInputs[1]?.value || "").toUpperCase().trim();
-    const rawReason  = (reasonInput?.value || "").trim();
+    const rawStatus      = statusSel?.value  || "PLANNED";
+    const rawOutcome     = outcomeSel?.value || "NORMAL";
+    const rawDepAd       = (depAdInputs[0]?.value || "").toUpperCase().trim();
+    const rawArrAd       = (depAdInputs[1]?.value || "").toUpperCase().trim();
+    const rawActDestAd   = (actDestAdInput?.value  || "").toUpperCase().trim();
+    const rawActDestText = (actDestTextInput?.value || "").trim();
+    const rawOutcomeTime = (outcomeTimeInput?.value || "").trim();
+    const rawReason      = (reasonInput?.value || "").trim();
 
     // Validate depAd/arrAd
     if (!isValidIcaoAd(rawDepAd)) {
@@ -7731,13 +7759,31 @@ export function initLiveBoard() {
       showToast(`Arr AD "${rawArrAd}" must be empty or a 4-character ICAO code.`, 'error');
       return;
     }
+    // Validate actualDestinationAd (ICAO or empty)
+    if (!isValidIcaoAd(rawActDestAd)) {
+      showToast(`Actual Dest AD "${rawActDestAd}" must be empty or a 4-character ICAO code.`, 'error');
+      return;
+    }
+    // Validate outcomeTime (time format or empty)
+    if (rawOutcomeTime) {
+      const vot = validateTime(rawOutcomeTime);
+      if (!vot.valid) {
+        showToast(`Outcome Time "${rawOutcomeTime}" is not valid — use HHMM or HH:MM format.`, 'error');
+        return;
+      }
+    }
 
     const patch = {
-      status: rawStatus,
-      depAd: rawDepAd,
-      arrAd: rawArrAd,
-      outcomeStatus: rawOutcome,
-      outcomeReason: rawReason,
+      status:              rawStatus,
+      depAd:               rawDepAd,
+      arrAd:               rawArrAd,
+      outcomeStatus:       rawOutcome,
+      outcomeReason:       rawReason,
+      actualDestinationAd:   rawActDestAd,
+      actualDestinationText: rawActDestText,
+      outcomeTime: rawOutcomeTime
+        ? (validateTime(rawOutcomeTime).normalized || rawOutcomeTime)
+        : "",
     };
 
     if (depInput?.value?.trim()) {

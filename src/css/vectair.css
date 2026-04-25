@@ -1080,6 +1080,25 @@ tr.strip.ft-ovr > td {
   font-family: inherit;
   max-width: 90px;
 }
+/* Stacked actual-destination cell (ICAO code + optional description) */
+.fmn-act-dest-cell {
+  min-width: 90px;
+}
+.fmn-el-act-dest-ad {
+  width: 44px;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 2px;
+}
+.fmn-el-act-dest-text {
+  display: block;
+  width: 80px;
+  font-size: 10px;
+}
+/* Outcome time input */
+.fmn-el-outcome-time {
+  width: 48px;
+}
 /* Reason free-text input */
 .fmn-reason-cell {
   min-width: 110px;
