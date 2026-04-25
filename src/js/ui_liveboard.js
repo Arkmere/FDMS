@@ -27,6 +27,7 @@ import {
   validateRequired,
   checkPastTime,
   computeFormationWTC,
+  derivedFormationStatus,
   getResolvedFormationMovements,
   updateFormationElement,
   cascadeFormationStatus,
@@ -2184,6 +2185,12 @@ function resolveElementForDisplay(el, shared, m) {
     status: el.status,
     depActual: el.depActual || "",
     arrActual: el.arrActual || "",
+    // FR-13: per-element outcome fields
+    outcomeStatus:         el.outcomeStatus         || "NORMAL",
+    outcomeReason:         el.outcomeReason         || "",
+    actualDestinationAd:   el.actualDestinationAd   || "",
+    actualDestinationText: el.actualDestinationText || "",
+    outcomeTime:           el.outcomeTime           || "",
     isInherited,
   };
 }
@@ -2196,12 +2203,34 @@ function renderFormationDetails(m) {
   const mvId = m.id;
   const totalMovements = getResolvedFormationMovements(m);
 
-  // ── Section A: Formation Summary ──────────────────────────────────────────
+  // ── Section A: Formation Summary (FR-13: derived status + divergence badge) ─
+  const derived = derivedFormationStatus(f.elements);
+  const uniqueStatuses = new Set(f.elements.map(el => el.status || "PLANNED"));
+  const hasDivergence = uniqueStatuses.size > 1;
+  const divergenceBadge = hasDivergence
+    ? `<span class="fmn-diverged-badge" title="Elements have different statuses — formation has diverged">DIVERGED</span>`
+    : "";
+  // Build a compact per-status count string when diverged (e.g. "1 Active · 2 Completed")
+  const statusCountText = hasDivergence ? (() => {
+    const counts = {};
+    f.elements.forEach(el => {
+      const s = el.status || "PLANNED";
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([s, n]) => `${n} ${statusLabel(s)}`)
+      .join(" · ");
+  })() : "";
+
   const summaryHtml = `
     <div class="fmn-summary">
       <div class="fmn-summary-item">
         <span class="fmn-summary-label">Formation</span>
         <span class="fmn-summary-value">${escapeHtml(f.label || "—")}</span>
+      </div>
+      <div class="fmn-summary-item">
+        <span class="fmn-summary-label">Summary Status</span>
+        <span class="fmn-summary-value">${escapeHtml(statusLabel(derived))}${divergenceBadge}${statusCountText ? `<span class="fmn-status-breakdown">${escapeHtml(statusCountText)}</span>` : ""}</span>
       </div>
       <div class="fmn-summary-item">
         <span class="fmn-summary-label">WTC Current</span>
@@ -2251,12 +2280,18 @@ function renderFormationDetails(m) {
       : (val ? escapeHtml(String(val)) : "—");
   };
 
+  const OUTCOME_STATUS_OPTIONS = ["NORMAL", "DIVERTED", "CHANGED", "CANCELLED"];
+
   const rows = f.elements.map((el, idx) => {
     const r = resolveElementForDisplay(el, shared, m);
     const inh = r.isInherited;
 
     const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
       .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
+      .join("");
+
+    const outcomeOptions = OUTCOME_STATUS_OPTIONS
+      .map(s => `<option value="${s}"${r.outcomeStatus === s ? " selected" : ""}>${escapeHtml(s.charAt(0) + s.slice(1).toLowerCase())}</option>`)
       .join("");
 
     // For the editable AD inputs: pass the element's own override value (empty if inherited)
@@ -2266,8 +2301,13 @@ function renderFormationDetails(m) {
     const sharedDepAdHint = escapeHtml(shared.depAd || m.depAd || "");
     const sharedArrAdHint = escapeHtml(shared.arrAd || m.arrAd || "");
 
+    // FR-13: highlight rows where the element has diverged from normal/shared state
+    const isDiverged = (el.status !== (f.elements[0]?.status || "PLANNED")) ||
+                       (r.outcomeStatus && r.outcomeStatus !== "NORMAL");
+    const rowClass = isDiverged ? " class=\"fmn-el-diverged\"" : "";
+
     return `
-      <tr>
+      <tr${rowClass}>
         <td class="fmn-ordinal">${r.ordinal}</td>
         <td>${escapeHtml(r.callsign)}</td>
         <td>${cellVal(r.reg,  inh.reg)}</td>
@@ -2314,6 +2354,19 @@ function renderFormationDetails(m) {
         <td class="fmn-count-cell"><span class="fmn-inherited" title="Shared across formation">${r.fisCount}</span></td>
         <td class="fmn-mvt-cell">${r.movements}</td>
         <td>
+          <select class="fmn-el-outcome" data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Outcome for ${escapeHtml(el.callsign)}">
+            ${outcomeOptions}
+          </select>
+        </td>
+        <td class="fmn-reason-cell">
+          <input class="fmn-el-input fmn-el-reason" type="text"
+            value="${escapeHtml(r.outcomeReason)}"
+            placeholder="Reason / note" maxlength="200"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Outcome reason for ${escapeHtml(el.callsign)}" />
+        </td>
+        <td>
           <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
             aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
         </td>
@@ -2344,6 +2397,8 @@ function renderFormationDetails(m) {
               <th>O/S</th>
               <th>FIS</th>
               <th>Mvts</th>
+              <th>Outcome</th>
+              <th>Reason</th>
               <th></th>
             </tr>
           </thead>
@@ -7653,17 +7708,20 @@ export function initLiveBoard() {
     const row = btn.closest("tr");
     if (!row) return;
 
-    const statusSel  = row.querySelector(".fmn-el-select");
+    const statusSel   = row.querySelector(".fmn-el-select");
+    const outcomeSel  = row.querySelector(".fmn-el-outcome");
     const depAdInputs = row.querySelectorAll(".fmn-el-ad");  // [0] = depAd, [1] = arrAd
-    const depInput   = row.querySelector(".fmn-el-dep");
-    const arrInput   = row.querySelector(".fmn-el-arr");
+    const depInput    = row.querySelector(".fmn-el-dep");
+    const arrInput    = row.querySelector(".fmn-el-arr");
+    const reasonInput = row.querySelector(".fmn-el-reason");
 
     // Validate and build patch
-    const rawStatus = statusSel?.value || "PLANNED";
-    const rawDepAd  = (depAdInputs[0]?.value || "").toUpperCase().trim();
-    const rawArrAd  = (depAdInputs[1]?.value || "").toUpperCase().trim();
+    const rawStatus  = statusSel?.value  || "PLANNED";
+    const rawOutcome = outcomeSel?.value || "NORMAL";
+    const rawDepAd   = (depAdInputs[0]?.value || "").toUpperCase().trim();
+    const rawArrAd   = (depAdInputs[1]?.value || "").toUpperCase().trim();
+    const rawReason  = (reasonInput?.value || "").trim();
 
-    // Validate WTC from element (already in storage; not re-entered here)
     // Validate depAd/arrAd
     if (!isValidIcaoAd(rawDepAd)) {
       showToast(`Dep AD "${rawDepAd}" must be empty or a 4-character ICAO code.`, 'error');
@@ -7674,7 +7732,13 @@ export function initLiveBoard() {
       return;
     }
 
-    const patch = { status: rawStatus, depAd: rawDepAd, arrAd: rawArrAd };
+    const patch = {
+      status: rawStatus,
+      depAd: rawDepAd,
+      arrAd: rawArrAd,
+      outcomeStatus: rawOutcome,
+      outcomeReason: rawReason,
+    };
 
     if (depInput?.value?.trim()) {
       const vd = validateTime(depInput.value.trim());

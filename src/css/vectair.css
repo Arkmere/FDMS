@@ -1044,6 +1044,50 @@ tr.strip.ft-ovr > td {
   font-style: italic;
 }
 
+/* FR-13: divergence badge in formation summary */
+.fmn-diverged-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #f5a623;
+  color: #fff;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+/* Per-status count breakdown shown next to derived status */
+.fmn-status-breakdown {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--va-text-soft);
+  margin-top: 2px;
+}
+/* Highlight rows where an element has diverged from others */
+.formation-table tr.fmn-el-diverged > td {
+  background: #fffae8;
+}
+/* Outcome select — same family as status select, slightly narrower */
+.fmn-el-outcome {
+  font-size: 11px;
+  padding: 1px 2px;
+  border: 1px solid #b0b8bc;
+  border-radius: 2px;
+  background: #fff;
+  font-family: inherit;
+  max-width: 90px;
+}
+/* Reason free-text input */
+.fmn-reason-cell {
+  min-width: 110px;
+}
+.fmn-el-reason {
+  width: 100px;
+}
+
 /* Ordinal column — narrow, centred */
 .formation-table td.fmn-ordinal,
 .formation-table th:first-child {
