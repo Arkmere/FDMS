@@ -1107,6 +1107,14 @@ tr.strip.ft-ovr > td {
   width: 100px;
 }
 
+/* FR-14: per-element identity inputs (attribution callsign + pilot name) */
+.fmn-el-attr-cs {
+  width: 72px;
+}
+.fmn-el-pilot {
+  width: 90px;
+}
+
 /* Ordinal column — narrow, centred */
 .formation-table td.fmn-ordinal,
 .formation-table th:first-child {

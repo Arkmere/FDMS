@@ -1296,6 +1296,32 @@ export function computeFormationWTC(elements, shared = {}) {
 }
 
 /**
+ * FR-14: Resolve the attribution callsign for a formation element.
+ * Priority: explicit underlyingCallsign → visible element callsign → master callsignCode.
+ * Used by reporting to credit stats to the correct operational identity.
+ * @param {object} el - Formation element
+ * @param {object} m  - Parent movement
+ * @returns {string}
+ */
+export function getElementAttributionIdentity(el, m) {
+  return (el.underlyingCallsign || "").trim()
+    || (el.callsign || "").trim()
+    || (m.callsignCode || "").trim();
+}
+
+/**
+ * FR-14: Resolve the pilot name for a formation element.
+ * Priority: explicit element pilotName → master movement captain.
+ * Used by reporting to credit sortie stats to the correct pilot.
+ * @param {object} el - Formation element
+ * @param {object} m  - Parent movement
+ * @returns {string}
+ */
+export function getResolvedElementPilot(el, m) {
+  return (el.pilotName || "").trim() || (m.captain || "").trim();
+}
+
+/**
  * Derive a conservative summary status from formation element states.
  * Priority: ACTIVE > PLANNED > COMPLETED > CANCELLED > mixed-terminal → COMPLETED.
  * "Mixed terminal" means some elements COMPLETED and some CANCELLED.
@@ -1408,6 +1434,9 @@ function normalizeFormation(formation, movement = null) {
       actualDestinationAd:   el.actualDestinationAd   || "",
       actualDestinationText: el.actualDestinationText || "",
       outcomeTime:           el.outcomeTime           || "",
+      // FR-14: per-element identity for attribution (distinct from visible callsign)
+      pilotName:             el.pilotName             || "",
+      underlyingCallsign:    el.underlyingCallsign    || "",
       overrides
     };
   });

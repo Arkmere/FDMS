@@ -22,7 +22,7 @@
 // This divergence is documented here and in STATE.md and must not be
 // accidentally merged or silently changed in future sprints.
 
-import { getMovements, getCancelledSorties } from './datamodel.js';
+import { getMovements, getCancelledSorties, getElementAttributionIdentity, getResolvedElementPilot } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';
 
 // ========================================
@@ -652,77 +652,82 @@ export function computeLeaderboards(movements, hoursMap = null) {
   let callsignPresent = 0;
   let registrationPresent = 0;
 
-  for (const m of movements) {
-    const captain = m.captain?.trim() || 'Unknown';
-    const callsign = m.callsignCode?.trim() || 'Unknown';
-    const registration = m.registration?.trim() || 'Unknown';
+  // Shared helper: credit one sortie entry to the three leaderboard buckets.
+  function creditSortie(captain, callsign, registration, osCount, tngCount, fisCount) {
+    const captainKey  = captain      || 'Unknown';
+    const callsignKey = callsign     || 'Unknown';
+    const regKey      = registration || 'Unknown';
 
+    if (!byCaptain[captainKey]) {
+      byCaptain[captainKey] = { name: captainKey, sorties: 0, overshoots: 0, overshootFlights: 0, fis: 0, fisFlights: 0, tng: 0, tngFlights: 0 };
+    }
+    byCaptain[captainKey].sorties++;
+    byCaptain[captainKey].overshoots += osCount;
+    if (osCount > 0) byCaptain[captainKey].overshootFlights++;
+    byCaptain[captainKey].fis += fisCount;
+    if (fisCount > 0) byCaptain[captainKey].fisFlights++;
+    byCaptain[captainKey].tng += tngCount;
+    if (tngCount > 0) byCaptain[captainKey].tngFlights++;
+
+    if (!byCallsign[callsignKey]) {
+      byCallsign[callsignKey] = { name: callsignKey, sorties: 0, overshoots: 0, overshootFlights: 0, fis: 0, fisFlights: 0, tng: 0, tngFlights: 0 };
+    }
+    byCallsign[callsignKey].sorties++;
+    byCallsign[callsignKey].overshoots += osCount;
+    if (osCount > 0) byCallsign[callsignKey].overshootFlights++;
+    byCallsign[callsignKey].fis += fisCount;
+    if (fisCount > 0) byCallsign[callsignKey].fisFlights++;
+    byCallsign[callsignKey].tng += tngCount;
+    if (tngCount > 0) byCallsign[callsignKey].tngFlights++;
+
+    if (!byRegistration[regKey]) {
+      byRegistration[regKey] = { name: regKey, sorties: 0, overshoots: 0, overshootFlights: 0, fis: 0, fisFlights: 0, tng: 0, tngFlights: 0 };
+    }
+    byRegistration[regKey].sorties++;
+    byRegistration[regKey].overshoots += osCount;
+    if (osCount > 0) byRegistration[regKey].overshootFlights++;
+    byRegistration[regKey].fis += fisCount;
+    if (fisCount > 0) byRegistration[regKey].fisFlights++;
+    byRegistration[regKey].tng += tngCount;
+    if (tngCount > 0) byRegistration[regKey].tngFlights++;
+  }
+
+  for (const m of movements) {
+    // Completeness tracking always at movement level (not expanded per element).
     if (m.captain?.trim()) captainPresent++;
     if (m.callsignCode?.trim()) callsignPresent++;
     if (m.registration?.trim()) registrationPresent++;
 
-    // By Captain
-    if (!byCaptain[captain]) {
-      byCaptain[captain] = {
-        name: captain,
-        sorties: 0,
-        overshoots: 0,
-        overshootFlights: 0,
-        fis: 0,
-        fisFlights: 0,
-        tng: 0,
-        tngFlights: 0
-      };
+    // FR-14: Formation element expansion — credit each element when it carries
+    // its own identity (pilotName or underlyingCallsign), so that stats are
+    // attributed to the real aircraft/pilot rather than the master formation label.
+    const hasFormation = m.formation && Array.isArray(m.formation.elements) && m.formation.elements.length > 0;
+    if (hasFormation) {
+      const elements = m.formation.elements;
+      const hasElementIdentity = elements.some(
+        el => (el.underlyingCallsign || '').trim() || (el.pilotName || '').trim()
+      );
+      if (hasElementIdentity) {
+        for (const el of elements) {
+          const captain      = getResolvedElementPilot(el, m);
+          const callsign     = getElementAttributionIdentity(el, m);
+          const registration = (el.reg || m.registration || '').trim();
+          const ov           = el.overrides || {};
+          const osCount      = Number('osCount'  in ov ? ov.osCount  : (m.osCount  || 0));
+          const tngCount     = Number('tngCount' in ov ? ov.tngCount : (m.tngCount || 0));
+          // FIS has no per-element override; always from master.
+          const fisCount     = Number(m.fisCount || 0);
+          creditSortie(captain, callsign, registration, osCount, tngCount, fisCount);
+        }
+        continue; // Skip master-level attribution for this movement.
+      }
     }
-    byCaptain[captain].sorties++;
-    byCaptain[captain].overshoots += m.osCount || 0;
-    if (m.osCount > 0) byCaptain[captain].overshootFlights++;
-    byCaptain[captain].fis += m.fisCount || 0;
-    if (m.fisCount > 0) byCaptain[captain].fisFlights++;
-    byCaptain[captain].tng += m.tngCount || 0;
-    if (m.tngCount > 0) byCaptain[captain].tngFlights++;
 
-    // By Callsign
-    if (!byCallsign[callsign]) {
-      byCallsign[callsign] = {
-        name: callsign,
-        sorties: 0,
-        overshoots: 0,
-        overshootFlights: 0,
-        fis: 0,
-        fisFlights: 0,
-        tng: 0,
-        tngFlights: 0
-      };
-    }
-    byCallsign[callsign].sorties++;
-    byCallsign[callsign].overshoots += m.osCount || 0;
-    if (m.osCount > 0) byCallsign[callsign].overshootFlights++;
-    byCallsign[callsign].fis += m.fisCount || 0;
-    if (m.fisCount > 0) byCallsign[callsign].fisFlights++;
-    byCallsign[callsign].tng += m.tngCount || 0;
-    if (m.tngCount > 0) byCallsign[callsign].tngFlights++;
-
-    // By Registration
-    if (!byRegistration[registration]) {
-      byRegistration[registration] = {
-        name: registration,
-        sorties: 0,
-        overshoots: 0,
-        overshootFlights: 0,
-        fis: 0,
-        fisFlights: 0,
-        tng: 0,
-        tngFlights: 0
-      };
-    }
-    byRegistration[registration].sorties++;
-    byRegistration[registration].overshoots += m.osCount || 0;
-    if (m.osCount > 0) byRegistration[registration].overshootFlights++;
-    byRegistration[registration].fis += m.fisCount || 0;
-    if (m.fisCount > 0) byRegistration[registration].fisFlights++;
-    byRegistration[registration].tng += m.tngCount || 0;
-    if (m.tngCount > 0) byRegistration[registration].tngFlights++;
+    // Non-formation or formation without element identity: attribute to master strip.
+    const captain      = m.captain?.trim() || '';
+    const callsign     = m.callsignCode?.trim() || '';
+    const registration = m.registration?.trim() || '';
+    creditSortie(captain, callsign, registration, m.osCount || 0, m.tngCount || 0, m.fisCount || 0);
   }
 
   // Convert to arrays and sort by sorties
