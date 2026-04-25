@@ -27,6 +27,7 @@ import {
   validateRequired,
   checkPastTime,
   computeFormationWTC,
+  getResolvedFormationMovements,
   updateFormationElement,
   cascadeFormationStatus,
   isValidWtcChar,
@@ -2135,92 +2136,202 @@ function getEgowIndicatorColor(egowCode, unitCode) {
   }
 }
 
+// Nominal runway base per flight type — mirrors _nominalBase() in datamodel.js (not exported).
+function _fmnNominalBase(ft) {
+  return ft === "LOC" ? 2 : (ft === "DEP" || ft === "ARR") ? 1 : 0;
+}
+
+/**
+ * Resolve all display-relevant fields for a single formation element.
+ * Applies shared-defaults fallback for fields the element does not override.
+ * Returns resolved values plus an isInherited map so the UI can distinguish
+ * inherited (muted) values from element-specific overrides.
+ */
+function resolveElementForDisplay(el, shared, m) {
+  const ov = el.overrides || {};
+  const reg      = el.reg  || shared.reg  || "";
+  const type     = el.type || shared.type || "";
+  const wtc      = el.wtc  || shared.wtc  || "";
+  const depAd    = el.depAd || shared.depAd || m.depAd || "";
+  const arrAd    = el.arrAd || shared.arrAd || m.arrAd || "";
+  const flightType = String("flightType" in ov ? ov.flightType : (shared.flightType || m.flightType || "")).toUpperCase();
+  const tngCount = "tngCount" in ov ? Number(ov.tngCount) : Number(shared.tngCount ?? m.tngCount ?? 0);
+  const osCount  = "osCount"  in ov ? Number(ov.osCount)  : Number(shared.osCount  ?? m.osCount  ?? 0);
+  // FIS has no per-element override; always from shared/master.
+  const fisCount = Number(shared.fisCount ?? m.fisCount ?? 0);
+
+  const base = _fmnNominalBase(flightType);
+  const movements = base + 2 * Math.max(0, Math.trunc(tngCount)) + Math.max(0, Math.trunc(osCount));
+
+  // A field is "inherited" when the element carries no independent override —
+  // i.e. it relies on the shared default rather than its own stored value.
+  const isInherited = {
+    reg:      !("reg"      in ov),
+    type:     !("type"     in ov),
+    wtc:      !("wtc"      in ov),
+    depAd:    !("depAd"    in ov),
+    arrAd:    !("arrAd"    in ov),
+    tngCount: !("tngCount" in ov),
+    osCount:  !("osCount"  in ov),
+    fisCount: true,
+  };
+
+  return {
+    ordinal: el.ordinal,
+    callsign: el.callsign,
+    reg, type, wtc, depAd, arrAd, flightType,
+    tngCount, osCount, fisCount, movements,
+    status: el.status,
+    depActual: el.depActual || "",
+    arrActual: el.arrActual || "",
+    isInherited,
+  };
+}
+
 function renderFormationDetails(m) {
   if (!m.formation || !Array.isArray(m.formation.elements)) return "";
 
+  const f = m.formation;
+  const shared = f.shared || {};
   const mvId = m.id;
-  const masterDepAd = escapeHtml(m.depAd || "");
-  const masterArrAd = escapeHtml(m.arrAd || "");
+  const totalMovements = getResolvedFormationMovements(m);
 
-  const rows = m.formation.elements
-    .map((el, idx) => {
-      const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
-        .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
-        .join("");
+  // ── Section A: Formation Summary ──────────────────────────────────────────
+  const summaryHtml = `
+    <div class="fmn-summary">
+      <div class="fmn-summary-item">
+        <span class="fmn-summary-label">Formation</span>
+        <span class="fmn-summary-value">${escapeHtml(f.label || "—")}</span>
+      </div>
+      <div class="fmn-summary-item">
+        <span class="fmn-summary-label">WTC Current</span>
+        <span class="fmn-summary-value fmn-wtc">${escapeHtml(f.wtcCurrent || "—")}</span>
+      </div>
+      <div class="fmn-summary-item">
+        <span class="fmn-summary-label">WTC Max</span>
+        <span class="fmn-summary-value fmn-wtc">${escapeHtml(f.wtcMax || "—")}</span>
+      </div>
+      <div class="fmn-summary-item">
+        <span class="fmn-summary-label">Total Movements</span>
+        <span class="fmn-summary-value">${totalMovements}</span>
+      </div>
+    </div>`;
 
-      // Dep AD / Arr AD: show element value or master fallback (muted) when empty
-      const elDepAd = el.depAd || "";
-      const elArrAd = el.arrAd || "";
-      const depAdDisplay = elDepAd
-        ? escapeHtml(elDepAd)
-        : `<span class="fmn-fallback" title="Inherited from master strip">${masterDepAd}</span>`;
-      const arrAdDisplay = elArrAd
-        ? escapeHtml(elArrAd)
-        : `<span class="fmn-fallback" title="Inherited from master strip">${masterArrAd}</span>`;
+  // ── Section B: Shared / Master Defaults ───────────────────────────────────
+  const sharedFields = [
+    ["Base Callsign", f.baseCallsign],
+    ["Flight Type",   shared.flightType || m.flightType],
+    ["Dep AD",        shared.depAd      || m.depAd],
+    ["Arr AD",        shared.arrAd      || m.arrAd],
+    ["Reg",           shared.reg        || m.reg],
+    ["Type",          shared.type       || m.type],
+    ["WTC",           shared.wtc        || m.wtc],
+    ["T&amp;Gs",      shared.tngCount   ?? m.tngCount ?? 0],
+    ["O/S",           shared.osCount    ?? m.osCount  ?? 0],
+    ["FIS",           shared.fisCount   ?? m.fisCount ?? 0],
+  ].filter(([, val]) => val !== "" && val !== undefined && val !== null);
 
-      return `
-        <tr>
-          <td>${escapeHtml(el.callsign)}</td>
-          <td>${escapeHtml(el.reg || "—")}</td>
-          <td>${escapeHtml(el.type || "—")}</td>
-          <td>${escapeHtml(el.wtc || "—")}</td>
-          <td>
-            <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}" aria-label="Status for ${escapeHtml(el.callsign)}">
-              ${statusOptions}
-            </select>
-          </td>
-          <td class="fmn-ad-cell">
-            <input class="fmn-el-input fmn-el-ad" type="text"
-              value="${escapeHtml(elDepAd)}"
-              placeholder="${masterDepAd || "ICAO"}" maxlength="4"
-              data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Dep AD for ${escapeHtml(el.callsign)}" />
-            ${!elDepAd && masterDepAd ? `<span class="fmn-fallback">${masterDepAd}</span>` : ""}
-          </td>
-          <td class="fmn-ad-cell">
-            <input class="fmn-el-input fmn-el-ad" type="text"
-              value="${escapeHtml(elArrAd)}"
-              placeholder="${masterArrAd || "ICAO"}" maxlength="4"
-              data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Arr AD for ${escapeHtml(el.callsign)}" />
-            ${!elArrAd && masterArrAd ? `<span class="fmn-fallback">${masterArrAd}</span>` : ""}
-          </td>
-          <td>
-            <input class="fmn-el-input fmn-el-dep" type="text"
-              value="${escapeHtml(el.depActual || "")}"
-              placeholder="HHMM" maxlength="5"
-              data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Dep actual for ${escapeHtml(el.callsign)}" />
-          </td>
-          <td>
-            <input class="fmn-el-input fmn-el-arr" type="text"
-              value="${escapeHtml(el.arrActual || "")}"
-              placeholder="HHMM" maxlength="5"
-              data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
-          </td>
-          <td>
-            <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Save element ${idx + 1} (${escapeHtml(el.callsign)})">Save</button>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+  const sharedHtml = `
+    <div class="fmn-shared">
+      <div class="fmn-shared-title">Shared Defaults</div>
+      <div class="fmn-shared-note">Apply to all elements unless overridden per aircraft</div>
+      <div class="kv fmn-shared-kv">
+        ${sharedFields.map(([label, val]) =>
+          `<div class="kv-label">${label}</div><div class="kv-value">${escapeHtml(String(val))}</div>`
+        ).join("")}
+      </div>
+    </div>`;
+
+  // ── Section C: Element Table ───────────────────────────────────────────────
+  // cellVal: show a resolved value; mute + italicise it when inherited from shared.
+  const cellVal = (val, inherited) => {
+    const display = val ? escapeHtml(String(val)) : "—";
+    return inherited
+      ? `<span class="fmn-inherited" title="Inherited from shared defaults">${display}</span>`
+      : (val ? escapeHtml(String(val)) : "—");
+  };
+
+  const rows = f.elements.map((el, idx) => {
+    const r = resolveElementForDisplay(el, shared, m);
+    const inh = r.isInherited;
+
+    const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
+      .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
+      .join("");
+
+    // For the editable AD inputs: pass the element's own override value (empty if inherited)
+    // so that saving an empty string means "clear override, revert to shared default".
+    const ownDepAd = "depAd" in (el.overrides || {}) ? escapeHtml(el.overrides.depAd) : "";
+    const ownArrAd = "arrAd" in (el.overrides || {}) ? escapeHtml(el.overrides.arrAd) : "";
+    const sharedDepAdHint = escapeHtml(shared.depAd || m.depAd || "");
+    const sharedArrAdHint = escapeHtml(shared.arrAd || m.arrAd || "");
+
+    return `
+      <tr>
+        <td class="fmn-ordinal">${r.ordinal}</td>
+        <td>${escapeHtml(r.callsign)}</td>
+        <td>${cellVal(r.reg,  inh.reg)}</td>
+        <td>${cellVal(r.type, inh.type)}</td>
+        <td>${cellVal(r.wtc,  inh.wtc)}</td>
+        <td>
+          <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Status for ${escapeHtml(el.callsign)}">
+            ${statusOptions}
+          </select>
+        </td>
+        <td class="fmn-ad-cell">
+          <input class="fmn-el-input fmn-el-ad" type="text"
+            value="${ownDepAd}"
+            placeholder="${sharedDepAdHint || "ICAO"}" maxlength="4"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Dep AD for ${escapeHtml(el.callsign)}" />
+          ${inh.depAd && sharedDepAdHint ? `<span class="fmn-inherited fmn-fallback">${sharedDepAdHint}</span>` : ""}
+        </td>
+        <td class="fmn-ad-cell">
+          <input class="fmn-el-input fmn-el-ad" type="text"
+            value="${ownArrAd}"
+            placeholder="${sharedArrAdHint || "ICAO"}" maxlength="4"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Arr AD for ${escapeHtml(el.callsign)}" />
+          ${inh.arrAd && sharedArrAdHint ? `<span class="fmn-inherited fmn-fallback">${sharedArrAdHint}</span>` : ""}
+        </td>
+        <td>
+          <input class="fmn-el-input fmn-el-dep" type="text"
+            value="${escapeHtml(r.depActual)}"
+            placeholder="HHMM" maxlength="5"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Dep actual for ${escapeHtml(el.callsign)}" />
+        </td>
+        <td>
+          <input class="fmn-el-input fmn-el-arr" type="text"
+            value="${escapeHtml(r.arrActual)}"
+            placeholder="HHMM" maxlength="5"
+            data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
+        </td>
+        <td class="fmn-count-cell">${cellVal(String(r.tngCount), inh.tngCount)}</td>
+        <td class="fmn-count-cell">${cellVal(String(r.osCount),  inh.osCount)}</td>
+        <td class="fmn-count-cell"><span class="fmn-inherited" title="Shared across formation">${r.fisCount}</span></td>
+        <td class="fmn-mvt-cell">${r.movements}</td>
+        <td>
+          <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
+            aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
+        </td>
+      </tr>`;
+  }).join("");
 
   return `
     <div class="expand-subsection">
       <div class="expand-title">Formation</div>
-      <div class="kv">
-        <div class="kv-label">Label</div><div class="kv-value">${escapeHtml(m.formation.label || "—")}</div>
-        <div class="kv-label">Current WTC</div><div class="kv-value">${escapeHtml(m.formation.wtcCurrent || "—")}</div>
-        <div class="kv-label">Max WTC</div><div class="kv-value">${escapeHtml(m.formation.wtcMax || "—")}</div>
-      </div>
+      ${summaryHtml}
+      ${sharedHtml}
+      <div class="fmn-elements-title">Elements</div>
       <div class="formation-table-wrap">
         <table class="formation-table">
           <thead>
             <tr>
-              <th>Element</th>
+              <th>#</th>
+              <th>Callsign</th>
               <th>Reg</th>
               <th>Type</th>
               <th>WTC</th>
@@ -2229,6 +2340,10 @@ function renderFormationDetails(m) {
               <th>Arr AD</th>
               <th>Dep</th>
               <th>Arr</th>
+              <th>T&amp;G</th>
+              <th>O/S</th>
+              <th>FIS</th>
+              <th>Mvts</th>
               <th></th>
             </tr>
           </thead>
@@ -2237,8 +2352,7 @@ function renderFormationDetails(m) {
           </tbody>
         </table>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 /**

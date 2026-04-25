@@ -969,6 +969,100 @@ tr.strip.ft-ovr > td {
   max-width: 100px;
 }
 
+/* ── Formation expanded-strip enhancements (FR-12) ─────────────────────── */
+
+/* Section A: compact summary bar */
+.fmn-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  background: #eef1f4;
+  border-radius: 3px;
+}
+.fmn-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.fmn-summary-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--va-text-soft);
+}
+.fmn-summary-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--va-text);
+}
+.fmn-summary-value.fmn-wtc {
+  color: var(--va-accent-brown);
+}
+
+/* Section B: shared defaults panel */
+.fmn-shared {
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  background: #f7f8fa;
+  border: 1px solid var(--va-border);
+  border-radius: 3px;
+}
+.fmn-shared-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--va-text-soft);
+  margin-bottom: 2px;
+}
+.fmn-shared-note {
+  font-size: 10px;
+  color: #8a9baa;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+.fmn-shared-kv {
+  grid-template-columns: 90px 1fr;
+}
+
+/* Section C: element table sub-header */
+.fmn-elements-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--va-text-soft);
+  margin-top: 4px;
+  margin-bottom: 3px;
+}
+
+/* Inherited value: muted + italic to show "comes from shared defaults" */
+.fmn-inherited {
+  color: #8a9baa;
+  font-style: italic;
+}
+
+/* Ordinal column — narrow, centred */
+.formation-table td.fmn-ordinal,
+.formation-table th:first-child {
+  text-align: center;
+  width: 20px;
+  min-width: 20px;
+}
+
+/* Count and movement summary cells */
+.fmn-count-cell {
+  text-align: center;
+  min-width: 28px;
+}
+.fmn-mvt-cell {
+  text-align: center;
+  min-width: 32px;
+  font-weight: 700;
+}
+
 /* Alerts section in expanded strip */
 .expand-section-alerts {
   flex: 1 1 100%;
