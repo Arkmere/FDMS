@@ -7,7 +7,8 @@ Current headline status:
 - Dual UTC/local timeline ruler is implemented as a display-only enhancement; UTC authority is unchanged.
 - The internal timeline header strip has been removed; rulers now form the top/bottom boundaries of the timeline area.
 - `main` is current locally and matches `origin/main`.
-- The next active feature workstream is **Formation continuation / expansion**.
+- Formation system primary implementation is **substantially complete** (FR-02 through FR-14b); FR-15 documentation closeout is the active workstream.
+- Next feature workstream after FR-15: **Create From workflow** or Desktop Productization continuation.
 
 This file is the shared source of truth for the Manager–Worker workflow:
 
@@ -234,15 +235,96 @@ restore / export / reset hardening present
 backup metadata envelope and restore format detection in place
 3.5 Formations
 
-Currently implemented:
+The formation system has undergone substantial implementation across the FR ticket series (FR-02 through FR-14b). The following records the implemented model as it now exists in code. This is the authoritative baseline; do not rely on older notes that described a weaker or partial system.
 
-formation create / edit / remove
-Live Board formation badge and expanded details
-per-element editing
-inheritance semantics
-WTC current / max semantics implemented
+**A. Master strip role**
 
-Formations are usable, but formation continuation / expansion remains a V1 workstream and is now the next active feature area.
+The master strip is the formation summary shell. It holds the top-level movement fields (callsign, route, planned times, flight type) and a nested `formation` object containing:
+
+- `formation.label` — human-readable designation (e.g. `"CNNCT flight of 3"`)
+- `formation.wtcCurrent` — highest WTC of PLANNED/ACTIVE elements (dynamic)
+- `formation.wtcMax` — highest WTC of all elements regardless of status (preserved)
+- `formation.shared` — shared/default layer for fields inherited by all elements
+- `formation.elements[]` — array of per-element records (one per aircraft)
+
+The master does not flatten or collapse element truth. It is a summary shell over individually-tracked elements.
+
+**B. Element role**
+
+Each entry in `formation.elements[]` represents a real aircraft in the formation. Elements can inherit from the shared defaults layer and can independently override inherited fields. Each element carries its own:
+
+- `callsign` — base callsign + space + ordinal (e.g. `CNNCT 1`); convention mirrors ATC practice
+- `reg`, `type` — registration and aircraft type
+- `wtc` — wake turbulence category for this specific aircraft
+- `status` — `PLANNED` / `ACTIVE` / `COMPLETED` / `CANCELLED` (independent per element)
+- `depAd`, `arrAd` — departure and arrival aerodromes; empty string means inherit from shared layer (display-only fallback; stored as `""`)
+- `depActual`, `arrActual` — individual actual times (UTC HH:MM)
+- `tngCount`, `osCount`, `fisCount` — per-element or inherited counts
+- `outcomeStatus`, `actualDestinationAd`, `actualDestinationText`, `outcomeTime`, `outcomeReason` — per-element diversion / outcome detail (FR-13 / FR-13b)
+- `underlyingCallsign`, `pilotName` — per-element attribution identity and pilot (FR-14 / FR-14b)
+- `overrides` dict — tracks which fields have diverged from the shared layer
+- `ordinal` — 1-based position in formation (added by `normalizeFormation()`)
+
+**C. Entry model**
+
+Formation activation is explicit. The shared defaults layer (`formation.shared`) is populated from the master movement fields at creation time (master-first seeding, FR-07). `normalizeFormation()` re-derives and re-validates the shared layer on every load, including migration of pre-v1.1 formations (element-first synthesis, FR-08). Field-level inheritance is tracked per element via the `overrides` dict (FR-09): if an element field diverges from the shared value it is recorded in `overrides`; otherwise the shared fallback applies. In-session draft persistence retains partially-entered formation data within the current session (FR-03).
+
+Element callsigns are generated on the `BASE_CALLSIGN + " " + ordinal` convention (FR-04). A formation exists only when `elements.length >= 2`; the authoring UI clamps element count to min=2, max=12.
+
+**D. Operational behavior**
+
+- **Per-element movement counting** (FR-10): `getResolvedFormationMovements()` sums per-element nominal movement contributions, resolving each element's `tngCount`/`osCount` overrides against the shared layer. `egowRunwayContribution()` sums per-element actual EGOW events using element-level actual times with master fallback.
+
+- **Dynamic WTC** (FR-11): `formation.wtcCurrent` is recomputed as the highest WTC among PLANNED/ACTIVE elements after every element status change. `formation.wtcMax` is the highest WTC across all elements regardless of status and never decreases. WTC rank: `L < S < M < H < J`.
+
+- **Element divergence** (FR-13): Elements hold statuses independently. The expanded formation panel renders a DIVERGED badge with per-status counts when elements are not all in the same status. `derivedFormationStatus()` returns a conservative summary: ACTIVE > PLANNED > COMPLETED > CANCELLED. Diverged rows are highlighted in the element table.
+
+- **Master status cascade**: Master → COMPLETED cascades all PLANNED/ACTIVE elements to COMPLETED (CANCELLED elements preserved). Master → CANCELLED cascades all PLANNED/ACTIVE elements to CANCELLED (COMPLETED elements preserved). No cascade on activation.
+
+- **Per-element diversion / outcome detail** (FR-13b): Each element records `outcomeStatus` (`NORMAL` / `DIVERTED` / `CHANGED` / `CANCELLED`), `actualDestinationAd`, `actualDestinationText`, `outcomeTime`, and `outcomeReason`. These are inline-editable in the element table in the expanded formation panel.
+
+- **Per-element attribution identity / pilot** (FR-14 / FR-14b): Each element carries `underlyingCallsign` (explicit non-display operational identity) and `pilotName`. `resolveFormationElementIdentity()` applies a VKB-aware priority chain: explicit manual `underlyingCallsign` → VKB registration lookup → fixed callsign lookup → element callsign → master callsign. Pilot priority: explicit `pilotName` → EGOW codes by attribution callsign → EGOW codes by element callsign → master captain. Sources are tracked (`manual`, `registration`, `fixed-callsign`, `egow-attribution`, `master-captain`, etc.). Reporting credits each element to its resolved identity rather than the master.
+
+**E. Expanded strip display**
+
+The formation expanded panel (FR-12) contains:
+
+- **Formation summary**: label, summary status, wtcCurrent, wtcMax, total movements, divergence badge
+- **Shared defaults section**: key-value display of the shared layer
+- **Element table**: one row per element with columns for ordinal, callsign, attr CS, pilot, reg, type, WTC, status, dep AD, arr AD, dep actual, arr actual, T&G, O/S, FIS, movements, outcome, actual destination, outcome time, reason — all inline-editable per row with an atomic Save button calling `updateFormationElement()`
+
+**F. Completed formation tickets**
+
+| Ticket | Delivered |
+|---|---|
+| FR-02 | Activation UX |
+| FR-03 | Draft memory / in-session persistence |
+| FR-04 | Callsign generation (base + ordinal convention) |
+| FR-05 | Shared/default model |
+| FR-06 | Enrichment |
+| FR-07 | Master-first seeding |
+| FR-08 | Element-first synthesis / load-time normalization |
+| FR-09 | Field-level inheritance tracking (overrides dict) |
+| FR-10 | Per-element movement counting |
+| FR-11 | Dynamic wtcCurrent / wtcMax recomputation |
+| FR-12 | Expanded strip display rebuild |
+| FR-13 | Lifecycle divergence detection and display |
+| FR-13b | Per-element diversion / outcome detail |
+| FR-14 | Per-element pilot attribution |
+| FR-14b | VKB-aware identity resolution assistance |
+| FR-15 | Documentation closeout (this ticket) |
+
+**G. Formation backlog (remaining future work)**
+
+The following are not implemented and remain backlog:
+
+- Formation creation via "Number of aircraft" count field in the New Flight modal — auto-generation of element set with callsigns
+- Automatic master → element field propagation when master fields are edited after element set is established (break-inheritance on individual element edit)
+- `formation_groups` table and `is_formation_master` / `element_index` fields — deferred data model schema track
+- Deeper pilot / aircraft profile architecture (V2 direction)
+- Broader report refinements for formation attribution beyond current baseline (e.g. historical formation analytics)
+- Multiple WTC scheme support per formation (UK dep/arr vs RECAT)
+- Advanced lifecycle / presentation enhancements beyond implemented baseline
 
 4) Settled timing / interaction baseline
 
@@ -741,9 +823,13 @@ the core UTC-first timing hardening pass is complete for the tested strip lifecy
 remaining timezone-related work is now primarily display/configurability/polish unless Stuart reports a regression
 C. Formation continuation / expansion
 
-Formations are usable but not considered fully complete for V1.
+The formation primary implementation tranche (FR-02 through FR-14b) is complete. The formation model is substantially implemented for V1 operational use: per-element tracking, dynamic WTC, lifecycle divergence, diversion outcome detail, and attribution identity are all in place and stable.
 
-This is now the next active feature workstream.
+FR-15 (documentation closeout) is the final ticket in this tranche, aligning STATE.md and FORMATIONS.md with what now exists in code.
+
+Remaining formation backlog items (auto-creation UX, master→element propagation, deeper profile architecture) are bounded improvements. They do not block V1 operational use of formations. They are deferred rather than blocking.
+
+After FR-15, the formation workstream is considered substantially closed for V1. Remaining backlog items are recorded in section 3.5.G and may be promoted to dedicated tickets as priorities allow.
 
 D. Create From workflow
 
@@ -817,20 +903,23 @@ implement migration into app-managed state
 cross-platform hardening and launch-readiness pass
 11.3 Immediate next-up status
 
-The next active feature workstream is:
+Formation continuation / expansion (primary tranche) is **complete**. FR-15 documentation closeout is the current active workstream.
 
-Formation continuation / expansion
+After FR-15 closes, the next recommended feature workstream is:
 
-Desktop productization remains the biggest overall launch-risk track, but the next feature work should focus on formations.
+**Create From workflow** (Track B)
+
+Desktop productization (Track A) remains the biggest overall launch-risk, but the next discrete feature work should be Create From workflow.
 
 11.4 Deferred from immediate next-up status
 
 The following are not the next active tranche now:
 
+Formation continuation / expansion — substantially complete; remaining backlog is bounded (see section 3.5.G)
 Ticket 6c — Callsign family grouping
 historical lifecycle-event analytics
 
-They remain valid backlog items but are no longer the immediate next recommended work.
+They remain valid backlog items but are not the immediate next recommended work.
 
 12) Manual verification posture
 
@@ -871,6 +960,10 @@ product name is now Vectair Flite
 documentation is an explicit maintained workstream
 V1 scope includes desktop productization, formation continuation/expansion, Create From workflow, and METAR Builder
 V2 scope includes API / VKB integration and booking confirmation / pilot briefing / GAR note
+
+formation primary implementation (FR-02 through FR-14b) is complete
+formation documentation closeout (FR-15) is the active workstream
+formation backlog (creation UX automation, master→element propagation, deeper profile architecture) is bounded and deferred; does not block V1 operational use
 
 This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.
 
