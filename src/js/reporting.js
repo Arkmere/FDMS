@@ -22,7 +22,7 @@
 // This divergence is documented here and in STATE.md and must not be
 // accidentally merged or silently changed in future sprints.
 
-import { getMovements, getCancelledSorties, getElementAttributionIdentity, getResolvedElementPilot } from './datamodel.js';
+import { getMovements, getCancelledSorties, getElementAttributionIdentity, getResolvedElementPilot, resolveFormationElementIdentity } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';
 
 // ========================================
@@ -709,8 +709,11 @@ export function computeLeaderboards(movements, hoursMap = null) {
       );
       if (hasElementIdentity) {
         for (const el of elements) {
-          const captain      = getResolvedElementPilot(el, m);
-          const callsign     = getElementAttributionIdentity(el, m);
+          // FR-14b: route through resolveFormationElementIdentity so VKB
+          // inference fills in any gaps left by manual-only FR-14 fields.
+          const resolved     = resolveFormationElementIdentity(el, m);
+          const captain      = resolved.pilot;
+          const callsign     = resolved.attributionCallsign;
           const registration = (el.reg || m.registration || '').trim();
           const ov           = el.overrides || {};
           const osCount      = Number('osCount'  in ov ? ov.osCount  : (m.osCount  || 0));
