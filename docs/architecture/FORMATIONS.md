@@ -1,38 +1,67 @@
-# Formations in Vectair FDMS
+# Formations in Vectair Flite
 
 > Canonical reference for how formation flights are represented, entered, displayed,
-> and managed within the Vectair Flight Data Management System.
+> and managed within Vectair Flite.
+>
+> **Document version: 2.0 — 2026-04-26**
+> Updated to reflect the implemented baseline after FR-02 through FR-15.
+> Earlier notes described a weaker or partially-implemented system; this document
+> describes what now exists in code.
 
 ---
 
-## Formations v1.1 — Clarifications and Extensions
+## Formations v1.1 — Implemented Baseline
 
-This section defines v1.1 behavior for formation elements, validation, and inheritance.
+This section defines the current implemented behavior. It replaces earlier notes that described inheritance, per-element editing, and WTC recomputation as "planned" or "not yet implemented" — those features are now implemented.
 
 ### Formation storage
 Formations are stored only on the master movement:
 
-`movement.formation = { label, wtcCurrent, wtcMax, elements[] }`
+```
+movement.formation = {
+  label,          // human-readable designation, e.g. "CNNCT flight of 3"
+  baseCallsign,   // extracted from label or first element
+  wtcCurrent,     // highest WTC of PLANNED/ACTIVE elements (dynamic)
+  wtcMax,         // highest WTC of all elements regardless of status (preserved)
+  shared,         // shared/default layer (see below)
+  elements[]      // per-element records
+}
+```
 
-### Element schema (v1.1)
+### Shared defaults layer (v1.1)
+
+`formation.shared` holds the common fields that elements inherit unless individually overridden:
+
+- `depAd`, `arrAd`
+- `flightType`
+- `tngCount`, `osCount`, `fisCount`
+- `reg`, `type`, `wtc`
+
+This layer is populated from the master movement fields at creation time (master-first seeding). `normalizeFormation()` re-derives it on every load, including migration of pre-v1.1 formations (element-first synthesis).
+
+### Element schema (v1.1 — implemented)
 Each element is stored as:
 
-- `callsign` (string) — editable in authoring UI (defaults auto-generated)
+- `ordinal` (number) — 1-based position; added by `normalizeFormation()` at load time
+- `callsign` (string) — base callsign + space + ordinal, e.g. `CNNCT 1`
 - `reg` (string)
 - `type` (string)
-- `wtc` (string) — one of `{L,S,M,H,J}`
-- `status` (string) — one of `{PLANNED,ACTIVE,COMPLETED,CANCELLED}`
-- `depAd` (string) — element departure aerodrome ICAO; `""` means unset
-- `arrAd` (string) — element arrival aerodrome ICAO; `""` means unset
-- `depActual` (string) — actual departure time (HH:MM or empty)
-- `arrActual` (string) — actual arrival time (HH:MM or empty)
-
-Element `depAd/arrAd` may differ from the master movement's dep/arr.
+- `wtc` (string) — one of `{L,S,M,H,J}`; empty means inherit from shared
+- `status` (string) — one of `{PLANNED,ACTIVE,COMPLETED,CANCELLED}`; independent per element
+- `depAd`, `arrAd` (string) — element aerodromes; `""` means unset (inherits shared-layer display fallback)
+- `depActual`, `arrActual` (string) — individual actual times (HH:MM UTC, or empty)
+- `tngCount`, `osCount`, `fisCount` (number) — per-element counts; override shared if set
+- `outcomeStatus` (string) — `NORMAL` / `DIVERTED` / `CHANGED` / `CANCELLED`
+- `actualDestinationAd`, `actualDestinationText` (string) — where the element actually went
+- `outcomeTime`, `outcomeReason` (string) — outcome event time and explanation
+- `underlyingCallsign` (string) — explicit non-display attribution identity (e.g. real callsign)
+- `pilotName` (string) — element-level pilot name
+- `overrides` (object) — dict of field names that have diverged from the shared layer
 
 ### Empty depAd/arrAd fallback (display behavior)
-If `element.depAd == ""`, the UI displays the master movement `depAd` as a muted fallback (display-only). The stored element value remains `""`. Same rule for `arrAd`.
+If `element.depAd == ""`, the UI displays the shared-layer `depAd` as a muted fallback (display-only). The stored element value remains `""`. Same rule for `arrAd`.
 
-No automatic copying from the master movement into element `depAd/arrAd` occurs.
+No automatic copying from the shared layer into element `depAd/arrAd` occurs on save. Divergence is tracked via the `overrides` dict.
 
 ### Validation (hard requirements)
 - `wtc` must be one of `{L,S,M,H,J}` (uppercase-coerced). Invalid values are rejected.
@@ -44,13 +73,15 @@ A formation exists only when `elements.length >= 2`.
 Authoring UI clamps formation count to `min=2`, `max=12`.
 If count < 2, `movement.formation` is treated as null (no formation).
 
-### WTC semantics
-- `wtcCurrent` = max WTC across elements whose status is `PLANNED` or `ACTIVE`.
-- `wtcMax` = max WTC across all elements regardless of status.
+### WTC semantics (dynamic — implemented)
+- `wtcCurrent` = max WTC across elements whose status is `PLANNED` or `ACTIVE`. Recomputed after every element status change.
+- `wtcMax` = max WTC across all elements regardless of status. Never decreases.
+- WTC rank: `L < S < M < H < J`
+- Both fields are recomputed by `computeFormationWTC()` and persisted on every `updateFormationElement()` call.
 
 ### Master status cascade rules
-- When the master movement becomes `COMPLETED`, all formation elements in `{PLANNED,ACTIVE}` are set to `COMPLETED`.
-- When the master movement becomes `CANCELLED`, all formation elements are set to `CANCELLED`.
+- When the master movement becomes `COMPLETED`, all formation elements in `{PLANNED,ACTIVE}` are set to `COMPLETED`. Elements already `CANCELLED` are preserved.
+- When the master movement becomes `CANCELLED`, all formation elements in `{PLANNED,ACTIVE}` are set to `CANCELLED`. Elements already `COMPLETED` are preserved.
 - No cascade occurs on master activation (PLANNED→ACTIVE).
 
 ### Produce-arrival / produce-departure inheritance
@@ -61,10 +92,10 @@ When producing the opposite leg from a formation-bearing movement:
   - `depActual = ""`
   - `arrActual = ""`
 
-### Out of scope (explicit)
-- Booking objects and booking sync are formation-agnostic in v1.1.
-- Element-level "micro-strip" operational fields (pob, tng/os/fis counts, remarks/warnings, ATC details) are not implemented in v1.1.
-- Future element-level counters, if added, must be informational-only and must not aggregate into master strip counters or daily stats.
+### Scope boundaries
+- Booking objects and booking sync are formation-agnostic.
+- `formation_groups` table and `is_formation_master` / `element_index` data model fields are deferred backlog — not implemented in the current single-movement model.
+- Formation auto-creation from a "Number of aircraft" count field is deferred backlog.
 
 ---
 
@@ -81,31 +112,19 @@ flight type, etc.) and a nested `formation` object holds the individual **elemen
 
 ---
 
-## 2. The Two Formation Modes
+## 2. The Formation Model
 
-### 2a. Single-Strip Formation (`formation_size` only)
+The implemented model is the **master + element** model. A `formation_size`-only flat mode (no element records) was considered earlier but is not the implemented approach.
 
-The simplest approach. One movement row is created with a `formation_size` count greater
-than 1. All movement counters (arrivals, departures, locals) are multiplied by that size.
-No individual element records exist.
+### Master + Element (implemented)
 
-- Used for: straightforward administrative scenarios where no per-aircraft distinction
-  is needed.
-- Limitation: no per-element registration, type, WTC, or individual time recording.
+One **master** movement represents the formation as a whole (lead callsign, route, planned times, flight type). Each **element** aircraft is represented inside the master strip's `formation.elements[]` array, with its own registration, type, WTC, individual status, actual times, outcome detail, and attribution identity.
 
-### 2b. Master + Element Strips (the preferred Woodvale model)
+- Used for: display flights, multi-ship training sorties, mixed-type formations
+- Supports mixed-WTC formations (e.g., MEMORIAL: Spitfire L, Hurricane L, Lancaster M)
+- Supports per-element divergence, diversion tracking, and individual pilot attribution
 
-A richer approach. One **master** movement represents the formation as a whole (the lead
-callsign, e.g., `CNNCT`). Each **element** aircraft is represented inside the master
-strip's `formation.elements` array, with its own registration, type, WTC, status, and
-individual departure/arrival times.
-
-- Used for: display flights, multi-ship training sorties, mixed-type formations where
-  individual accounting is required.
-- Supports mixed-WTC formations (e.g., MEMORIAL: Spitfire L, Hurricane L, Lancaster M).
-
-> The remainder of this document focuses on the **master + element** model, as this is
-> what is implemented in the current live board.
+Movement counting is per-element (see §10), not lead-only.
 
 ---
 
@@ -244,20 +263,35 @@ below the main details (coding, summary, etc.). This section is rendered by
 | Current WTC | `formation.wtcCurrent` |
 | Max WTC | `formation.wtcMax` |
 
-**Element table (one row per element):**
+**Element table (one row per element — inline-editable):**
 
-| Column | Source field |
-|---|---|
-| Element | `element.callsign` |
-| Reg | `element.reg` (or `—`) |
-| Type | `element.type` (or `—`) |
-| WTC | `element.wtc` (or `—`) |
-| Status | `element.status` (human-readable label) |
-| Dep | `element.depActual` (or `—`) |
-| Arr | `element.arrActual` (or `—`) |
+| Column | Source | Inline-editable |
+|---|---|---|
+| # | `element.ordinal` | — |
+| Callsign | `element.callsign` | — |
+| Attr CS | `element.underlyingCallsign` | Yes — explicit attribution identity override |
+| Pilot | `element.pilotName` | Yes |
+| Reg | `element.reg` | — |
+| Type | `element.type` | — |
+| WTC | `element.wtc` | — |
+| Status | `element.status` | Yes — dropdown |
+| Dep AD | `element.depAd` (shared-layer fallback if empty) | Yes |
+| Arr AD | `element.arrAd` (shared-layer fallback if empty) | Yes |
+| Dep | `element.depActual` | Yes |
+| Arr | `element.arrActual` | Yes |
+| T&G | `element.tngCount` (shared-layer fallback) | Yes |
+| O/S | `element.osCount` (shared-layer fallback) | Yes |
+| FIS | `element.fisCount` | Yes |
+| Mvts | computed nominal contribution | — |
+| Outcome | `element.outcomeStatus` | Yes — dropdown |
+| Act Dest | `element.actualDestinationAd` | Yes |
+| Out Time | `element.outcomeTime` | Yes |
+| Reason | `element.outcomeReason` | Yes |
+| Save | — | Row-level atomic save button |
 
-The table is read-only in the current implementation; individual element fields are not
-yet inline-editable.
+Each row has a **Save** button that calls `updateFormationElement(movementId, elementIndex, patch)`, which validates inputs, updates overrides tracking, recomputes WTC, and persists to storage. Inherited fields (falling back to the shared layer) are displayed in muted/italic style with placeholder text showing the shared-layer value.
+
+Diverged rows (elements whose status or outcome differs from the first element) are highlighted with the `fmn-el-diverged` row class.
 
 ---
 
@@ -308,57 +342,57 @@ Under UK/RECAT schemes the ordering may differ; the facility configuration
 
 ---
 
-## 7. Master / Element Inheritance Model (Planned Behaviour)
+## 7. Master / Element Inheritance Model (Implemented Baseline)
 
-> The inheritance logic described in this section is the **target design** as specified
-> in `Project Overview.md` and `roadmap.md`. It is not yet fully implemented in code;
-> the current system stores element data but does not propagate master-level edits.
+### 7a. Implemented: shared defaults layer
 
-### 7a. Inheritance principle
+The implemented model uses a `formation.shared` layer as the source of inherited defaults (FR-05 / FR-07 / FR-08 / FR-09). This is different from — and simpler than — the earlier roadmap description of per-field inheritance tracking on elements.
 
-When a formation is first created, elements **inherit** key fields from the master strip:
+When a formation is created, `formation.shared` is populated from the master movement's fields (master-first seeding, FR-07). On every app load, `normalizeFormation()` re-derives the shared layer from the element data if needed (element-first synthesis, FR-08), ensuring forward-compatibility and migration of older formations.
 
-- Planned departure and arrival times
-- T&G count
-- O/S flag
-- FIS flag
-- Rules (VFR/IFR)
+Elements **display** shared-layer values as muted/placeholder fallbacks when their own field is empty (`""`). No automatic copying from the shared layer into element storage occurs on save.
 
-### 7b. Breaking inheritance
+### 7b. Implemented: overrides tracking
 
-Editing a field **on an individual element** breaks inheritance for that field on that
-element only. The element's value then diverges from the master and will not be
-overwritten by subsequent master edits.
+When an element field is edited and diverges from the shared-layer value, it is recorded in `element.overrides`:
 
-All other fields on that element that have not been individually edited continue to track
-the master.
+```json
+{
+  "overrides": {
+    "depAd": "EGCC",
+    "tngCount": 1
+  }
+}
+```
 
-### 7c. Practical example
+This tracks which fields are element-specific overrides vs. falling back to the shared layer. The `overrides` dict is updated atomically by `updateFormationElement()` on every save.
 
-1. CNNCT is created. All three elements inherit DEP time `13:15`.
-2. CNNCT 2 needs to depart early — its DEP time is set to `13:10`.
-   - CNNCT 2 now has an independent DEP time.
-3. CNNCT master DEP time is revised to `13:20`.
-   - CNNCT 1 and CNNCT 3 update to `13:20`.
-   - CNNCT 2 remains at `13:10` (inheritance was broken).
+### 7c. What is NOT implemented (backlog)
 
-### 7d. Future data model fields (roadmap)
+The following inheritance behaviors are **deferred** and not in the current codebase:
 
-To support full master/element inheritance, the roadmap describes a `formation_groups`
-table and additional fields on movement records:
+- **Master → element propagation on master edit**: editing a field on the master strip does not automatically push that value to elements that have not individually overridden it. This was described in earlier notes but is not implemented.
+- **Break-inheritance on individual edit via UI**: the `overrides` dict is maintained by the data layer, but there is no UI mechanism that explicitly "breaks" inheritance and tracks it as a distinct user action.
+- **`formation_groups` table and `is_formation_master` / `element_index` fields**: the earlier roadmap's relational data model is deferred. The current model stores everything on the master movement record.
+
+### 7d. Deferred data model (backlog reference)
+
+Earlier roadmap notes described a `formation_groups` table:
 
 ```
 formation_groups
   id              – unique group identifier
   dof             – date of flight (YYYY-MM-DD)
-  base_callsign   – the lead callsign (e.g., "CNNCT")
+  base_callsign   – the lead callsign
   notes           – free text
 
 movements (extended)
   formation_group_id   – links element back to its formation_groups record
-  is_formation_master  – true for the CNNCT master, false for CNNCT 1/2/3
+  is_formation_master  – true for the master, false for elements
   element_index        – 1, 2, 3 … for elements; null for the master
 ```
+
+This schema is not implemented. It remains a possible future direction if the data model is significantly redesigned.
 
 ---
 
@@ -408,33 +442,33 @@ callsign followed by their position number.
 
 ---
 
-## 10. Formation and the Movement Counters
+## 10. Formation and the Movement Counters (Implemented Baseline)
 
-### 10a. Master-level counting
+### 10a. Per-element nominal counting (Monthly Return)
 
-Movement totals (arrivals, departures, locals, OVR) are attributed to the master strip
-in the same way as a non-formation movement. The master strip counts as **one** traffic
-unit for the top-level EGOW counters.
-
-### 10b. Per-element counting (single-strip mode)
-
-In `formation_size`-only mode (§2a), counters are multiplied:
+`getResolvedFormationMovements(m)` sums per-element nominal movement contributions for Monthly Return / Dashboard reporting:
 
 ```
-total movements contributed = formation_size × 1
+per element: base(flightType) + 2×tngCount + osCount
 ```
 
-### 10c. Per-element counting (master + element mode)
+Each element's `tngCount` and `osCount` are resolved against the shared layer: element override if set in `element.overrides`, otherwise shared-layer value. Total across all elements is the formation's nominal movement contribution.
 
-In the master + element model, each element strip can carry its own:
+### 10b. Per-element EGOW event counting (Live Board daily stats)
 
-- T&G count (`tngCount`)
-- O/S count (`osCount`)
-- FIS count (`fisCount`)
-- EGOW code and classification
+`egowRunwayContribution(m)` sums per-element actual EGOW events for the Live Board daily totals:
 
-This gives full per-aircraft accountability for training formations where different
-elements may fly different numbers of circuits.
+- For each element: uses element-level `depActual` / `arrActual` if present; falls back to master-level actual times
+- DEP element contribution: 1 if `depActual` exists, else 0
+- ARR element contribution: 1 if `arrActual` exists, else 0
+- LOC element contribution: `(depActual ? 1 : 0) + 2×tngCount + osCount + (arrActual ? 1 : 0)`
+- OVR: 0 always
+
+This replaces any earlier model where formations contributed only as a single lead-aircraft unit.
+
+### 10c. Per-element T&G, O/S, FIS
+
+Each element can carry its own `tngCount`, `osCount`, and `fisCount`. These are inline-editable in the element table. Values not overridden at the element level fall back to the shared-layer defaults for display and counting purposes.
 
 ---
 
@@ -442,73 +476,173 @@ elements may fly different numbers of circuits.
 
 ```
 1. Strip Created
-   Controller creates a new movement (DEP, ARR, LOC, or OVR).
-   If the flight involves multiple aircraft, formation fields are populated:
-     - formation.label set
-     - formation.elements array built with one entry per aircraft
+   Controller creates a master movement (DEP, ARR, LOC, or OVR).
+   formation.label, formation.shared, and formation.elements[] are populated.
+   Shared-layer defaults are seeded from the master movement fields.
+   Each element is assigned a callsign (BASE + space + ordinal).
+   normalizeFormation() derives ordinals, shared layer, and wtcCurrent/wtcMax.
 
 2. Strip Activated (PLANNED → ACTIVE)
    The master strip moves to ACTIVE status.
-   Individual elements are also set ACTIVE as each aircraft departs (or as a group).
-   depActual is recorded on each element.
+   No automatic cascade to elements on activation.
+   Individual elements transition to ACTIVE as each aircraft departs.
+   depActual is recorded on each element via the inline element table.
+   wtcCurrent is recomputed after each element change.
 
 3. Live Board Display
    The master strip appears on the board.
    The F×n badge indicates the element count.
-   Expanding the strip row shows the full formation panel (§5b).
+   Expanding the strip row shows the full formation panel:
+     - Summary (label, status, wtcCurrent, wtcMax, total movements)
+     - Shared defaults section
+     - Inline-editable element table
    wtcCurrent shows the highest WTC of elements still PLANNED or ACTIVE.
+   A DIVERGED badge appears if elements have different statuses.
 
-4. Elements Land Individually
+4. Elements Land Individually / Diverge
    As each element aircraft lands:
-     arrActual is set on that element.
-     element.status → COMPLETED.
-     wtcCurrent is recomputed (heaviest remaining active element).
-     wtcMax is unchanged.
+     arrActual is set on that element in the element table.
+     element.status → COMPLETED (via inline Save).
+     wtcCurrent is recomputed; wtcMax is preserved.
+   If an element diverts:
+     outcomeStatus set to DIVERTED.
+     actualDestinationAd, outcomeTime, outcomeReason set as appropriate.
+     Element row is highlighted in the panel.
 
 5. Master Strip Completed
-   Once all elements are COMPLETED (or CANCELLED), the master strip is completed.
+   Master status → COMPLETED cascades all PLANNED/ACTIVE elements to COMPLETED.
+   CANCELLED elements are preserved (not forced to COMPLETED).
    The strip moves off the Live Board and into History.
    wtcMax is preserved as a permanent record of the heaviest type in the formation.
 
 6. Historical Record
    The completed master strip, with its full formation object intact,
-   appears in the History tab.
-   All element callsigns, registrations, types, WTC, and times remain queryable.
+   appears in Movement History.
+   All element callsigns, registrations, types, WTC, actual times,
+   outcome detail, and attribution identity remain queryable.
+   Reporting credits each element to its resolved attribution callsign and pilot.
 ```
+
+---
+
+## 11b. Element Divergence and Diversion Outcome Detail (FR-13 / FR-13b)
+
+### Divergence detection
+
+Elements hold statuses independently. The formation panel renders a **DIVERGED** badge when elements are not all in the same status, accompanied by a per-status count breakdown (e.g. "2 COMPLETED, 1 ACTIVE").
+
+`derivedFormationStatus(elements)` computes a conservative summary status: ACTIVE > PLANNED > COMPLETED > CANCELLED. Mixed terminal states (some COMPLETED + some CANCELLED) resolve to COMPLETED.
+
+Diverged element rows are highlighted with the `fmn-el-diverged` row class in the element table.
+
+### Per-element diversion / outcome detail
+
+Each element records the outcome of its individual sortie:
+
+| Field | Values | Meaning |
+|---|---|---|
+| `outcomeStatus` | `NORMAL` / `DIVERTED` / `CHANGED` / `CANCELLED` | Nature of outcome |
+| `actualDestinationAd` | ICAO code | Where the element actually went |
+| `actualDestinationText` | free text | Description of actual destination |
+| `outcomeTime` | HH:MM UTC | Time of outcome event |
+| `outcomeReason` | free text | Explanation |
+
+All fields are inline-editable in the element table and stored per-element independently.
+
+---
+
+## 11c. Attribution Identity and Pilot Resolution (FR-14 / FR-14b)
+
+### Per-element identity fields
+
+Each element carries:
+
+- `underlyingCallsign` — explicit non-display attribution identity (e.g. the real callsign when the formation callsign is a display alias)
+- `pilotName` — element-level pilot / captain name
+
+These are distinct from the visible `element.callsign` and from the master strip's `captain` field.
+
+### VKB-aware identity resolution
+
+`resolveFormationElementIdentity(el, m)` returns `{ attributionCallsign, pilot, callsignSource, pilotSource }` using a priority chain:
+
+**Attribution callsign priority:**
+1. Explicit `el.underlyingCallsign` (manual override) → source: `"manual"`
+2. VKB fixed callsign lookup by `el.reg` → source: `"registration"`
+3. Check if `el.callsign` is itself a known fixed callsign → source: `"fixed-callsign"`
+4. Fall back to `el.callsign` → source: `"element-callsign"`
+5. Fall back to master `m.callsignCode` → source: `"fallback"`
+
+**Pilot priority:**
+1. Explicit `el.pilotName` → source: `"manual"`
+2. EGOW codes lookup by resolved attribution callsign → source: `"egow-attribution"`
+3. EGOW codes lookup by visible element callsign → source: `"egow-element"`
+4. Master captain fallback → source: `"master-captain"`
+
+VKB lookups degrade gracefully (returns null/empty if VKB data is not loaded).
+
+### Reporting integration
+
+When a formation has element identity data, `reporting.js` expands the formation into per-element contributions. Each element is credited to its resolved `attributionCallsign` and `pilot` rather than the master callsign and captain. This prevents all formation movements from being attributed to the lead only.
 
 ---
 
 ## 12. Source Code Reference
 
-| Concern | File | Location |
+| Concern | File | Notes |
 |---|---|---|
-| Formation data model & demo data | `src/js/datamodel.js` | Lines 157–190 (CNNCT), 256–289 (MEMORIAL) |
+| Formation data model, demo data, normalization | `src/js/datamodel.js` | `normalizeFormation()`, `updateFormationElement()`, `computeFormationWTC()`, `cascadeFormationStatus()` |
+| Movement counting (nominal) | `src/js/datamodel.js` | `getResolvedFormationMovements()`, `runwayMovementContribution()` |
+| EGOW event counting (per-element actual) | `src/js/datamodel.js` | `egowRunwayContribution()`, `_formationEgowContribution()` |
+| Identity resolution (VKB-aware) | `src/js/datamodel.js` | `resolveFormationElementIdentity()`, `getElementAttributionIdentity()`, `getResolvedElementPilot()` |
 | Formation badge rendering | `src/js/ui_liveboard.js` | `renderBadges()` |
-| Formation details panel rendering | `src/js/ui_liveboard.js` | `renderFormationDetails()` |
-| Formation design specification | `Project Overview.md` | §Formation section |
-| Formation roadmap / future model | `roadmap.md` | Master+element model section |
+| Formation details panel rendering | `src/js/ui_liveboard.js` | `renderFormationDetails()`, `resolveElementForDisplay()` |
+| Element inline save handler | `src/js/ui_liveboard.js` | `.fmn-el-save` button handler |
+| Reporting attribution (per-element expansion) | `src/js/reporting.js` | Formation element expansion block |
 | Strip lifecycle (applies to elements) | `docs/STRIP_LIFECYCLE_AND_COUNTERS.md` | §1–§2 |
 
 ---
 
 ## 13. Implementation Status
 
-| Feature | Status |
+### Completed (implemented)
+
+| Feature | FR ticket |
 |---|---|
-| Formation data structure (`label`, `wtcCurrent`, `wtcMax`, `elements[]`) | Implemented |
-| Formation badge on Live Board (`F×n`) | Implemented |
-| Formation expanded details panel | Implemented |
-| Element table (callsign, reg, type, WTC, status, times) | Implemented |
-| Demo formations (CNNCT, MEMORIAL) | Implemented |
-| Formation creation via "Number of aircraft" field in New Flight modal | Not yet implemented |
-| Automatic element callsign generation | Not yet implemented |
-| Master → element field inheritance and propagation | Not yet implemented |
-| Break-inheritance on individual element edit | Not yet implemented |
-| Dynamic recomputation of `wtcCurrent` on element status change | Not yet implemented |
-| `formation_groups` table and `is_formation_master` / `element_index` fields | Not yet implemented |
-| Inline editing of individual element fields | Not yet implemented |
-| Multiple WTC scheme support per formation (UK dep/arr, RECAT) | Not yet implemented |
+| Formation data structure (`label`, `wtcCurrent`, `wtcMax`, `shared`, `elements[]`) | FR-05 |
+| Shared/default layer (`formation.shared`) and master-first seeding | FR-05 / FR-07 |
+| Element-first synthesis / load-time normalization (`normalizeFormation()`) | FR-08 |
+| Field-level inheritance tracking (`element.overrides` dict) | FR-09 |
+| Activation UX | FR-02 |
+| Draft memory / in-session persistence | FR-03 |
+| Callsign generation (base + ordinal convention) | FR-04 |
+| Enrichment | FR-06 |
+| Formation badge on Live Board (`F×n`) | FR-12 |
+| Formation expanded details panel (full rebuild) | FR-12 |
+| Element table — fully inline-editable, row-level Save | FR-12 |
+| Per-element movement counting (nominal and EGOW event) | FR-10 |
+| Dynamic recomputation of `wtcCurrent` / `wtcMax` on every element change | FR-11 |
+| Element status independence; divergence badge and row highlighting | FR-13 |
+| Per-element diversion / outcome detail fields | FR-13b |
+| Per-element attribution identity (`underlyingCallsign`, `pilotName`) | FR-14 |
+| VKB-aware identity resolution (`resolveFormationElementIdentity()`) | FR-14b |
+| Reporting per-element expansion (credits to resolved identity, not master only) | FR-14 / FR-14b |
+| Demo formations (CNNCT, MEMORIAL) | — |
+| Master status cascade (COMPLETED / CANCELLED) | — |
+| Documentation closeout (this document) | FR-15 |
+
+### Backlog (not yet implemented)
+
+| Feature | Notes |
+|---|---|
+| Formation creation via "Number of aircraft" count field in New Flight modal | Auto-generation of element set with callsigns — deferred |
+| Automatic master → element field propagation on master edit | Break-inheritance semantics — deferred |
+| `formation_groups` table, `is_formation_master`, `element_index` fields | Deferred relational data model — not blocking current use |
+| Multiple WTC scheme support per formation (UK dep/arr vs RECAT) | Deferred |
+| Deeper pilot / aircraft profile architecture | V2 direction |
+| Broader historical formation attribution analytics in reporting | Deferred |
 
 ---
 
-*Document version: 1.0 — 2026-02-10*
+*Document version: 2.0 — 2026-04-26*  
+*Supersedes v1.0 (2026-02-10). Updated to reflect implemented baseline after FR-02 through FR-15.*
