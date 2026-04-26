@@ -49,7 +49,8 @@ import {
   ensureDeletedStripsInitialised,
   shouldShowUtcLocalToggleForNewForms,
   getOperationalTimezoneOffsetHours,
-  DELETED_STRIPS_RETENTION_HOURS
+  DELETED_STRIPS_RETENTION_HOURS,
+  resolveFormationElementIdentity
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
@@ -1740,6 +1741,9 @@ function wireFormationElementEnrichment(container, count, opts) {
     const regInput      = container.querySelector(`[data-el-reg="${i}"]`);
     const typeInput     = container.querySelector(`[data-el-type="${i}"]`);
     const wtcInput      = container.querySelector(`[data-el-wtc="${i}"]`);
+    // FR-14b: identity inputs wired for autofill
+    const attrCsInput   = container.querySelector(`[data-el-attr-cs="${i}"]`);
+    const pilotInput    = container.querySelector(`[data-el-pilot="${i}"]`);
     if (!callsignInput) continue;
 
     // Compute WTC from the element's type; only writes if WTC field is still empty
@@ -1754,7 +1758,14 @@ function wireFormationElementEnrichment(container, count, opts) {
       if (ch) wtcInput.value = ch;
     };
 
-    // Enrich element row from its registration (type autofill, then WTC)
+    // FR-14b: fill pilot from EGOW codes for a given callsign; non-destructive.
+    const autofillElPilot = (cs) => {
+      if (!pilotInput || pilotInput.value.trim() || !cs) return;
+      const name = lookupCaptainFromEgowCodes(cs);
+      if (name) pilotInput.value = name;
+    };
+
+    // Enrich element row from its registration (type, WTC, and FR-14b attr-cs autofill)
     const applyElRegEnrichment = () => {
       if (!regInput || !typeInput) return;
       const reg = regInput.value.trim();
@@ -1765,6 +1776,15 @@ function wireFormationElementEnrichment(container, count, opts) {
         if (vkbType && vkbType !== '-' && vkbType !== '' && !typeInput.value.trim()) {
           typeInput.value = vkbType;
         }
+        // FR-14b: autofill attr-cs from VKB FIXED C/S when blank
+        if (attrCsInput && !attrCsInput.value.trim()) {
+          const fixedCs = (regData['FIXED C/S'] || '').trim();
+          if (fixedCs && fixedCs !== '-') {
+            attrCsInput.value = fixedCs;
+            // Also try to fill pilot from the resolved callsign identity
+            autofillElPilot(fixedCs);
+          }
+        }
       } else if (!typeInput.value.trim()) {
         const inferred = inferTypeFromReg(reg);
         if (inferred) typeInput.value = inferred;
@@ -1773,30 +1793,37 @@ function wireFormationElementEnrichment(container, count, opts) {
     };
 
     // Enrich element row from its callsign via fixed-callsign → registration → type → WTC
+    // FR-14b: also fill pilot from EGOW codes when the callsign is a known unit callsign.
     const applyElCallsignEnrichment = () => {
-      if (!callsignInput || !regInput || regInput.value.trim()) return;
+      if (!callsignInput) return;
       const cs = callsignInput.value.trim();
       if (!cs) return;
-      const regData = lookupRegistrationByFixedCallsign(cs);
-      if (regData) {
-        const registration = regData['REGISTRATION'] || '';
-        if (registration && registration !== '-') {
-          regInput.value = normalizeEuCivilRegistration(registration);
-          applyElRegEnrichment();
+      // Fixed-callsign → registration path (existing behaviour, runs only if reg is blank)
+      if (regInput && !regInput.value.trim()) {
+        const regData = lookupRegistrationByFixedCallsign(cs);
+        if (regData) {
+          const registration = regData['REGISTRATION'] || '';
+          if (registration && registration !== '-') {
+            regInput.value = normalizeEuCivilRegistration(registration);
+            applyElRegEnrichment();
+            return; // reg enrichment will also handle pilot via FIXED C/S
+          }
         }
       }
+      // FR-14b: pilot lookup from EGOW codes for the visible callsign
+      autofillElPilot(cs);
     };
 
     // type → WTC
     typeInput?.addEventListener('input',  autofillElWtc);
     typeInput?.addEventListener('change', autofillElWtc);
 
-    // reg → type + WTC
+    // reg → type + WTC + attr-cs (FR-14b)
     regInput?.addEventListener('input',  applyElRegEnrichment);
     regInput?.addEventListener('change', applyElRegEnrichment);
     regInput?.addEventListener('blur',   applyElRegEnrichment);
 
-    // callsign → reg → type + WTC (for fixed callsigns)
+    // callsign → reg → type + WTC + pilot (FR-14b)
     callsignInput?.addEventListener('change', applyElCallsignEnrichment);
     callsignInput?.addEventListener('blur',   applyElCallsignEnrichment);
 
@@ -2314,6 +2341,27 @@ function renderFormationDetails(m) {
     const sharedDepAdHint = escapeHtml(shared.depAd || m.depAd || "");
     const sharedArrAdHint = escapeHtml(shared.arrAd || m.arrAd || "");
 
+    // FR-14b: resolve identity for placeholder hints. The resolved values are
+    // shown as placeholder text when the manual fields are blank — the operator's
+    // typed value is never overwritten.
+    const resolvedId = resolveFormationElementIdentity(el, m);
+    const attrCsPlaceholder = r.underlyingCallsign
+      ? ""  // value present — placeholder hidden by browser anyway
+      : escapeHtml(
+          resolvedId.callsignSource !== "element-callsign" && resolvedId.callsignSource !== "fallback"
+            ? `inferred: ${resolvedId.attributionCallsign}`
+            : "e.g. UAM03"
+        );
+    const pilotPlaceholder = r.pilotName
+      ? ""
+      : escapeHtml(
+          resolvedId.pilotSource !== "unknown" && resolvedId.pilotSource !== "master-captain"
+            ? `inferred: ${resolvedId.pilot}`
+            : resolvedId.pilotSource === "master-captain" && resolvedId.pilot
+              ? `master: ${resolvedId.pilot}`
+              : "Pilot name"
+        );
+
     // FR-13: highlight rows where the element has diverged from normal/shared state
     const isDiverged = (el.status !== (f.elements[0]?.status || "PLANNED")) ||
                        (r.outcomeStatus && r.outcomeStatus !== "NORMAL") ||
@@ -2327,14 +2375,14 @@ function renderFormationDetails(m) {
         <td>
           <input class="fmn-el-input fmn-el-attr-cs" type="text"
             value="${escapeHtml(r.underlyingCallsign)}"
-            placeholder="e.g. UAM03"
+            placeholder="${attrCsPlaceholder || "e.g. UAM03"}"
             data-mv-id="${mvId}" data-el-idx="${idx}"
             aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
         </td>
         <td>
           <input class="fmn-el-input fmn-el-pilot" type="text"
             value="${escapeHtml(r.pilotName)}"
-            placeholder="Pilot name"
+            placeholder="${pilotPlaceholder || "Pilot name"}"
             data-mv-id="${mvId}" data-el-idx="${idx}"
             aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
         </td>

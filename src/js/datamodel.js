@@ -2,6 +2,14 @@
 // Storage-backed demo data + helpers for statuses and basic querying.
 // Movements persist in localStorage between page reloads.
 
+// FR-14b: VKB lookups used by resolveFormationElementIdentity only.
+// These are gracefully no-ops when VKB data is not yet loaded.
+import {
+  lookupRegistration       as _vkbLookupReg,
+  lookupRegistrationByFixedCallsign as _vkbLookupByFixedCs,
+  lookupCaptainFromEgowCodes        as _vkbLookupCaptain
+} from './vkb.js';
+
 const STORAGE_KEY = "vectair_fdms_movements_v3";
 const STORAGE_KEY_V2 = "vectair_fdms_movements_v2";
 const STORAGE_KEY_V1 = "vectair_fdms_movements_v1";
@@ -1319,6 +1327,116 @@ export function getElementAttributionIdentity(el, m) {
  */
 export function getResolvedElementPilot(el, m) {
   return (el.pilotName || "").trim() || (m.captain || "").trim();
+}
+
+/**
+ * FR-14b: Resolve the full attribution identity for a formation element using
+ * all available data (explicit fields first, then conservative VKB inference).
+ *
+ * Attribution callsign priority:
+ *   1. el.underlyingCallsign  — explicit manual entry always wins
+ *   2. VKB FIXED C/S for el.reg  — registration → fixed callsign lookup
+ *   3. Visible element callsign is itself a fixed callsign (lookup confirms it)
+ *   4. Visible element callsign fallback
+ *   5. Master callsignCode fallback
+ *
+ * Pilot priority:
+ *   1. el.pilotName  — explicit manual entry always wins
+ *   2. EGOW codes Name for the resolved attribution callsign
+ *   3. EGOW codes Name for the visible element callsign
+ *   4. Master captain fallback
+ *
+ * VKB functions return null/empty when VKB data is not yet loaded — the
+ * helper degrades gracefully to lower-priority sources in that case.
+ *
+ * @param {object} el - Formation element
+ * @param {object} m  - Parent movement
+ * @returns {{ attributionCallsign: string, pilot: string, callsignSource: string, pilotSource: string }}
+ */
+export function resolveFormationElementIdentity(el, m) {
+  // ── Attribution callsign ─────────────────────────────────────────────────
+  let attributionCallsign = "";
+  let callsignSource = "fallback";
+
+  const explicitUnderlying = (el.underlyingCallsign || "").trim();
+  if (explicitUnderlying) {
+    attributionCallsign = explicitUnderlying;
+    callsignSource = "manual";
+  } else {
+    // Try VKB FIXED C/S derived from element registration
+    const elReg = (el.reg || "").trim();
+    if (elReg) {
+      try {
+        const regData = _vkbLookupReg(elReg);
+        const fixedCs = regData ? (regData["FIXED C/S"] || "").trim() : "";
+        if (fixedCs && fixedCs !== "-") {
+          attributionCallsign = fixedCs;
+          callsignSource = "registration";
+        }
+      } catch (_) { /* VKB not loaded — silent fallback */ }
+    }
+
+    // If still empty, check whether the visible element callsign is itself a
+    // known fixed callsign; if so it already IS the attribution identity.
+    if (!attributionCallsign) {
+      const elCs = (el.callsign || "").trim();
+      if (elCs) {
+        try {
+          const fixedCsData = _vkbLookupByFixedCs(elCs);
+          if (fixedCsData) {
+            // The element callsign matches a VKB fixed-callsign entry → it is
+            // already the underlying operational identity.
+            attributionCallsign = elCs;
+            callsignSource = "fixed-callsign";
+          }
+        } catch (_) { /* VKB not loaded — silent fallback */ }
+      }
+    }
+
+    // Visible element callsign (+ master) as final fallback
+    if (!attributionCallsign) {
+      attributionCallsign = (el.callsign || "").trim() || (m.callsignCode || "").trim();
+      callsignSource = "element-callsign";
+    }
+  }
+
+  // ── Pilot ────────────────────────────────────────────────────────────────
+  let pilot = "";
+  let pilotSource = "unknown";
+
+  const explicitPilot = (el.pilotName || "").trim();
+  if (explicitPilot) {
+    pilot = explicitPilot;
+    pilotSource = "manual";
+  } else {
+    // EGOW codes lookup for the resolved attribution callsign
+    try {
+      if (attributionCallsign) {
+        pilot = _vkbLookupCaptain(attributionCallsign) || "";
+        if (pilot) pilotSource = "egow-attribution";
+      }
+    } catch (_) { /* VKB not loaded */ }
+
+    // EGOW codes lookup for the visible element callsign (if attribution is the same
+    // or EGOW lookup above did not find a name)
+    if (!pilot) {
+      const elCs = (el.callsign || "").trim();
+      try {
+        if (elCs && elCs !== attributionCallsign) {
+          pilot = _vkbLookupCaptain(elCs) || "";
+          if (pilot) pilotSource = "egow-element";
+        }
+      } catch (_) { /* VKB not loaded */ }
+    }
+
+    // Master captain fallback
+    if (!pilot) {
+      pilot = (m.captain || "").trim();
+      if (pilot) pilotSource = "master-captain";
+    }
+  }
+
+  return { attributionCallsign, pilot, callsignSource, pilotSource };
 }
 
 /**
