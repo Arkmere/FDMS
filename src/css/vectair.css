@@ -1308,9 +1308,10 @@ tr.strip.ft-ovr > td {
 .formation-element-strip .fmn-el-reason   { width: 90px; }
 .formation-element-strip .fmn-el-input    { max-width: 100%; }
 
-/* Compact number inputs for T&G and O/S count overrides */
+/* Compact number inputs for T&G, O/S and FIS count overrides */
 .fmn-el-tng,
-.fmn-el-os {
+.fmn-el-os,
+.fmn-el-fis {
   width: 44px;
   text-align: center;
   font-size: 11px;
@@ -1321,11 +1322,11 @@ tr.strip.ft-ovr > td {
   font-family: inherit;
 }
 .fmn-el-tng:focus,
-.fmn-el-os:focus {
+.fmn-el-os:focus,
+.fmn-el-fis:focus {
   outline: 2px solid var(--va-link);
   border-color: var(--va-link);
 }
-
 /* Save button container in primary ctrl row — bottom-aligned */
 .formation-element-ctrl-save {
   display: flex;

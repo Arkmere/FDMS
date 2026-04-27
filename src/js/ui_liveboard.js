@@ -2389,10 +2389,12 @@ function renderFormationElementStrip(m, el, idx, shared) {
                 data-mv-id="${mvId}" data-el-idx="${idx}"
                 aria-label="O/S count for ${escapeHtml(el.callsign)}" />
             </label>
-            <div class="formation-element-ctrl-label">
-              <span>FIS</span>
-              <span class="formation-element-value fmn-inherited" title="Shared across formation">${r.fisCount}</span>
-            </div>
+            <label class="formation-element-ctrl-label">FIS
+  <input class="fmn-el-input fmn-el-fis" type="number" min="0" step="1"
+    value="${r.fisCount}"
+    data-mv-id="${mvId}" data-el-idx="${idx}"
+    aria-label="FIS count for ${escapeHtml(el.callsign)}" />
+</label>
             <div class="formation-element-ctrl-label">
               <span>Mvts</span>
               <span class="formation-element-value formation-element-mvt">${r.movements}</span>
@@ -7867,8 +7869,10 @@ export function initLiveBoard() {
     const attrCsInput      = row.querySelector(".fmn-el-attr-cs");
     const pilotInput       = row.querySelector(".fmn-el-pilot");
     // Movement count inputs (per-element overrides)
+    // Movement count inputs (per-element overrides)
     const tngInput         = row.querySelector(".fmn-el-tng");
     const osInput          = row.querySelector(".fmn-el-os");
+    const fisInput         = row.querySelector(".fmn-el-fis");
 
     // Validate and build patch
     const rawStatus      = statusSel?.value  || "PLANNED";
@@ -7962,6 +7966,12 @@ export function initLiveBoard() {
         else delete _newOv.osCount;
       }
 
+if (fisInput) {
+  const _fisVal    = Math.max(0, parseInt(fisInput.value.trim() || "0", 10) || 0);
+  const _sharedFis = Number(_curShared.fisCount ?? _parentMv.fisCount ?? 0);
+  if (_fisVal !== _sharedFis) _newOv.fisCount = _fisVal;
+  else delete _newOv.fisCount;
+}
       patch.overrides = _newOv;
     }
 
