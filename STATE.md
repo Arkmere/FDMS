@@ -962,7 +962,12 @@ V1 scope includes desktop productization, formation continuation/expansion, Crea
 V2 scope includes API / VKB integration and booking confirmation / pilot briefing / GAR note
 
 formation primary implementation (FR-02 through FR-14b) is complete
-formation documentation closeout (FR-15) is the active workstream
+formation documentation closeout (FR-15) is complete
+formation expanded element display refactored from table rows into strip-style child cards (presentation-layer only; no data model changes)
+formation child cards use the formation element callsign (e.g. MERSY1) as the primary strip callsign
+generic crew/callsign attribution and pilot identity moved to secondary/detail position within each child card
+formation child cards use normal flight-type colour language (LOC/pink, DEP/blue, ARR/orange, OVR/green)
+no formation model, counting, WTC, lifecycle, status cascade, inheritance, or persistence logic changed
 formation backlog (creation UX automation, master→element propagation, deeper profile architecture) is bounded and deferred; does not block V1 operational use
 
 This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.

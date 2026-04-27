@@ -2235,6 +2235,227 @@ function resolveElementForDisplay(el, shared, m) {
   };
 }
 
+/**
+ * Render a single formation element as a strip-style child card.
+ * Primary callsign: element callsign (e.g. MERSY1).
+ * Secondary text: attribution callsign / pilot identity.
+ * All per-element edit controls are preserved in the controls area.
+ */
+function renderFormationElementStrip(m, el, idx, shared) {
+  const f    = m.formation;
+  const mvId = m.id;
+  const r    = resolveElementForDisplay(el, shared, m);
+  const inh  = r.isInherited;
+
+  const cellVal = (val, inherited) => {
+    const d = val ? escapeHtml(String(val)) : "—";
+    return inherited
+      ? `<span class="fmn-inherited" title="Inherited from shared defaults">${d}</span>`
+      : (val ? escapeHtml(String(val)) : "—");
+  };
+
+  const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
+    .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
+    .join("");
+
+  const outcomeOptions = ["NORMAL", "DIVERTED", "CHANGED", "CANCELLED"]
+    .map(s => `<option value="${s}"${r.outcomeStatus === s ? " selected" : ""}>${escapeHtml(s.charAt(0) + s.slice(1).toLowerCase())}</option>`)
+    .join("");
+
+  const ownDepAd        = "depAd" in (el.overrides || {}) ? escapeHtml(el.overrides.depAd) : "";
+  const ownArrAd        = "arrAd" in (el.overrides || {}) ? escapeHtml(el.overrides.arrAd) : "";
+  const sharedDepAdHint = escapeHtml(shared.depAd || m.depAd || "");
+  const sharedArrAdHint = escapeHtml(shared.arrAd || m.arrAd || "");
+
+  // Resolve identity for placeholder hints — existing path, unchanged behaviour
+  const resolvedId = resolveFormationElementIdentity(el, m);
+  const attrCsPlaceholder = r.underlyingCallsign
+    ? ""
+    : escapeHtml(
+        resolvedId.callsignSource !== "element-callsign" && resolvedId.callsignSource !== "fallback"
+          ? `inferred: ${resolvedId.attributionCallsign}`
+          : "e.g. UAM03"
+      );
+  const pilotPlaceholder = r.pilotName
+    ? ""
+    : escapeHtml(
+        resolvedId.pilotSource !== "unknown" && resolvedId.pilotSource !== "master-captain"
+          ? `inferred: ${resolvedId.pilot}`
+          : resolvedId.pilotSource === "master-captain" && resolvedId.pilot
+            ? `master: ${resolvedId.pilot}`
+            : "Pilot name"
+      );
+
+  // Secondary display line: attribution callsign / pilot (read-only header text)
+  const attrCsDisplay = r.underlyingCallsign ||
+    (resolvedId.callsignSource !== "element-callsign" && resolvedId.callsignSource !== "fallback"
+      ? resolvedId.attributionCallsign : "");
+  const pilotDisplay  = r.pilotName ||
+    (resolvedId.pilotSource !== "unknown" && resolvedId.pilotSource !== "master-captain"
+      ? resolvedId.pilot : "");
+  const secondaryParts = [attrCsDisplay, pilotDisplay].filter(Boolean);
+  const secondaryText  = secondaryParts.length ? escapeHtml(secondaryParts.join(" / ")) : "";
+
+  // Divergence: element status deviates from first element, or non-normal outcome
+  const isDiverged = (el.status !== (f.elements[0]?.status || "PLANNED")) ||
+                     (r.outcomeStatus && r.outcomeStatus !== "NORMAL") ||
+                     Boolean(r.actualDestinationAd);
+
+  // Flight-type class — per-element override if set, else inherit from parent movement
+  const ftRaw   = (r.flightType || m.flightType || "").toLowerCase();
+  const ftClass = ftRaw ? ` ft-${ftRaw}` : "";
+
+  const divergedBadge = isDiverged
+    ? `<span class="fmn-diverged-badge" title="This element has diverged from others">DIVERGED</span>`
+    : "";
+
+  return `
+    <div class="formation-element-strip${ftClass}${isDiverged ? " fmn-el-diverged" : ""}"
+         data-formation-id="${mvId}" data-element-index="${idx}">
+      <div class="formation-element-status-strip"></div>
+      <div class="formation-element-main">
+
+        <div class="formation-element-header">
+          <div class="formation-element-callsign">
+            <div class="formation-element-cs-primary">${escapeHtml(r.callsign)}</div>
+            ${secondaryText ? `<div class="formation-element-cs-secondary">${secondaryText}</div>` : ""}
+          </div>
+          <div class="formation-element-meta">
+            <span class="formation-element-ordinal">#${r.ordinal}</span>
+            ${divergedBadge}
+          </div>
+        </div>
+
+        <div class="formation-element-info-row">
+          <div class="formation-element-field">
+            <span class="formation-element-label">Reg</span>
+            <span class="formation-element-value">${cellVal(r.reg, inh.reg)}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">Type</span>
+            <span class="formation-element-value">${cellVal(r.type, inh.type)}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">WTC</span>
+            <span class="formation-element-value">${cellVal(r.wtc, inh.wtc)}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">T&amp;G</span>
+            <span class="formation-element-value">${cellVal(String(r.tngCount), inh.tngCount)}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">O/S</span>
+            <span class="formation-element-value">${cellVal(String(r.osCount), inh.osCount)}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">FIS</span>
+            <span class="formation-element-value fmn-inherited" title="Shared across formation">${r.fisCount}</span>
+          </div>
+          <div class="formation-element-field">
+            <span class="formation-element-label">Mvts</span>
+            <span class="formation-element-value formation-element-mvt">${r.movements}</span>
+          </div>
+        </div>
+
+        <div class="formation-element-controls">
+          <div class="formation-element-ctrl-row">
+            <label class="formation-element-ctrl-label">Attr CS
+              <input class="fmn-el-input fmn-el-attr-cs" type="text"
+                value="${escapeHtml(r.underlyingCallsign)}"
+                placeholder="${attrCsPlaceholder || "e.g. UAM03"}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Pilot
+              <input class="fmn-el-input fmn-el-pilot" type="text"
+                value="${escapeHtml(r.pilotName)}"
+                placeholder="${pilotPlaceholder || "Pilot name"}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Status
+              <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Status for ${escapeHtml(el.callsign)}">
+                ${statusOptions}
+              </select>
+            </label>
+          </div>
+          <div class="formation-element-ctrl-row">
+            <label class="formation-element-ctrl-label">Dep AD
+              <input class="fmn-el-input fmn-el-ad" type="text"
+                value="${ownDepAd}"
+                placeholder="${sharedDepAdHint || "ICAO"}" maxlength="4"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Dep AD for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Arr AD
+              <input class="fmn-el-input fmn-el-ad" type="text"
+                value="${ownArrAd}"
+                placeholder="${sharedArrAdHint || "ICAO"}" maxlength="4"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Arr AD for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Dep
+              <input class="fmn-el-input fmn-el-dep" type="text"
+                value="${escapeHtml(r.depActual)}"
+                placeholder="HHMM" maxlength="5"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Dep actual for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Arr
+              <input class="fmn-el-input fmn-el-arr" type="text"
+                value="${escapeHtml(r.arrActual)}"
+                placeholder="HHMM" maxlength="5"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
+            </label>
+          </div>
+          <div class="formation-element-ctrl-row">
+            <label class="formation-element-ctrl-label">Outcome
+              <select class="fmn-el-outcome" data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Outcome for ${escapeHtml(el.callsign)}">
+                ${outcomeOptions}
+              </select>
+            </label>
+            <label class="formation-element-ctrl-label">Act Dest AD
+              <input class="fmn-el-input fmn-el-act-dest-ad" type="text"
+                value="${escapeHtml(r.actualDestinationAd)}"
+                placeholder="ICAO" maxlength="4"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Actual destination AD for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Act Dest
+              <input class="fmn-el-input fmn-el-act-dest-text" type="text"
+                value="${escapeHtml(r.actualDestinationText)}"
+                placeholder="Description (opt.)"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Actual destination description for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Out Time
+              <input class="fmn-el-input fmn-el-outcome-time" type="text"
+                value="${escapeHtml(r.outcomeTime)}"
+                placeholder="HHMM" maxlength="5"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Outcome time for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Reason
+              <input class="fmn-el-input fmn-el-reason" type="text"
+                value="${escapeHtml(r.outcomeReason)}"
+                placeholder="Reason / note" maxlength="200"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Outcome reason for ${escapeHtml(el.callsign)}" />
+            </label>
+          </div>
+          <div class="formation-element-ctrl-row">
+            <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
+              aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
+          </div>
+        </div>
+
+      </div>
+    </div>`;
+}
+
 function renderFormationDetails(m) {
   if (!m.formation || !Array.isArray(m.formation.elements)) return "";
 
@@ -2311,162 +2532,10 @@ function renderFormationDetails(m) {
       </div>
     </div>`;
 
-  // ── Section C: Element Table ───────────────────────────────────────────────
-  // cellVal: show a resolved value; mute + italicise it when inherited from shared.
-  const cellVal = (val, inherited) => {
-    const display = val ? escapeHtml(String(val)) : "—";
-    return inherited
-      ? `<span class="fmn-inherited" title="Inherited from shared defaults">${display}</span>`
-      : (val ? escapeHtml(String(val)) : "—");
-  };
-
-  const OUTCOME_STATUS_OPTIONS = ["NORMAL", "DIVERTED", "CHANGED", "CANCELLED"];
-
-  const rows = f.elements.map((el, idx) => {
-    const r = resolveElementForDisplay(el, shared, m);
-    const inh = r.isInherited;
-
-    const statusOptions = ["PLANNED", "ACTIVE", "COMPLETED", "CANCELLED"]
-      .map(s => `<option value="${s}"${el.status === s ? " selected" : ""}>${statusLabel(s)}</option>`)
-      .join("");
-
-    const outcomeOptions = OUTCOME_STATUS_OPTIONS
-      .map(s => `<option value="${s}"${r.outcomeStatus === s ? " selected" : ""}>${escapeHtml(s.charAt(0) + s.slice(1).toLowerCase())}</option>`)
-      .join("");
-
-    // For the editable AD inputs: pass the element's own override value (empty if inherited)
-    // so that saving an empty string means "clear override, revert to shared default".
-    const ownDepAd = "depAd" in (el.overrides || {}) ? escapeHtml(el.overrides.depAd) : "";
-    const ownArrAd = "arrAd" in (el.overrides || {}) ? escapeHtml(el.overrides.arrAd) : "";
-    const sharedDepAdHint = escapeHtml(shared.depAd || m.depAd || "");
-    const sharedArrAdHint = escapeHtml(shared.arrAd || m.arrAd || "");
-
-    // FR-14b: resolve identity for placeholder hints. The resolved values are
-    // shown as placeholder text when the manual fields are blank — the operator's
-    // typed value is never overwritten.
-    const resolvedId = resolveFormationElementIdentity(el, m);
-    const attrCsPlaceholder = r.underlyingCallsign
-      ? ""  // value present — placeholder hidden by browser anyway
-      : escapeHtml(
-          resolvedId.callsignSource !== "element-callsign" && resolvedId.callsignSource !== "fallback"
-            ? `inferred: ${resolvedId.attributionCallsign}`
-            : "e.g. UAM03"
-        );
-    const pilotPlaceholder = r.pilotName
-      ? ""
-      : escapeHtml(
-          resolvedId.pilotSource !== "unknown" && resolvedId.pilotSource !== "master-captain"
-            ? `inferred: ${resolvedId.pilot}`
-            : resolvedId.pilotSource === "master-captain" && resolvedId.pilot
-              ? `master: ${resolvedId.pilot}`
-              : "Pilot name"
-        );
-
-    // FR-13: highlight rows where the element has diverged from normal/shared state
-    const isDiverged = (el.status !== (f.elements[0]?.status || "PLANNED")) ||
-                       (r.outcomeStatus && r.outcomeStatus !== "NORMAL") ||
-                       Boolean(r.actualDestinationAd);
-    const rowClass = isDiverged ? " class=\"fmn-el-diverged\"" : "";
-
-    return `
-      <tr${rowClass}>
-        <td class="fmn-ordinal">${r.ordinal}</td>
-        <td>${escapeHtml(r.callsign)}</td>
-        <td>
-          <input class="fmn-el-input fmn-el-attr-cs" type="text"
-            value="${escapeHtml(r.underlyingCallsign)}"
-            placeholder="${attrCsPlaceholder || "e.g. UAM03"}"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td>
-          <input class="fmn-el-input fmn-el-pilot" type="text"
-            value="${escapeHtml(r.pilotName)}"
-            placeholder="${pilotPlaceholder || "Pilot name"}"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td>${cellVal(r.reg,  inh.reg)}</td>
-        <td>${cellVal(r.type, inh.type)}</td>
-        <td>${cellVal(r.wtc,  inh.wtc)}</td>
-        <td>
-          <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Status for ${escapeHtml(el.callsign)}">
-            ${statusOptions}
-          </select>
-        </td>
-        <td class="fmn-ad-cell">
-          <input class="fmn-el-input fmn-el-ad" type="text"
-            value="${ownDepAd}"
-            placeholder="${sharedDepAdHint || "ICAO"}" maxlength="4"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Dep AD for ${escapeHtml(el.callsign)}" />
-          ${inh.depAd && sharedDepAdHint ? `<span class="fmn-inherited fmn-fallback">${sharedDepAdHint}</span>` : ""}
-        </td>
-        <td class="fmn-ad-cell">
-          <input class="fmn-el-input fmn-el-ad" type="text"
-            value="${ownArrAd}"
-            placeholder="${sharedArrAdHint || "ICAO"}" maxlength="4"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Arr AD for ${escapeHtml(el.callsign)}" />
-          ${inh.arrAd && sharedArrAdHint ? `<span class="fmn-inherited fmn-fallback">${sharedArrAdHint}</span>` : ""}
-        </td>
-        <td>
-          <input class="fmn-el-input fmn-el-dep" type="text"
-            value="${escapeHtml(r.depActual)}"
-            placeholder="HHMM" maxlength="5"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Dep actual for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td>
-          <input class="fmn-el-input fmn-el-arr" type="text"
-            value="${escapeHtml(r.arrActual)}"
-            placeholder="HHMM" maxlength="5"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td class="fmn-count-cell">${cellVal(String(r.tngCount), inh.tngCount)}</td>
-        <td class="fmn-count-cell">${cellVal(String(r.osCount),  inh.osCount)}</td>
-        <td class="fmn-count-cell"><span class="fmn-inherited" title="Shared across formation">${r.fisCount}</span></td>
-        <td class="fmn-mvt-cell">${r.movements}</td>
-        <td>
-          <select class="fmn-el-outcome" data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Outcome for ${escapeHtml(el.callsign)}">
-            ${outcomeOptions}
-          </select>
-        </td>
-        <td class="fmn-act-dest-cell">
-          <input class="fmn-el-input fmn-el-act-dest-ad" type="text"
-            value="${escapeHtml(r.actualDestinationAd)}"
-            placeholder="ICAO" maxlength="4"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Actual destination AD for ${escapeHtml(el.callsign)}" />
-          <input class="fmn-el-input fmn-el-act-dest-text" type="text"
-            value="${escapeHtml(r.actualDestinationText)}"
-            placeholder="Description (opt.)"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Actual destination description for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td>
-          <input class="fmn-el-input fmn-el-outcome-time" type="text"
-            value="${escapeHtml(r.outcomeTime)}"
-            placeholder="HHMM" maxlength="5"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Outcome time for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td class="fmn-reason-cell">
-          <input class="fmn-el-input fmn-el-reason" type="text"
-            value="${escapeHtml(r.outcomeReason)}"
-            placeholder="Reason / note" maxlength="200"
-            data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Outcome reason for ${escapeHtml(el.callsign)}" />
-        </td>
-        <td>
-          <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
-            aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
-        </td>
-      </tr>`;
-  }).join("");
+  // ── Section C: Element strips (strip-style child cards) ──────────────────
+  const elementStrips = f.elements
+    .map((el, idx) => renderFormationElementStrip(m, el, idx, shared))
+    .join("");
 
   return `
     <div class="expand-subsection">
@@ -2474,37 +2543,10 @@ function renderFormationDetails(m) {
       ${summaryHtml}
       ${sharedHtml}
       <div class="fmn-elements-title">Elements</div>
-      <div class="formation-table-wrap">
-        <table class="formation-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Callsign</th>
-              <th title="Attribution callsign — underlying aircraft identity for stats">Attr CS</th>
-              <th title="Pilot name for this element">Pilot</th>
-              <th>Reg</th>
-              <th>Type</th>
-              <th>WTC</th>
-              <th>Status</th>
-              <th>Dep AD</th>
-              <th>Arr AD</th>
-              <th>Dep</th>
-              <th>Arr</th>
-              <th>T&amp;G</th>
-              <th>O/S</th>
-              <th>FIS</th>
-              <th>Mvts</th>
-              <th>Outcome</th>
-              <th>Act Dest</th>
-              <th>Out Time</th>
-              <th>Reason</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
+      <div class="formation-expanded-panel">
+        <div class="formation-element-stack">
+          ${elementStrips}
+        </div>
       </div>
     </div>`;
 }
@@ -7804,7 +7846,7 @@ export function initLiveBoard() {
     if (!btn) return;
     const mvId = parseInt(btn.dataset.mvId, 10);
     const elIdx = parseInt(btn.dataset.elIdx, 10);
-    const row = btn.closest("tr");
+    const row = btn.closest(".formation-element-strip") || btn.closest("tr");
     if (!row) return;
 
     const statusSel        = row.querySelector(".fmn-el-select");
