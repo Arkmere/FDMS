@@ -819,6 +819,10 @@ Movement History remains completed-movement history unless a later dedicated tic
 | H5 | Add Search / Table view |
 | H6 | Polish, edge cases, accessibility, export naming, selected-day UX |
 
+### 10.11 Completed tickets
+
+- **H1 implemented:** Movement History now defaults to Today; Movement History is completed-only; Cancelled Sorties and Deleted Strips remain separate.
+
 ---
 
 ## 11. Documentation workstream
