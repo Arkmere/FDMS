@@ -1136,6 +1136,15 @@ tr.strip.ft-ovr > td {
 
 /* ── Formation element child-strip design ───────────────────────────────── */
 
+/* Full-width section that holds the formation stack below the three narrow columns.
+   Uses the same flex: 1 1 100% pattern as .expand-section-alerts. */
+.formation-elements-section {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 /* Containment wrapper — must not widen the board */
 .formation-expanded-panel {
   width: 100%;
@@ -1298,6 +1307,39 @@ tr.strip.ft-ovr > td {
 .formation-element-strip .fmn-el-pilot    { width: 85px; }
 .formation-element-strip .fmn-el-reason   { width: 90px; }
 .formation-element-strip .fmn-el-input    { max-width: 100%; }
+
+/* Compact number inputs for T&G and O/S count overrides */
+.fmn-el-tng,
+.fmn-el-os {
+  width: 44px;
+  text-align: center;
+  font-size: 11px;
+  padding: 1px 4px;
+  border: 1px solid #b0b8bc;
+  border-radius: 2px;
+  background: #fff;
+  font-family: inherit;
+}
+.fmn-el-tng:focus,
+.fmn-el-os:focus {
+  outline: 2px solid var(--va-link);
+  border-color: var(--va-link);
+}
+
+/* Save button container in primary ctrl row — bottom-aligned */
+.formation-element-ctrl-save {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+/* Outcome/divergence row — muted relative to primary operational row */
+.formation-element-ctrl-outcome {
+  opacity: 0.8;
+  padding-top: 3px;
+  border-top: 1px dashed var(--va-border);
+  margin-top: 2px;
+}
 
 /* Alerts section in expanded strip */
 .expand-section-alerts {

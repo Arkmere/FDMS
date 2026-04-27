@@ -968,6 +968,10 @@ formation child cards use the formation element callsign (e.g. MERSY1) as the pr
 generic crew/callsign attribution and pilot identity moved to secondary/detail position within each child card
 formation child cards use normal flight-type colour language (LOC/pink, DEP/blue, ARR/orange, OVR/green)
 no formation model, counting, WTC, lifecycle, status cascade, inheritance, or persistence logic changed
+formation element stack corrected to render as full-width section below the three-column expanded panel (was incorrectly nested inside the narrow Movement Summary column)
+T&G/O/S/FIS/timing promoted to primary editable operational row; outcome/diversion fields moved to secondary emphasis row
+T&G and O/S now write back as per-element overrides via existing updateFormationElement path
+no datamodel/counting/WTC/lifecycle changes in this follow-up
 formation backlog (creation UX automation, master→element propagation, deeper profile architecture) is bounded and deferred; does not block V1 operational use
 
 This is the baseline future tickets should assume unless Stuart reports a regression or explicitly reprioritizes roadmap scope.

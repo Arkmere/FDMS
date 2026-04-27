@@ -2339,48 +2339,16 @@ function renderFormationElementStrip(m, el, idx, shared) {
             <span class="formation-element-label">WTC</span>
             <span class="formation-element-value">${cellVal(r.wtc, inh.wtc)}</span>
           </div>
-          <div class="formation-element-field">
-            <span class="formation-element-label">T&amp;G</span>
-            <span class="formation-element-value">${cellVal(String(r.tngCount), inh.tngCount)}</span>
-          </div>
-          <div class="formation-element-field">
-            <span class="formation-element-label">O/S</span>
-            <span class="formation-element-value">${cellVal(String(r.osCount), inh.osCount)}</span>
-          </div>
-          <div class="formation-element-field">
-            <span class="formation-element-label">FIS</span>
-            <span class="formation-element-value fmn-inherited" title="Shared across formation">${r.fisCount}</span>
-          </div>
-          <div class="formation-element-field">
-            <span class="formation-element-label">Mvts</span>
-            <span class="formation-element-value formation-element-mvt">${r.movements}</span>
-          </div>
         </div>
 
         <div class="formation-element-controls">
           <div class="formation-element-ctrl-row">
-            <label class="formation-element-ctrl-label">Attr CS
-              <input class="fmn-el-input fmn-el-attr-cs" type="text"
-                value="${escapeHtml(r.underlyingCallsign)}"
-                placeholder="${attrCsPlaceholder || "e.g. UAM03"}"
-                data-mv-id="${mvId}" data-el-idx="${idx}"
-                aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
-            </label>
-            <label class="formation-element-ctrl-label">Pilot
-              <input class="fmn-el-input fmn-el-pilot" type="text"
-                value="${escapeHtml(r.pilotName)}"
-                placeholder="${pilotPlaceholder || "Pilot name"}"
-                data-mv-id="${mvId}" data-el-idx="${idx}"
-                aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
-            </label>
             <label class="formation-element-ctrl-label">Status
               <select class="fmn-el-select" data-mv-id="${mvId}" data-el-idx="${idx}"
                 aria-label="Status for ${escapeHtml(el.callsign)}">
                 ${statusOptions}
               </select>
             </label>
-          </div>
-          <div class="formation-element-ctrl-row">
             <label class="formation-element-ctrl-label">Dep AD
               <input class="fmn-el-input fmn-el-ad" type="text"
                 value="${ownDepAd}"
@@ -2409,8 +2377,48 @@ function renderFormationElementStrip(m, el, idx, shared) {
                 data-mv-id="${mvId}" data-el-idx="${idx}"
                 aria-label="Arr actual for ${escapeHtml(el.callsign)}" />
             </label>
+            <label class="formation-element-ctrl-label">T&amp;G
+              <input class="fmn-el-input fmn-el-tng" type="number" min="0" step="1"
+                value="${r.tngCount}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="T&G count for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">O/S
+              <input class="fmn-el-input fmn-el-os" type="number" min="0" step="1"
+                value="${r.osCount}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="O/S count for ${escapeHtml(el.callsign)}" />
+            </label>
+            <div class="formation-element-ctrl-label">
+              <span>FIS</span>
+              <span class="formation-element-value fmn-inherited" title="Shared across formation">${r.fisCount}</span>
+            </div>
+            <div class="formation-element-ctrl-label">
+              <span>Mvts</span>
+              <span class="formation-element-value formation-element-mvt">${r.movements}</span>
+            </div>
+            <div class="formation-element-ctrl-save">
+              <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
+            </div>
           </div>
           <div class="formation-element-ctrl-row">
+            <label class="formation-element-ctrl-label">Attr CS
+              <input class="fmn-el-input fmn-el-attr-cs" type="text"
+                value="${escapeHtml(r.underlyingCallsign)}"
+                placeholder="${attrCsPlaceholder || "e.g. UAM03"}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Attribution callsign for ${escapeHtml(el.callsign)}" />
+            </label>
+            <label class="formation-element-ctrl-label">Pilot
+              <input class="fmn-el-input fmn-el-pilot" type="text"
+                value="${escapeHtml(r.pilotName)}"
+                placeholder="${pilotPlaceholder || "Pilot name"}"
+                data-mv-id="${mvId}" data-el-idx="${idx}"
+                aria-label="Pilot name for ${escapeHtml(el.callsign)}" />
+            </label>
+          </div>
+          <div class="formation-element-ctrl-row formation-element-ctrl-outcome">
             <label class="formation-element-ctrl-label">Outcome
               <select class="fmn-el-outcome" data-mv-id="${mvId}" data-el-idx="${idx}"
                 aria-label="Outcome for ${escapeHtml(el.callsign)}">
@@ -2445,10 +2453,6 @@ function renderFormationElementStrip(m, el, idx, shared) {
                 data-mv-id="${mvId}" data-el-idx="${idx}"
                 aria-label="Outcome reason for ${escapeHtml(el.callsign)}" />
             </label>
-          </div>
-          <div class="formation-element-ctrl-row">
-            <button class="small-btn fmn-el-save" data-mv-id="${mvId}" data-el-idx="${idx}"
-              aria-label="Save element ${r.ordinal} (${escapeHtml(el.callsign)})">Save</button>
           </div>
         </div>
 
@@ -2958,6 +2962,7 @@ function renderExpandedRow(tbody, m, context = 'live') {
     </div>
   ` : '';
 
+  const _fmnSection = renderFormationDetails(m);
   expTd.innerHTML = `
     <div class="expand-inner">
       <div class="expand-section">
@@ -2978,7 +2983,6 @@ function renderExpandedRow(tbody, m, context = 'live') {
             ${(m.actualDestinationAd) ? `<div class="kv-label">Actual Dest.</div><div class="kv-value">${m.actualDestinationAd === 'ZZZZ' && m.actualDestinationText ? escapeHtml(m.actualDestinationText) + ' <small style="color:#888">(ZZZZ)</small>' : escapeHtml(m.actualDestinationAd)}</div>` : ''}
           </div>
         </div>
-        ${renderFormationDetails(m)}
       </div>
 
       <div class="expand-section">
@@ -3009,6 +3013,7 @@ function renderExpandedRow(tbody, m, context = 'live') {
       </div>
 
       ${alertsSection}
+      ${_fmnSection ? `<div class="expand-section formation-elements-section">${_fmnSection}</div>` : ""}
     </div>
   `;
 
@@ -7861,6 +7866,9 @@ export function initLiveBoard() {
     // FR-14: per-element identity inputs
     const attrCsInput      = row.querySelector(".fmn-el-attr-cs");
     const pilotInput       = row.querySelector(".fmn-el-pilot");
+    // Movement count inputs (per-element overrides)
+    const tngInput         = row.querySelector(".fmn-el-tng");
+    const osInput          = row.querySelector(".fmn-el-os");
 
     // Validate and build patch
     const rawStatus      = statusSel?.value  || "PLANNED";
@@ -7922,6 +7930,39 @@ export function initLiveBoard() {
       patch.arrActual = va.valid ? (va.normalized || arrInput.value.trim()) : "";
     } else {
       patch.arrActual = "";
+    }
+
+    // Build per-element overrides for tngCount/osCount plus mirrored depAd/arrAd logic.
+    // updateFormationElement handles depAd/arrAd in its own step before Object.assign,
+    // but Object.assign with patch.overrides then overwrites that result — so we replicate
+    // the same AD override logic here to keep the final state correct.
+    const _allMvs   = getMovements();
+    const _parentMv = _allMvs.find(mv => mv.id === mvId);
+    if (_parentMv?.formation?.elements?.[elIdx] !== undefined) {
+      const _curEl     = _parentMv.formation.elements[elIdx];
+      const _curShared = _parentMv.formation.shared || {};
+      const _newOv     = { ...(_curEl.overrides || {}) };
+
+      if (rawDepAd && rawDepAd !== (_curShared.depAd || "")) _newOv.depAd = rawDepAd;
+      else delete _newOv.depAd;
+      if (rawArrAd && rawArrAd !== (_curShared.arrAd || "")) _newOv.arrAd = rawArrAd;
+      else delete _newOv.arrAd;
+
+      if (tngInput) {
+        const _tngVal    = Math.max(0, parseInt(tngInput.value.trim() || "0", 10) || 0);
+        const _sharedTng = Number(_curShared.tngCount ?? _parentMv.tngCount ?? 0);
+        if (_tngVal !== _sharedTng) _newOv.tngCount = _tngVal;
+        else delete _newOv.tngCount;
+      }
+
+      if (osInput) {
+        const _osVal    = Math.max(0, parseInt(osInput.value.trim() || "0", 10) || 0);
+        const _sharedOs = Number(_curShared.osCount ?? _parentMv.osCount ?? 0);
+        if (_osVal !== _sharedOs) _newOv.osCount = _osVal;
+        else delete _newOv.osCount;
+      }
+
+      patch.overrides = _newOv;
     }
 
     const updated = updateFormationElement(mvId, elIdx, patch);
