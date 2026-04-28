@@ -8074,7 +8074,7 @@ function sortHistoryMovements(movements, column, direction) {
 
 /**
  * Render the History Board table
- * Shows COMPLETED and CANCELLED movements
+ * Shows COMPLETED movements only (Movement History is completed-movement history).
  */
 export function renderHistoryBoard() {
   if (window.__FDMS_DIAGNOSTICS__ && window.__fdmsDiag) window.__fdmsDiag.renderHistoryBoardCount++;
@@ -8086,7 +8086,7 @@ export function renderHistoryBoard() {
 
   // Get time period filter
   const periodSelect = byId("historyTimePeriod");
-  const period = periodSelect ? periodSelect.value : "24h";
+  const period = periodSelect ? periodSelect.value : "today";
 
   // Calculate cutoff time for filtering
   const now = new Date();
@@ -8153,7 +8153,7 @@ export function renderHistoryBoard() {
     const empty = document.createElement("tr");
     empty.innerHTML = `
       <td colspan="8" style="padding:8px; font-size:12px; color:#777;">
-        No completed movements in this period.
+        No completed movements match the selected period.
       </td>
     `;
     tbody.appendChild(empty);
@@ -8162,9 +8162,7 @@ export function renderHistoryBoard() {
 
   for (const m of sorted) {
     const tr = document.createElement("tr");
-    // Add cancelled-strip class for brown background on cancelled movements
-    const cancelledClass = m.status === 'CANCELLED' ? ' cancelled-strip' : '';
-    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}${cancelledClass}`;
+    tr.className = `strip strip-row ${flightTypeClass(m.flightType)}`;
 
     // Sidebar always uses EGOW indicator color (even for cancelled - so we can see who it was for)
     const indicatorColor = getEgowIndicatorColor(m.egowCode, m.unitCode);
@@ -8215,7 +8213,7 @@ export function renderHistoryBoard() {
         </div>
       </td>
       <td>
-        <span class="badge ${m.status === 'COMPLETED' ? 'badge-success' : 'badge-cancelled'}">${escapeHtml(statusLabel(m.status))}</span>
+        <span class="badge badge-success">${escapeHtml(statusLabel(m.status))}</span>
       </td>
       <td class="actions-cell">
         <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">
@@ -9983,7 +9981,7 @@ function exportHistoryCSV() {
   const movements = getMovements().filter(m => m.status === "COMPLETED");
 
   if (movements.length === 0) {
-    showToast("No completed movements to export", 'warning');
+    showToast("No completed history movements to export", 'warning');
     return;
   }
 
