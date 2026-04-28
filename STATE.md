@@ -823,6 +823,7 @@ Movement History remains completed-movement history unless a later dedicated tic
 
 - **H1 implemented:** Movement History now defaults to Today; Movement History is completed-only; Cancelled Sorties and Deleted Strips remain separate.
 - **H2 implemented:** Movement History now has internal views for Historic Strip Board, Historic Movement Calendar, and Search / Table. Historic Strip Board contains the existing completed-movement board and remains default. Calendar and Search / Table are placeholders pending H3/H5.
+- **H3 implemented:** Historic Movement Calendar month view added for completed movements, using operational date (m.dof). Calendar navigation (Previous / Next / Today) and month label are operational. Clicking a day switches to Historic Strip Board with a temporary selected-date filter and a visible banner/chip with a Clear button. Mil/Civ/Other summaries use existing EGOW code classification. Ctrl-click / Shift-click multi-date selection deferred to H3b/H4.
 
 ---
 

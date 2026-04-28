@@ -505,6 +505,11 @@
                     </button>
                   </div>
 
+                  <div id="historyCalendarFilterBanner" class="history-calendar-filter-banner hidden">
+                    <span id="historyCalendarFilterText"></span>
+                    <button id="btnClearHistoryCalendarFilter" type="button" class="small-btn">Clear date filter</button>
+                  </div>
+
                   <div class="table-container">
                     <table id="historyTable">
                       <thead>
@@ -527,9 +532,15 @@
 
               <div class="movement-history-view hidden" id="hist-view-calendar">
                 <div class="panel">
-                  <div class="placeholder">
-                    Historic Movement Calendar will be added in H3. This view will summarise completed movements by operational date.
+                  <div class="history-calendar-toolbar">
+                    <div class="history-calendar-nav">
+                      <button type="button" class="small-btn" id="historyCalendarPrev" aria-label="Previous month">&#8249;</button>
+                      <span id="historyCalendarMonthLabel" class="history-calendar-month-label">Loading&hellip;</span>
+                      <button type="button" class="small-btn" id="historyCalendarNext" aria-label="Next month">&#8250;</button>
+                    </div>
+                    <button type="button" class="small-btn" id="historyCalendarToday">Today</button>
                   </div>
+                  <div id="historyCalendarGrid" class="history-calendar-grid"></div>
                 </div>
               </div><!-- /hist-view-calendar -->
 
