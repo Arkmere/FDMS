@@ -85,6 +85,37 @@ import {
 let expandedId = null;
 let historyExpandedId = null;
 
+// H3: Historic Movement Calendar state
+let historyCalendarSelectedDate = "";   // YYYY-MM-DD, or "" when no date selected
+
+const historyCalendarState = {
+  year: new Date().getUTCFullYear(),
+  month: new Date().getUTCMonth()     // 0-based
+};
+
+/**
+ * Returns the operational date (YYYY-MM-DD) for a movement, or "" if none.
+ * Uses m.dof as the canonical operational date field, consistent with
+ * renderHistoryBoard(), exportHistoryCSV(), and reporting date grouping.
+ */
+function getMovementOperationalDate(m) {
+  if (m.dof && /^\d{4}-\d{2}-\d{2}$/.test(m.dof)) return m.dof;
+  return "";
+}
+
+/**
+ * Classifies a movement as "military", "civilian", or "other" for H3 calendar
+ * summary cells.  Uses the same EGOW code sets as the Monthly Return report.
+ */
+function classifyHistoryMovementForCalendar(m) {
+  const military = ["BM", "VM", "VMH", "VNH"];
+  const civilian = ["BC", "VC", "VCH"];
+  const code = (m.egowCode || "").toUpperCase();
+  if (military.includes(code)) return "military";
+  if (civilian.includes(code)) return "civilian";
+  return "other";
+}
+
 // Tracks the active modal keyboard handler so it can always be cleaned up,
 // even when the modal is closed via modalRoot.innerHTML = "" rather than the
 // X-button path that calls closeModal().  This prevents keyHandler leaks that
@@ -8107,43 +8138,57 @@ export function renderHistoryBoard() {
   // Get completed movements only (Ticket 6a: CANCELLED moved to dedicated Cancelled Sorties subpage)
   let movements = getMovements().filter(m => m.status === "COMPLETED");
 
-  // Apply time period filter
-  if (cutoffTime) {
-    movements = movements.filter(m => {
-      // Parse DOF and completion time
-      const dofParts = (m.dof || "").split("-");
-      if (dofParts.length !== 3) return false;
+  // H3: Calendar date filter overrides the period dropdown when a date is selected from the calendar
+  const _calBanner = byId("historyCalendarFilterBanner");
+  const _calFilterText = byId("historyCalendarFilterText");
+  if (historyCalendarSelectedDate) {
+    movements = movements.filter(m => getMovementOperationalDate(m) === historyCalendarSelectedDate);
+    if (_calBanner) _calBanner.classList.remove("hidden");
+    if (_calFilterText) {
+      const _d = new Date(historyCalendarSelectedDate + "T00:00:00Z");
+      _calFilterText.textContent = `Showing completed movements for ${_d.toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}`;
+    }
+  } else {
+    if (_calBanner) _calBanner.classList.add("hidden");
 
-      // Get completion time (ATD for DEP, ATA for ARR, ACT for OVR)
-      const ft = (m.flightType || "").toUpperCase();
-      let completionTime = "";
-      if (ft === "DEP") {
-        completionTime = m.depActual || m.depPlanned || "";
-      } else if (ft === "ARR") {
-        completionTime = m.arrActual || m.arrPlanned || "";
-      } else if (ft === "LOC") {
-        completionTime = m.depActual || m.arrActual || m.depPlanned || m.arrPlanned || "";
-      } else if (ft === "OVR") {
-        completionTime = m.depActual || m.depPlanned || "";
-      }
+    // Apply time period filter
+    if (cutoffTime) {
+      movements = movements.filter(m => {
+        // Parse DOF and completion time
+        const dofParts = (m.dof || "").split("-");
+        if (dofParts.length !== 3) return false;
 
-      if (!completionTime) return false;
+        // Get completion time (ATD for DEP, ATA for ARR, ACT for OVR)
+        const ft = (m.flightType || "").toUpperCase();
+        let completionTime = "";
+        if (ft === "DEP") {
+          completionTime = m.depActual || m.depPlanned || "";
+        } else if (ft === "ARR") {
+          completionTime = m.arrActual || m.arrPlanned || "";
+        } else if (ft === "LOC") {
+          completionTime = m.depActual || m.arrActual || m.depPlanned || m.arrPlanned || "";
+        } else if (ft === "OVR") {
+          completionTime = m.depActual || m.depPlanned || "";
+        }
 
-      // Parse time
-      const timeParts = completionTime.split(":");
-      if (timeParts.length !== 2) return false;
+        if (!completionTime) return false;
 
-      // Create date object from DOF + completion time
-      const movementDate = new Date(
-        parseInt(dofParts[0], 10),
-        parseInt(dofParts[1], 10) - 1,
-        parseInt(dofParts[2], 10),
-        parseInt(timeParts[0], 10),
-        parseInt(timeParts[1], 10)
-      );
+        // Parse time
+        const timeParts = completionTime.split(":");
+        if (timeParts.length !== 2) return false;
 
-      return movementDate >= cutoffTime;
-    });
+        // Create date object from DOF + completion time
+        const movementDate = new Date(
+          parseInt(dofParts[0], 10),
+          parseInt(dofParts[1], 10) - 1,
+          parseInt(dofParts[2], 10),
+          parseInt(timeParts[0], 10),
+          parseInt(timeParts[1], 10)
+        );
+
+        return movementDate >= cutoffTime;
+      });
+    }
   }
 
   // Sort movements
@@ -8308,6 +8353,8 @@ export function setupMovementHistoryViews() {
 
     if (viewId === "hist-view-strip-board") {
       renderHistoryBoard();
+    } else if (viewId === "hist-view-calendar") {
+      renderHistoricMovementCalendar();
     }
   }
 
@@ -8315,7 +8362,166 @@ export function setupMovementHistoryViews() {
     btn.addEventListener("click", () => activate(btn.dataset.historyView));
   });
 
+  initHistoricMovementCalendar();
   activate("hist-view-strip-board");
+}
+
+/**
+ * Render the Historic Movement Calendar month grid for the current
+ * historyCalendarState year/month.  All date arithmetic uses UTC to avoid
+ * BST/DST drift.
+ */
+export function renderHistoricMovementCalendar() {
+  const grid = byId("historyCalendarGrid");
+  const label = byId("historyCalendarMonthLabel");
+  if (!grid || !label) return;
+
+  const { year, month } = historyCalendarState;
+
+  // Update month label
+  const labelDate = new Date(Date.UTC(year, month, 1));
+  label.textContent = labelDate.toLocaleDateString("en-GB", { year: "numeric", month: "long", timeZone: "UTC" });
+
+  // Build per-day movement summary: dateStr -> { total, military, civilian, other }
+  const completed = getMovements().filter(m => m.status === "COMPLETED");
+  const dayMap = Object.create(null);
+  for (const m of completed) {
+    const d = getMovementOperationalDate(m);
+    if (!d) continue;
+    if (!dayMap[d]) dayMap[d] = { total: 0, military: 0, civilian: 0, other: 0 };
+    dayMap[d].total++;
+    dayMap[d][classifyHistoryMovementForCalendar(m)]++;
+  }
+
+  // Today string (UTC)
+  const _now = new Date();
+  const todayStr = `${_now.getUTCFullYear()}-${String(_now.getUTCMonth() + 1).padStart(2, "0")}-${String(_now.getUTCDate()).padStart(2, "0")}`;
+
+  // First day-of-week offset: Mon = 0, … Sun = 6
+  const firstDay = new Date(Date.UTC(year, month, 1));
+  const startDow = (firstDay.getUTCDay() + 6) % 7;   // getUTCDay: 0=Sun → shift to Mon-start
+
+  // Days in month
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  let html = "";
+
+  // Weekday header row
+  for (const wd of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+    html += `<div class="history-calendar-day-header">${wd}</div>`;
+  }
+
+  // Leading empty cells
+  for (let i = 0; i < startDow; i++) {
+    html += `<div class="history-calendar-day empty"><div class="history-calendar-day-number"></div></div>`;
+  }
+
+  // Day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const data = dayMap[dateStr];
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === historyCalendarSelectedDate;
+
+    let cls = "history-calendar-day";
+    if (isToday) cls += " today";
+    if (isSelected) cls += " selected";
+    if (data) cls += " has-movements";
+
+    let inner = `<div class="history-calendar-day-number">${day}</div>`;
+
+    if (data) {
+      let milCivLine = "";
+      const parts = [];
+      if (data.military > 0) parts.push(`Mil ${data.military}`);
+      if (data.civilian > 0) parts.push(`Civ ${data.civilian}`);
+      if (data.other > 0) parts.push(`Oth ${data.other}`);
+      if (parts.length) milCivLine = `<br>${parts.join(" · ")}`;
+      inner += `<div class="history-calendar-summary">Total ${data.total}${milCivLine}</div>`;
+    }
+
+    const ariaLabel = data
+      ? `${dateStr}, ${data.total} completed movement${data.total !== 1 ? "s" : ""}`
+      : dateStr;
+
+    html += `<div class="${cls}" data-date="${dateStr}" role="button" tabindex="0" aria-label="${ariaLabel}">${inner}</div>`;
+  }
+
+  // Trailing empty cells to complete the final row
+  const totalCells = startDow + daysInMonth;
+  const remainder = totalCells % 7;
+  if (remainder > 0) {
+    for (let i = remainder; i < 7; i++) {
+      html += `<div class="history-calendar-day empty"><div class="history-calendar-day-number"></div></div>`;
+    }
+  }
+
+  grid.innerHTML = html;
+
+  // Bind day-click: select date and switch to Historic Strip Board
+  grid.querySelectorAll(".history-calendar-day[data-date]").forEach(cell => {
+    cell.addEventListener("click", () => {
+      historyCalendarSelectedDate = cell.dataset.date;
+      // Trigger strip-board activation via its nav button so activate() logic runs
+      const stripBtn = document.querySelector('[data-history-view="hist-view-strip-board"]');
+      if (stripBtn) stripBtn.click();
+    });
+
+    cell.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        cell.click();
+      }
+    });
+  });
+}
+
+/**
+ * Bind toolbar buttons for the Historic Movement Calendar.
+ * Called once from setupMovementHistoryViews().
+ */
+function initHistoricMovementCalendar() {
+  const prev = byId("historyCalendarPrev");
+  const next = byId("historyCalendarNext");
+  const todayBtn = byId("historyCalendarToday");
+  const clearBtn = byId("btnClearHistoryCalendarFilter");
+
+  if (prev) {
+    prev.addEventListener("click", () => {
+      historyCalendarState.month--;
+      if (historyCalendarState.month < 0) {
+        historyCalendarState.month = 11;
+        historyCalendarState.year--;
+      }
+      renderHistoricMovementCalendar();
+    });
+  }
+
+  if (next) {
+    next.addEventListener("click", () => {
+      historyCalendarState.month++;
+      if (historyCalendarState.month > 11) {
+        historyCalendarState.month = 0;
+        historyCalendarState.year++;
+      }
+      renderHistoricMovementCalendar();
+    });
+  }
+
+  if (todayBtn) {
+    todayBtn.addEventListener("click", () => {
+      historyCalendarState.year = new Date().getUTCFullYear();
+      historyCalendarState.month = new Date().getUTCMonth();
+      renderHistoricMovementCalendar();
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      historyCalendarSelectedDate = "";
+      renderHistoryBoard();
+    });
+  }
 }
 
 /**
