@@ -822,6 +822,7 @@ Movement History remains completed-movement history unless a later dedicated tic
 ### 10.11 Completed tickets
 
 - **H1 implemented:** Movement History now defaults to Today; Movement History is completed-only; Cancelled Sorties and Deleted Strips remain separate.
+- **H2 implemented:** Movement History now has internal views for Historic Strip Board, Historic Movement Calendar, and Search / Table. Historic Strip Board contains the existing completed-movement board and remains default. Calendar and Search / Table are placeholders pending H3/H5.
 
 ---
 

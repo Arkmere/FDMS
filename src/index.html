@@ -483,39 +483,64 @@
               <div class="page-title">Movement History</div>
               <div class="page-subtitle">Completed movements.</div>
 
-              <div class="panel">
-                <div class="history-actions">
-                  <label class="control-label">Time Period:</label>
-                  <select id="historyTimePeriod" class="control-select">
-                    <option value="today" selected>Today</option>
-                    <option value="24h">Last 24 Hours</option>
-                    <option value="48h">Last 48 Hours</option>
-                    <option value="7d">Last 7 Days</option>
-                    <option value="all">All Time</option>
-                  </select>
-                  <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
-                    Export as CSV
-                  </button>
-                </div>
+              <nav class="movement-history-view-bar" id="movementHistoryViewBar" aria-label="Movement History views">
+                <button type="button" class="movement-history-view-btn active" data-history-view="hist-view-strip-board">Historic Strip Board</button>
+                <button type="button" class="movement-history-view-btn" data-history-view="hist-view-calendar">Historic Movement Calendar</button>
+                <button type="button" class="movement-history-view-btn" data-history-view="hist-view-search-table">Search / Table</button>
+              </nav>
 
-                <div class="table-container">
-                  <table id="historyTable">
-                    <thead>
-                      <tr>
-                        <th style="width: 14px"></th>
-                        <th data-sort="callsign">Callsign</th>
-                        <th data-sort="regtype">Reg / Type / WTC</th>
-                        <th data-sort="route">Route</th>
-                        <th data-sort="time">Times</th>
-                        <th data-sort="activity">Activity</th>
-                        <th data-sort="status">Status</th>
-                        <th style="width: 80px;">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="historyBody"></tbody>
-                  </table>
+              <div class="movement-history-view" id="hist-view-strip-board">
+                <div class="panel">
+                  <div class="history-actions">
+                    <label class="control-label">Time Period:</label>
+                    <select id="historyTimePeriod" class="control-select">
+                      <option value="today" selected>Today</option>
+                      <option value="24h">Last 24 Hours</option>
+                      <option value="48h">Last 48 Hours</option>
+                      <option value="7d">Last 7 Days</option>
+                      <option value="all">All Time</option>
+                    </select>
+                    <button class="btn btn-secondary" id="btnExportHistoryCsv" type="button">
+                      Export as CSV
+                    </button>
+                  </div>
+
+                  <div class="table-container">
+                    <table id="historyTable">
+                      <thead>
+                        <tr>
+                          <th style="width: 14px"></th>
+                          <th data-sort="callsign">Callsign</th>
+                          <th data-sort="regtype">Reg / Type / WTC</th>
+                          <th data-sort="route">Route</th>
+                          <th data-sort="time">Times</th>
+                          <th data-sort="activity">Activity</th>
+                          <th data-sort="status">Status</th>
+                          <th style="width: 80px;">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="historyBody"></tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              </div><!-- /hist-view-strip-board -->
+
+              <div class="movement-history-view hidden" id="hist-view-calendar">
+                <div class="panel">
+                  <div class="placeholder">
+                    Historic Movement Calendar will be added in H3. This view will summarise completed movements by operational date.
+                  </div>
+                </div>
+              </div><!-- /hist-view-calendar -->
+
+              <div class="movement-history-view hidden" id="hist-view-search-table">
+                <div class="panel">
+                  <div class="placeholder">
+                    Search / Table view will be added in H5. This view will provide structured search across completed movement history.
+                  </div>
+                </div>
+              </div><!-- /hist-view-search-table -->
+
             </div><!-- /hist-subpage-movements -->
 
             <!-- Subpage: Cancelled Sorties -->

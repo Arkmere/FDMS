@@ -4,6 +4,7 @@
 import {
   initLiveBoard,
   initHistoryBoard,
+  setupMovementHistoryViews,
   renderLiveBoard,
   renderHistoryBoard,
   initHistoryExport,
@@ -1857,6 +1858,7 @@ async function bootstrap() {
     runStage('liveboard:init', () => initLiveBoard());
     runStage('timeline:init',  () => { initTimeline(); initLiveboardCounters(); });
     runStage('history:init',   () => {
+      setupMovementHistoryViews();
       initHistoryBoard();
       initCancelledSortiesLog();
       initDeletedStripsLog();

@@ -8284,6 +8284,41 @@ export function renderHistoryBoard() {
 }
 
 /**
+ * Wire the second-level Movement History internal view switch.
+ * Activates Historic Strip Board by default.
+ */
+export function setupMovementHistoryViews() {
+  const bar = byId("movementHistoryViewBar");
+  if (!bar || bar.dataset.bound === "true") return;
+  bar.dataset.bound = "true";
+
+  const buttons = Array.from(bar.querySelectorAll("[data-history-view]"));
+  const views = Array.from(document.querySelectorAll(".movement-history-view"));
+
+  function activate(viewId) {
+    buttons.forEach(btn => {
+      const active = btn.dataset.historyView === viewId;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+
+    views.forEach(view => {
+      view.classList.toggle("hidden", view.id !== viewId);
+    });
+
+    if (viewId === "hist-view-strip-board") {
+      renderHistoryBoard();
+    }
+  }
+
+  buttons.forEach(btn => {
+    btn.addEventListener("click", () => activate(btn.dataset.historyView));
+  });
+
+  activate("hist-view-strip-board");
+}
+
+/**
  * Initialize History board sorting
  */
 export function initHistoryBoard() {
