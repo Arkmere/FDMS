@@ -4186,6 +4186,39 @@ tr.strip.ft-ovr > td {
   z-index: 1;
 }
 
+.history-search-table thead th[data-search-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.history-search-table thead th[data-search-sort]:hover {
+  text-decoration: underline;
+}
+
+.history-search-table thead th[data-search-sort-active="true"]::after {
+  content: " \25B2";
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+.history-search-table thead th[data-search-sort-active="true"][data-search-sort-dir="desc"]::after {
+  content: " \25BC";
+}
+
+.history-search-limit-notice {
+  margin: 4px 0 6px;
+  padding: 5px 8px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #6d4c00;
+}
+
+.history-search-limit-notice.hidden {
+  display: none;
+}
+
 .history-search-table tbody tr:hover {
   background: #f8f9fb;
 }
