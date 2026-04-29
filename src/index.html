@@ -566,7 +566,7 @@
                       <label class="history-filter-field">
                         <span>Flight type</span>
                         <select id="historyFilterFlightType" class="control-select">
-                          <option value="">All</option>
+                          <option value="">All flight types</option>
                           <option value="DEP">DEP</option>
                           <option value="ARR">ARR</option>
                           <option value="LOC">LOC</option>
@@ -692,7 +692,7 @@
                       <label class="history-filter-field">
                         <span>Flight type</span>
                         <select id="historySearchFlightType" class="control-select">
-                          <option value="">All</option>
+                          <option value="">All flight types</option>
                           <option value="DEP">DEP</option>
                           <option value="ARR">ARR</option>
                           <option value="LOC">LOC</option>
@@ -712,24 +712,25 @@
                     </div>
                   </div>
 
+                  <p id="historySearchLimitNotice" class="history-search-limit-notice hidden"></p>
                   <div class="table-container">
                     <table id="historySearchTable" class="history-search-table">
                       <thead>
                         <tr>
-                          <th>Date</th>
-                          <th>Callsign</th>
-                          <th>Registration</th>
-                          <th>Type</th>
-                          <th>WTC</th>
-                          <th>Flight type</th>
-                          <th>Dep AD</th>
-                          <th>Arr AD</th>
-                          <th>Times</th>
-                          <th>EGOW code</th>
-                          <th>EGOW unit</th>
-                          <th>Pilot</th>
-                          <th>Activity</th>
-                          <th>Status</th>
+                          <th data-search-sort="time">Date</th>
+                          <th data-search-sort="callsign">Callsign</th>
+                          <th data-search-sort="registration">Registration</th>
+                          <th data-search-sort="type">Type</th>
+                          <th data-search-sort="wtc">WTC</th>
+                          <th data-search-sort="flightType">Flight type</th>
+                          <th data-search-sort="depAd">Dep AD</th>
+                          <th data-search-sort="arrAd">Arr AD</th>
+                          <th data-search-sort="times">Times</th>
+                          <th data-search-sort="egowCode">EGOW code</th>
+                          <th data-search-sort="unitCode">EGOW unit</th>
+                          <th data-search-sort="pilot">Pilot</th>
+                          <th data-search-sort="activity">Activity</th>
+                          <th data-search-sort="status">Status</th>
                           <th class="history-search-actions">Actions</th>
                         </tr>
                       </thead>

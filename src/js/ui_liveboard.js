@@ -10546,6 +10546,10 @@ export function initHistoryExport() {
 ---------------------------------------- */
 
 let _searchTableExpandedId = null;
+let historySearchSortColumn = "time";
+let historySearchSortDirection = "desc";
+
+const HISTORY_SEARCH_VISIBLE_ROW_LIMIT = 500;
 
 const SEARCH_TABLE_FILTER_IDS = {
   dateFrom:     "historySearchDateFrom",
@@ -10638,6 +10642,82 @@ function _searchTableUnitCodeDisplay(m) {
   return text || "—";
 }
 
+function sortHistorySearchMovements(movements, column, direction) {
+  return movements.slice().sort((a, b) => {
+    let valA, valB;
+
+    switch (column) {
+      case "time":
+      case "date": {
+        const dofA = getDOFTimestamp(a);
+        const dofB = getDOFTimestamp(b);
+        if (dofA !== dofB) return direction === "asc" ? dofA - dofB : dofB - dofA;
+        valA = timeToMinutes(getATA(a) || getATD(a) || getACT(a) || getETA(a) || getETD(a) || getECT(a));
+        valB = timeToMinutes(getATA(b) || getATD(b) || getACT(b) || getETA(b) || getETD(b) || getECT(b));
+        break;
+      }
+      case "callsign":
+        valA = (a.callsignCode || a.callsignVoice || "").toLowerCase();
+        valB = (b.callsignCode || b.callsignVoice || "").toLowerCase();
+        break;
+      case "registration":
+        valA = _normaliseRegistrationSearchValue(a.registration);
+        valB = _normaliseRegistrationSearchValue(b.registration);
+        break;
+      case "type":
+        valA = (a.type || "").toLowerCase();
+        valB = (b.type || "").toLowerCase();
+        break;
+      case "wtc":
+        valA = (a.wtc || "").toLowerCase();
+        valB = (b.wtc || "").toLowerCase();
+        break;
+      case "flightType":
+        valA = (a.flightType || "").toLowerCase();
+        valB = (b.flightType || "").toLowerCase();
+        break;
+      case "depAd":
+        valA = (a.depAd || "").toLowerCase();
+        valB = (b.depAd || "").toLowerCase();
+        break;
+      case "arrAd":
+        valA = (a.arrAd || "").toLowerCase();
+        valB = (b.arrAd || "").toLowerCase();
+        break;
+      case "times":
+        valA = _searchTableTimesCompact(a).toLowerCase();
+        valB = _searchTableTimesCompact(b).toLowerCase();
+        break;
+      case "egowCode":
+        valA = (a.egowCode || "").toLowerCase();
+        valB = (b.egowCode || "").toLowerCase();
+        break;
+      case "unitCode":
+        valA = _searchTableUnitCodeDisplay(a).toLowerCase();
+        valB = _searchTableUnitCodeDisplay(b).toLowerCase();
+        break;
+      case "pilot":
+        valA = _searchTablePilotDisplay(a).toLowerCase();
+        valB = _searchTablePilotDisplay(b).toLowerCase();
+        break;
+      case "activity":
+        valA = (a.tngCount || 0) + (a.osCount || 0) + (a.fisCount || 0);
+        valB = (b.tngCount || 0) + (b.osCount || 0) + (b.fisCount || 0);
+        break;
+      case "status":
+        valA = (a.status || "").toLowerCase();
+        valB = (b.status || "").toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+
+    if (valA === valB) return 0;
+    const cmp = valA < valB ? -1 : 1;
+    return direction === "asc" ? cmp : -cmp;
+  });
+}
+
 function renderHistorySearchDetailRow(tbody, m) {
   const tr = document.createElement("tr");
   tr.className = "history-search-detail-row";
@@ -10699,6 +10779,7 @@ function _escapeCsvValue(value) {
 export function renderHistorySearchTable() {
   const tbody = byId("historySearchBody");
   const countEl = byId("historySearchResultCount");
+  const limitNotice = byId("historySearchLimitNotice");
   if (!tbody) return;
 
   tbody.innerHTML = "";
@@ -10712,15 +10793,38 @@ export function renderHistorySearchTable() {
     movements = movements.filter(m => movementMatchesSearchTableFilters(m, filters));
   }
 
-  // Sort newest first by operational date, then by completion time descending
-  movements = sortHistoryMovements(movements, "time", "desc");
+  movements = sortHistorySearchMovements(movements, historySearchSortColumn, historySearchSortDirection);
+
+  const totalCount = movements.length;
 
   if (countEl) {
-    const n = movements.length;
-    countEl.textContent = `${n} completed movement${n !== 1 ? "s" : ""}`;
+    countEl.textContent = `${totalCount} completed movement${totalCount !== 1 ? "s" : ""}`;
   }
 
-  if (movements.length === 0) {
+  // Update sort indicator on headers
+  const thead = byId("historySearchTable") && byId("historySearchTable").querySelector("thead");
+  if (thead) {
+    thead.querySelectorAll("th[data-search-sort]").forEach(th => {
+      th.removeAttribute("data-search-sort-active");
+      th.removeAttribute("data-search-sort-dir");
+    });
+    const activeTh = thead.querySelector(`th[data-search-sort="${historySearchSortColumn}"]`);
+    if (activeTh) {
+      activeTh.setAttribute("data-search-sort-active", "true");
+      activeTh.setAttribute("data-search-sort-dir", historySearchSortDirection);
+    }
+  }
+
+  if (limitNotice) {
+    if (totalCount > HISTORY_SEARCH_VISIBLE_ROW_LIMIT) {
+      limitNotice.textContent = `Showing first ${HISTORY_SEARCH_VISIBLE_ROW_LIMIT} of ${totalCount} matching completed movements. Narrow the search or export CSV for full results.`;
+      limitNotice.classList.remove("hidden");
+    } else {
+      limitNotice.classList.add("hidden");
+    }
+  }
+
+  if (totalCount === 0) {
     const empty = document.createElement("tr");
     const msg = filtersActive
       ? "No completed movements match the current search."
@@ -10730,7 +10834,9 @@ export function renderHistorySearchTable() {
     return;
   }
 
-  for (const m of movements) {
+  const visibleMovements = movements.slice(0, HISTORY_SEARCH_VISIBLE_ROW_LIMIT);
+
+  for (const m of visibleMovements) {
     const tr = document.createElement("tr");
     tr.dataset.id = String(m.id);
 
@@ -10789,6 +10895,10 @@ export function renderHistorySearchTable() {
       }
       historyCalendarSelectedDate = date;
       activateMovementHistoryView("hist-view-strip-board");
+      const _h4Active = hasActiveHistoryFilters(getHistoryFilterValues());
+      if (_h4Active) {
+        showToast("Opened selected date in Historic Strip Board. Active Strip Board filters still apply.", "info");
+      }
     });
 
     tbody.appendChild(tr);
@@ -10807,7 +10917,7 @@ function exportHistorySearchCSV() {
   if (filtersActive) {
     movements = movements.filter(m => movementMatchesSearchTableFilters(m, filters));
   }
-  movements = sortHistoryMovements(movements, "time", "desc");
+  movements = sortHistorySearchMovements(movements, historySearchSortColumn, historySearchSortDirection);
 
   if (movements.length === 0) {
     showToast("No completed movements to export", "warning");
@@ -10865,7 +10975,7 @@ function exportHistorySearchCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `history-search-results-${new Date().toISOString().split("T")[0]}.csv`;
+  a.download = `flite-history-search-${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 
@@ -10924,6 +11034,23 @@ function initHistorySearchTable() {
   const exportBtn = byId("btnExportHistorySearchCsv");
   if (exportBtn) {
     exportBtn.addEventListener("click", exportHistorySearchCSV);
+  }
+
+  // Column-click sorting
+  const table = byId("historySearchTable");
+  if (table) {
+    table.querySelectorAll("thead th[data-search-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const col = th.getAttribute("data-search-sort");
+        if (historySearchSortColumn === col) {
+          historySearchSortDirection = historySearchSortDirection === "asc" ? "desc" : "asc";
+        } else {
+          historySearchSortColumn = col;
+          historySearchSortDirection = "asc";
+        }
+        renderHistorySearchTable();
+      });
+    });
   }
 }
 
