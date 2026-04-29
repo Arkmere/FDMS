@@ -622,8 +622,119 @@
 
               <div class="movement-history-view hidden" id="hist-view-search-table">
                 <div class="panel">
-                  <div class="placeholder">
-                    Search / Table view will be added in H5. This view will provide structured search across completed movement history.
+                  <div class="history-search-panel">
+                    <div class="history-filter-header">
+                      <span class="history-filter-title">Search completed movements</span>
+                      <div class="history-search-toolbar">
+                        <span id="historySearchResultCount" class="history-search-result-count"></span>
+                        <button id="btnClearHistorySearch" type="button" class="small-btn">Clear search</button>
+                        <button id="btnExportHistorySearchCsv" type="button" class="btn btn-secondary">Export filtered CSV</button>
+                      </div>
+                    </div>
+
+                    <div class="history-search-grid history-filter-grid">
+                      <label class="history-filter-field">
+                        <span>Date from</span>
+                        <input id="historySearchDateFrom" type="date" class="control-input">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Date to</span>
+                        <input id="historySearchDateTo" type="date" class="control-input">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Free text</span>
+                        <input id="historySearchText" type="text" class="control-input" placeholder="Callsign, reg, pilot, route…" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Callsign</span>
+                        <input id="historySearchCallsign" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Registration</span>
+                        <input id="historySearchRegistration" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Pilot</span>
+                        <input id="historySearchPilot" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Aircraft type</span>
+                        <input id="historySearchAircraftType" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>EGOW code</span>
+                        <input id="historySearchEgowCode" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>EGOW unit code</span>
+                        <select id="historySearchUnitCode" class="control-select">
+                          <option value="">No filter</option>
+                          <option value="ANY">Any unit code</option>
+                          <option value="L">L</option>
+                          <option value="M">M</option>
+                          <option value="A">A</option>
+                        </select>
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>WTC</span>
+                        <input id="historySearchWtc" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Flight type</span>
+                        <select id="historySearchFlightType" class="control-select">
+                          <option value="">All</option>
+                          <option value="DEP">DEP</option>
+                          <option value="ARR">ARR</option>
+                          <option value="LOC">LOC</option>
+                          <option value="OVR">OVR</option>
+                        </select>
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Departure AD</span>
+                        <input id="historySearchDepAd" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Arrival AD</span>
+                        <input id="historySearchArrAd" type="text" class="control-input" autocomplete="off">
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="table-container">
+                    <table id="historySearchTable" class="history-search-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Callsign</th>
+                          <th>Registration</th>
+                          <th>Type</th>
+                          <th>WTC</th>
+                          <th>Flight type</th>
+                          <th>Dep AD</th>
+                          <th>Arr AD</th>
+                          <th>Times</th>
+                          <th>EGOW code</th>
+                          <th>EGOW unit</th>
+                          <th>Pilot</th>
+                          <th>Activity</th>
+                          <th>Status</th>
+                          <th class="history-search-actions">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="historySearchBody"></tbody>
+                    </table>
                   </div>
                 </div>
               </div><!-- /hist-view-search-table -->
