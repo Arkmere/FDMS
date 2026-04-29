@@ -4076,3 +4076,61 @@ tr.strip.ft-ovr > td {
 .history-calendar-filter-banner span {
   flex: 1;
 }
+
+/* H4: Historic Strip Board structured filter panel */
+.history-filter-panel {
+  margin-bottom: 10px;
+  padding: 8px;
+  background: #eef1f3;
+  border: 1px solid var(--va-border);
+  border-radius: 4px;
+}
+
+.history-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.history-filter-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--va-accent-brown);
+}
+
+.history-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.history-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--va-text-soft);
+}
+
+.history-filter-field span {
+  font-weight: 600;
+}
+
+.history-filter-field input,
+.history-filter-field select {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .history-filter-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .history-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
