@@ -8135,13 +8135,52 @@ function _substringMatch(haystack, needle) {
   return String(haystack || "").toUpperCase().includes(needle.toUpperCase());
 }
 
+function _joinSearchFields(fields) {
+  return fields
+    .flat(Infinity)
+    .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+    .map(v => String(v))
+    .join(" ");
+}
+
+/**
+ * Return all known pilot / PIC / attribution text for Historic Strip Board search.
+ * Covers ordinary movements and formation element pilot identity without changing schema.
+ */
+function getHistoryPilotSearchText(m) {
+  const formationElements = Array.isArray(m.formation?.elements)
+    ? m.formation.elements
+    : [];
+
+  const formationPilotText = formationElements.map(e => [
+    e.pilotName,
+    e.pilot,
+    e.pic,
+    e.captain,
+    e.attribution,
+    e.pilotIdentity,
+    e.pilotId,
+  ]);
+
+  return _joinSearchFields([
+    m.pilotName,
+    m.pilot,
+    m.pic,
+    m.captain,
+    m.attribution,
+    m.pilotIdentity,
+    m.pilotId,
+    formationPilotText,
+  ]);
+}
+
 function movementMatchesHistoryFilters(m, filters) {
   // Free-text: OR across common display fields
   if (filters.text) {
     const needle = filters.text.toUpperCase();
-    const fields = [
+        const fields = [
       m.callsignCode, m.callsignVoice, m.registration, m.type,
-      m.depAd, m.arrAd, m.egowCode, m.pilotName, m.remarks,
+      m.depAd, m.arrAd, m.egowCode, getHistoryPilotSearchText(m), m.remarks,
       m.flightType, m.wtc,
     ];
     const hit = fields.some(f => String(f || "").toUpperCase().includes(needle));
@@ -8154,7 +8193,7 @@ function movementMatchesHistoryFilters(m, filters) {
     if (!_substringMatch(m.callsignCode, n) && !_substringMatch(m.callsignVoice, n)) return false;
   }
   if (filters.registration && !_substringMatch(m.registration, filters.registration)) return false;
-  if (filters.pilot       && !_substringMatch(m.pilotName,    filters.pilot))       return false;
+  if (filters.pilot       && !_substringMatch(getHistoryPilotSearchText(m), filters.pilot)) return false;
   if (filters.aircraftType && !_substringMatch(m.type,        filters.aircraftType)) return false;
   if (filters.egowCode    && !_substringMatch(m.egowCode,     filters.egowCode))    return false;
   if (filters.wtc         && !_substringMatch(m.wtc,          filters.wtc))         return false;
