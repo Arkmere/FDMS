@@ -4198,3 +4198,49 @@ tr.strip.ft-ovr > td {
 .history-search-actions .small-btn {
   margin-right: 2px;
 }
+
+.history-search-detail-row td {
+  background: #f4f6f9;
+  border-bottom: 2px solid var(--va-border);
+}
+
+.history-search-detail {
+  padding: 8px 10px;
+}
+
+.history-search-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 6px 16px;
+}
+
+.history-search-detail-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+}
+
+.history-search-detail-grid .hsd-remarks {
+  grid-column: 1 / -1;
+}
+
+.hsd-label {
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--va-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 900px) {
+  .history-search-detail-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .history-search-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

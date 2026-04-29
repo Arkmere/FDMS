@@ -10629,7 +10629,55 @@ function _searchTableTimesCompact(m) {
 }
 
 function _searchTablePilotDisplay(m) {
-  return m.pilotName || m.pilot || m.pic || m.captain || m.attribution || m.pilotIdentity || m.pilotId || "—";
+  const text = getHistoryPilotSearchText(m).trim();
+  return text || "—";
+}
+
+function _searchTableUnitCodeDisplay(m) {
+  const text = getHistoryUnitCodeSearchText(m).trim();
+  return text || "—";
+}
+
+function renderHistorySearchDetailRow(tbody, m) {
+  const tr = document.createElement("tr");
+  tr.className = "history-search-detail-row";
+
+  const dof      = escapeHtml(getMovementOperationalDate(m) || "—");
+  const pilot    = escapeHtml(_searchTablePilotDisplay(m));
+  const unitCode = escapeHtml(_searchTableUnitCodeDisplay(m));
+  const times    = escapeHtml(_searchTableTimesCompact(m));
+  const activity = _searchTableActivityDisplay(m); // pre-escaped HTML entity for &
+
+  const depRoute = m.depAd
+    ? `<span${m.depName ? ` title="${escapeHtml(m.depName)}"` : ""}>${escapeHtml(m.depAd)}</span>`
+    : "—";
+  const arrRoute = m.arrAd
+    ? `<span${m.arrName ? ` title="${escapeHtml(m.arrName)}"` : ""}>${escapeHtml(m.arrAd)}</span>`
+    : "—";
+
+  tr.innerHTML = `
+    <td colspan="15">
+      <div class="history-search-detail">
+        <div class="history-search-detail-grid">
+          <div><span class="hsd-label">Callsign</span><span>${escapeHtml(m.callsignCode || "—")}${m.callsignVoice ? ` <span class="cell-muted">(${escapeHtml(m.callsignVoice)})</span>` : ""}</span></div>
+          <div><span class="hsd-label">Registration</span><span>${escapeHtml(m.registration || "—")}</span></div>
+          <div><span class="hsd-label">Type</span><span>${escapeHtml(m.type || "—")}</span></div>
+          <div><span class="hsd-label">WTC</span><span>${escapeHtml(m.wtc || "—")}</span></div>
+          <div><span class="hsd-label">Flight type</span><span>${escapeHtml(m.flightType || "—")}</span></div>
+          <div><span class="hsd-label">Date</span><span>${dof}</span></div>
+          <div><span class="hsd-label">Route</span><span>${depRoute} → ${arrRoute}</span></div>
+          <div><span class="hsd-label">Times</span><span>${times}</span></div>
+          <div><span class="hsd-label">EGOW code</span><span>${escapeHtml(m.egowCode || "—")}</span></div>
+          <div><span class="hsd-label">EGOW unit</span><span>${unitCode}</span></div>
+          <div><span class="hsd-label">Pilot / PIC</span><span>${pilot}</span></div>
+          <div><span class="hsd-label">Activity</span><span>${activity}</span></div>
+          <div><span class="hsd-label">Status</span><span class="badge badge-success">Completed</span></div>
+          ${m.remarks ? `<div class="hsd-remarks"><span class="hsd-label">Remarks</span><span>${escapeHtml(m.remarks)}</span></div>` : ""}
+        </div>
+      </div>
+    </td>
+  `;
+  tbody.appendChild(tr);
 }
 
 function _searchTableActivityDisplay(m) {
@@ -10697,7 +10745,7 @@ export function renderHistorySearchTable() {
     const arrAd      = escapeHtml(m.arrAd || "—");
     const times      = escapeHtml(_searchTableTimesCompact(m));
     const egowCode   = escapeHtml(m.egowCode || "—");
-    const unitCode   = escapeHtml(m.unitCode || m.egowUnitCode || m.unit || m.egowUnit || "—");
+    const unitCode   = escapeHtml(_searchTableUnitCodeDisplay(m));
     const pilot      = escapeHtml(_searchTablePilotDisplay(m));
     const activity   = _searchTableActivityDisplay(m); // already safe — only T&amp;G/O/S/FIS numbers
     const depTitle   = m.depName ? ` title="${escapeHtml(m.depName)}"` : "";
@@ -10746,7 +10794,7 @@ export function renderHistorySearchTable() {
     tbody.appendChild(tr);
 
     if (_searchTableExpandedId === m.id) {
-      renderExpandedRow(tbody, m, "history");
+      renderHistorySearchDetailRow(tbody, m);
     }
   }
 }
@@ -10762,7 +10810,7 @@ function exportHistorySearchCSV() {
   movements = sortHistoryMovements(movements, "time", "desc");
 
   if (movements.length === 0) {
-    showToast("No movements to export", "warning");
+    showToast("No completed movements to export", "warning");
     return;
   }
 
@@ -10799,7 +10847,7 @@ function exportHistorySearchCSV() {
     m.arrAd || "",
     _searchTableTimesCompact(m),
     m.egowCode || "",
-    m.unitCode || m.egowUnitCode || m.unit || m.egowUnit || "",
+    _searchTableUnitCodeDisplay(m) === "—" ? "" : _searchTableUnitCodeDisplay(m),
     _searchTablePilotDisplay(m) === "—" ? "" : _searchTablePilotDisplay(m),
     m.tngCount || 0,
     m.osCount || 0,
