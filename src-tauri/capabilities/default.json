@@ -4,6 +4,8 @@
   "description": "Default capabilities for Vectair Flite desktop shell (DP-02 scaffold).",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:allow-save",
+    "fs:allow-write-text-file"
   ]
 }
