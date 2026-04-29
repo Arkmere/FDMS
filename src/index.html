@@ -551,6 +551,7 @@
                         <span>EGOW unit code</span>
                         <select id="historyFilterUnitCode" class="control-select">
                           <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
                           <option value="ANY">Any unit code</option>
                           <option value="L">L</option>
                           <option value="M">M</option>
@@ -566,7 +567,8 @@
                       <label class="history-filter-field">
                         <span>Flight type</span>
                         <select id="historyFilterFlightType" class="control-select">
-                          <option value="">All flight types</option>
+                          <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
                           <option value="DEP">DEP</option>
                           <option value="ARR">ARR</option>
                           <option value="LOC">LOC</option>
@@ -670,13 +672,24 @@
 
                       <label class="history-filter-field">
                         <span>EGOW code</span>
-                        <input id="historySearchEgowCode" type="text" class="control-input" autocomplete="off">
+                        <select id="historySearchEgowCode" class="control-select">
+                          <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
+                          <option value="BM">BM</option>
+                          <option value="BC">BC</option>
+                          <option value="VM">VM</option>
+                          <option value="VMH">VMH</option>
+                          <option value="VC">VC</option>
+                          <option value="VCH">VCH</option>
+                          <option value="VNH">VNH</option>
+                        </select>
                       </label>
 
                       <label class="history-filter-field">
                         <span>EGOW unit code</span>
                         <select id="historySearchUnitCode" class="control-select">
                           <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
                           <option value="ANY">Any unit code</option>
                           <option value="L">L</option>
                           <option value="M">M</option>
@@ -686,13 +699,17 @@
 
                       <label class="history-filter-field">
                         <span>WTC</span>
-                        <input id="historySearchWtc" type="text" class="control-input" autocomplete="off">
+                        <select id="historySearchWtc" class="control-select">
+                          <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
+                        </select>
                       </label>
 
                       <label class="history-filter-field">
                         <span>Flight type</span>
                         <select id="historySearchFlightType" class="control-select">
-                          <option value="">All flight types</option>
+                          <option value="">No filter</option>
+                          <option value="__NONE__">None / blank</option>
                           <option value="DEP">DEP</option>
                           <option value="ARR">ARR</option>
                           <option value="LOC">LOC</option>

@@ -8132,6 +8132,13 @@ function hasActiveHistoryFilters(filters) {
   return Object.values(filters).some(v => v !== "");
 }
 
+function _isBlankHistoryFilterValue(value) {
+  return value === null ||
+         value === undefined ||
+         String(value).trim() === "" ||
+         String(value).trim() === "—";
+}
+
 function _substringMatch(haystack, needle) {
   return String(haystack || "").toUpperCase().includes(needle.toUpperCase());
 }
@@ -8233,19 +8240,29 @@ function movementMatchesHistoryFilters(m, filters) {
   if (filters.registration && !_registrationMatch(m.registration, filters.registration)) return false;
   if (filters.pilot        && !_substringMatch(getHistoryPilotSearchText(m), filters.pilot)) return false;
   if (filters.aircraftType && !_substringMatch(m.type,     filters.aircraftType)) return false;
-  if (filters.egowCode     && !_substringMatch(m.egowCode, filters.egowCode))    return false;
+  if (filters.egowCode) {
+    if (!_substringMatch(m.egowCode, filters.egowCode)) return false;
+  }
   if (filters.unitCode) {
     const unitCodeTokens      = getHistoryUnitCodeSearchText(m).toUpperCase().split(/\s+/).filter(Boolean);
     const recognisedUnitCodes = ["L", "M", "A"];
-    if (filters.unitCode.toUpperCase() === "ANY") {
+    if (filters.unitCode === "__NONE__") {
+      const hasToken = recognisedUnitCodes.some(code => unitCodeTokens.includes(code));
+      const hasText  = getHistoryUnitCodeSearchText(m).trim() !== "";
+      if (hasToken || hasText) return false;
+    } else if (filters.unitCode.toUpperCase() === "ANY") {
       if (!recognisedUnitCodes.some(code => unitCodeTokens.includes(code))) return false;
     } else {
       if (!unitCodeTokens.includes(filters.unitCode.toUpperCase())) return false;
     }
   }
-  if (filters.wtc          && !_substringMatch(m.wtc,      filters.wtc))         return false;
+  if (filters.wtc && !_substringMatch(m.wtc, filters.wtc)) return false;
   if (filters.flightType) {
-    if ((m.flightType || "").toUpperCase() !== filters.flightType.toUpperCase()) return false;
+    if (filters.flightType === "__NONE__") {
+      if (!_isBlankHistoryFilterValue(m.flightType)) return false;
+    } else {
+      if ((m.flightType || "").toUpperCase() !== filters.flightType.toUpperCase()) return false;
+    }
   }
   if (filters.depAd && !_substringMatch(m.depAd, filters.depAd)) return false;
   if (filters.arrAd && !_substringMatch(m.arrAd, filters.arrAd)) return false;
@@ -10590,17 +10607,32 @@ function movementMatchesSearchTableFilters(m, filters) {
     if (filters.dateTo   && dof > filters.dateTo)   return false;
   }
 
-  // Delegate remaining filters to the shared H4 matcher by building
-  // a filter object with the same keys (excluding H5-only dateFrom/dateTo)
+  // H5-specific: egowCode and wtc use selects — exact match + __NONE__ support
+  if (filters.egowCode) {
+    if (filters.egowCode === "__NONE__") {
+      if (!_isBlankHistoryFilterValue(m.egowCode)) return false;
+    } else {
+      if ((m.egowCode || "").toUpperCase() !== filters.egowCode.toUpperCase()) return false;
+    }
+  }
+  if (filters.wtc) {
+    if (filters.wtc === "__NONE__") {
+      if (!_isBlankHistoryFilterValue(m.wtc)) return false;
+    } else {
+      if ((m.wtc || "").toUpperCase() !== filters.wtc.toUpperCase()) return false;
+    }
+  }
+
+  // Delegate remaining filters to the shared H4 matcher (egowCode/wtc already handled above)
   const h4Filters = {
     text:         filters.text,
     callsign:     filters.callsign,
     registration: filters.registration,
     pilot:        filters.pilot,
     aircraftType: filters.aircraftType,
-    egowCode:     filters.egowCode,
+    egowCode:     "",
     unitCode:     filters.unitCode,
-    wtc:          filters.wtc,
+    wtc:          "",
     flightType:   filters.flightType,
     depAd:        filters.depAd,
     arrAd:        filters.arrAd,
@@ -10842,7 +10874,6 @@ export function renderHistorySearchTable() {
 
     const dof        = getMovementOperationalDate(m) || "—";
     const callsign   = escapeHtml(m.callsignCode || "—");
-    const voiceSub   = m.callsignVoice ? `<div class="cell-muted" style="font-size:10px;">${escapeHtml(m.callsignVoice)}</div>` : "";
     const reg        = escapeHtml(m.registration || "—");
     const type       = escapeHtml(m.type || "—");
     const wtc        = escapeHtml(m.wtc || "—");
@@ -10859,7 +10890,7 @@ export function renderHistorySearchTable() {
 
     tr.innerHTML = `
       <td>${escapeHtml(dof)}</td>
-      <td><div class="cell-strong">${callsign}</div>${voiceSub}</td>
+      <td><div class="cell-strong">${callsign}</div></td>
       <td>${reg}</td>
       <td>${type}</td>
       <td>${wtc}</td>
@@ -10874,7 +10905,7 @@ export function renderHistorySearchTable() {
       <td><span class="badge badge-success">Completed</span></td>
       <td class="history-search-actions">
         <button type="button" class="small-btn btnHistorySearchOpenInfo" aria-label="Open info">Info</button>
-        <button type="button" class="small-btn btnHistorySearchJumpDay" aria-label="Jump to day in Historic Strip Board">Jump</button>
+        <button type="button" class="small-btn btnHistorySearchJumpDay" aria-label="View this day in Historic Strip Board">View day</button>
       </td>
     `;
 
@@ -10979,7 +11010,7 @@ function exportHistorySearchCSV() {
   a.click();
   URL.revokeObjectURL(url);
 
-  showToast(`Exported ${movements.length} movements to CSV`, "success");
+  showToast(`Filtered history CSV exported. Check your Downloads folder.`, "success");
 }
 
 function initHistorySearchTable() {
@@ -10995,8 +11026,6 @@ function initHistorySearchTable() {
     SEARCH_TABLE_FILTER_IDS.registration,
     SEARCH_TABLE_FILTER_IDS.pilot,
     SEARCH_TABLE_FILTER_IDS.aircraftType,
-    SEARCH_TABLE_FILTER_IDS.egowCode,
-    SEARCH_TABLE_FILTER_IDS.wtc,
     SEARCH_TABLE_FILTER_IDS.depAd,
     SEARCH_TABLE_FILTER_IDS.arrAd,
   ];
@@ -11009,10 +11038,25 @@ function initHistorySearchTable() {
   const selectIds = [
     SEARCH_TABLE_FILTER_IDS.flightType,
     SEARCH_TABLE_FILTER_IDS.unitCode,
+    SEARCH_TABLE_FILTER_IDS.egowCode,
+    SEARCH_TABLE_FILTER_IDS.wtc,
   ];
   for (const id of selectIds) {
     const el = byId(id);
     if (el) el.addEventListener("change", () => renderHistorySearchTable());
+  }
+
+  // Populate WTC options from the system WTC configuration
+  const wtcSelect = byId(SEARCH_TABLE_FILTER_IDS.wtc);
+  if (wtcSelect) {
+    const wtcSystem = (getConfig().wtcSystem || "ICAO").toUpperCase();
+    const wtcOpts = (_WTC_OPTIONS && _WTC_OPTIONS[wtcSystem]) ? _WTC_OPTIONS[wtcSystem] : _WTC_OPTIONS.ICAO;
+    for (const cat of wtcOpts) {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      wtcSelect.appendChild(opt);
+    }
   }
 
   const clearBtn = byId("btnClearHistorySearch");
