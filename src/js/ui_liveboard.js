@@ -8112,6 +8112,7 @@ const HISTORY_FILTER_IDS = {
   pilot:        "historyFilterPilot",
   aircraftType: "historyFilterAircraftType",
   egowCode:     "historyFilterEgowCode",
+  unitCode:     "historyFilterUnitCode",
   wtc:          "historyFilterWtc",
   flightType:   "historyFilterFlightType",
   depAd:        "historyFilterDepAd",
@@ -8135,6 +8136,16 @@ function _substringMatch(haystack, needle) {
   return String(haystack || "").toUpperCase().includes(needle.toUpperCase());
 }
 
+function _normaliseRegistrationSearchValue(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function _registrationMatch(value, filter) {
+  const haystack = _normaliseRegistrationSearchValue(value);
+  const needle   = _normaliseRegistrationSearchValue(filter);
+  return needle === "" || haystack.includes(needle);
+}
+
 function _joinSearchFields(fields) {
   return fields
     .flat(Infinity)
@@ -8143,10 +8154,6 @@ function _joinSearchFields(fields) {
     .join(" ");
 }
 
-/**
- * Return all known pilot / PIC / attribution text for Historic Strip Board search.
- * Covers ordinary movements and formation element pilot identity without changing schema.
- */
 function getHistoryPilotSearchText(m) {
   const formationElements = Array.isArray(m.formation?.elements)
     ? m.formation.elements
@@ -8174,14 +8181,45 @@ function getHistoryPilotSearchText(m) {
   ]);
 }
 
+function getHistoryUnitCodeSearchText(m) {
+  const formationElements = Array.isArray(m.formation?.elements)
+    ? m.formation.elements
+    : [];
+
+  const formationUnitText = formationElements.map(e => [
+    e.unitCode,
+    e.egowUnitCode,
+    e.unit,
+    e.egowUnit,
+  ]);
+
+  return _joinSearchFields([
+    m.unitCode,
+    m.egowUnitCode,
+    m.unit,
+    m.egowUnit,
+    formationUnitText,
+  ]);
+}
+
 function movementMatchesHistoryFilters(m, filters) {
   // Free-text: OR across common display fields
   if (filters.text) {
     const needle = filters.text.toUpperCase();
-        const fields = [
-      m.callsignCode, m.callsignVoice, m.registration, m.type,
-      m.depAd, m.arrAd, m.egowCode, getHistoryPilotSearchText(m), m.remarks,
-      m.flightType, m.wtc,
+    const fields = [
+      m.callsignCode,
+      m.callsignVoice,
+      m.registration,
+      _normaliseRegistrationSearchValue(m.registration),
+      m.type,
+      m.depAd,
+      m.arrAd,
+      m.egowCode,
+      getHistoryUnitCodeSearchText(m),
+      getHistoryPilotSearchText(m),
+      m.remarks,
+      m.flightType,
+      m.wtc,
     ];
     const hit = fields.some(f => String(f || "").toUpperCase().includes(needle));
     if (!hit) return false;
@@ -8192,11 +8230,20 @@ function movementMatchesHistoryFilters(m, filters) {
     const n = filters.callsign.toUpperCase();
     if (!_substringMatch(m.callsignCode, n) && !_substringMatch(m.callsignVoice, n)) return false;
   }
-  if (filters.registration && !_substringMatch(m.registration, filters.registration)) return false;
-  if (filters.pilot       && !_substringMatch(getHistoryPilotSearchText(m), filters.pilot)) return false;
-  if (filters.aircraftType && !_substringMatch(m.type,        filters.aircraftType)) return false;
-  if (filters.egowCode    && !_substringMatch(m.egowCode,     filters.egowCode))    return false;
-  if (filters.wtc         && !_substringMatch(m.wtc,          filters.wtc))         return false;
+  if (filters.registration && !_registrationMatch(m.registration, filters.registration)) return false;
+  if (filters.pilot        && !_substringMatch(getHistoryPilotSearchText(m), filters.pilot)) return false;
+  if (filters.aircraftType && !_substringMatch(m.type,     filters.aircraftType)) return false;
+  if (filters.egowCode     && !_substringMatch(m.egowCode, filters.egowCode))    return false;
+  if (filters.unitCode) {
+    const unitCodeTokens      = getHistoryUnitCodeSearchText(m).toUpperCase().split(/\s+/).filter(Boolean);
+    const recognisedUnitCodes = ["L", "M", "A"];
+    if (filters.unitCode.toUpperCase() === "ANY") {
+      if (!recognisedUnitCodes.some(code => unitCodeTokens.includes(code))) return false;
+    } else {
+      if (!unitCodeTokens.includes(filters.unitCode.toUpperCase())) return false;
+    }
+  }
+  if (filters.wtc          && !_substringMatch(m.wtc,      filters.wtc))         return false;
   if (filters.flightType) {
     if ((m.flightType || "").toUpperCase() !== filters.flightType.toUpperCase()) return false;
   }
@@ -8665,8 +8712,15 @@ function initHistoryFilters() {
     if (el) el.addEventListener("input", () => renderHistoryBoard());
   }
 
-  const selectEl = byId(HISTORY_FILTER_IDS.flightType);
-  if (selectEl) selectEl.addEventListener("change", () => renderHistoryBoard());
+  const selectIds = [
+    HISTORY_FILTER_IDS.flightType,
+    HISTORY_FILTER_IDS.unitCode,
+  ];
+
+  const selectEls = selectIds.map(id => byId(id)).filter(Boolean);
+  for (const el of selectEls) {
+    el.addEventListener("change", () => renderHistoryBoard());
+  }
 
   const clearBtn = byId("btnClearHistoryFilters");
   if (clearBtn) {
@@ -8675,7 +8729,9 @@ function initHistoryFilters() {
         const el = byId(id);
         if (el) el.value = "";
       }
-      if (selectEl) selectEl.value = "";
+      for (const el of selectEls) {
+        el.value = "";
+      }
       renderHistoryBoard();
     });
   }
