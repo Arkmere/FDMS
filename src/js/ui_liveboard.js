@@ -8489,6 +8489,36 @@ export function renderHistoryBoard() {
 }
 
 /**
+ * Switch the Movement History internal view to viewId and render it.
+ * Extracted as a top-level helper so H5 Jump-to-day and H3 calendar
+ * day-click can both call it without depending on the scoped activate()
+ * closure inside setupMovementHistoryViews().
+ */
+function activateMovementHistoryView(viewId) {
+  const bar = byId("movementHistoryViewBar");
+  const buttons = bar ? Array.from(bar.querySelectorAll("[data-history-view]")) : [];
+  const views = Array.from(document.querySelectorAll(".movement-history-view"));
+
+  buttons.forEach(btn => {
+    const active = btn.dataset.historyView === viewId;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  views.forEach(view => {
+    view.classList.toggle("hidden", view.id !== viewId);
+  });
+
+  if (viewId === "hist-view-strip-board") {
+    renderHistoryBoard();
+  } else if (viewId === "hist-view-calendar") {
+    renderHistoricMovementCalendar();
+  } else if (viewId === "hist-view-search-table") {
+    renderHistorySearchTable();
+  }
+}
+
+/**
  * Wire the second-level Movement History internal view switch.
  * Activates Historic Strip Board by default.
  */
@@ -8498,33 +8528,15 @@ export function setupMovementHistoryViews() {
   bar.dataset.bound = "true";
 
   const buttons = Array.from(bar.querySelectorAll("[data-history-view]"));
-  const views = Array.from(document.querySelectorAll(".movement-history-view"));
-
-  function activate(viewId) {
-    buttons.forEach(btn => {
-      const active = btn.dataset.historyView === viewId;
-      btn.classList.toggle("active", active);
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-    });
-
-    views.forEach(view => {
-      view.classList.toggle("hidden", view.id !== viewId);
-    });
-
-    if (viewId === "hist-view-strip-board") {
-      renderHistoryBoard();
-    } else if (viewId === "hist-view-calendar") {
-      renderHistoricMovementCalendar();
-    }
-  }
 
   buttons.forEach(btn => {
-    btn.addEventListener("click", () => activate(btn.dataset.historyView));
+    btn.addEventListener("click", () => activateMovementHistoryView(btn.dataset.historyView));
   });
 
   initHistoricMovementCalendar();
   initHistoryFilters();
-  activate("hist-view-strip-board");
+  initHistorySearchTable();
+  activateMovementHistoryView("hist-view-strip-board");
 }
 
 /**
@@ -8623,9 +8635,7 @@ export function renderHistoricMovementCalendar() {
   grid.querySelectorAll(".history-calendar-day[data-date]").forEach(cell => {
     cell.addEventListener("click", () => {
       historyCalendarSelectedDate = cell.dataset.date;
-      // Trigger strip-board activation via its nav button so activate() logic runs
-      const stripBtn = document.querySelector('[data-history-view="hist-view-strip-board"]');
-      if (stripBtn) stripBtn.click();
+      activateMovementHistoryView("hist-view-strip-board");
     });
 
     cell.addEventListener("keydown", (e) => {
@@ -10525,6 +10535,395 @@ export function initHistoryExport() {
   const exportBtn = byId("btnExportHistoryCsv");
   if (exportBtn) {
     exportBtn.addEventListener("click", exportHistoryCSV);
+  }
+}
+
+/* ----------------------------------------
+   H5: Movement History Search / Table view
+   Independent structured search across completed movement history.
+   Filters are read from H5-specific DOM inputs only; H4 Strip Board
+   filters are never touched.
+---------------------------------------- */
+
+let _searchTableExpandedId = null;
+
+const SEARCH_TABLE_FILTER_IDS = {
+  dateFrom:     "historySearchDateFrom",
+  dateTo:       "historySearchDateTo",
+  text:         "historySearchText",
+  callsign:     "historySearchCallsign",
+  registration: "historySearchRegistration",
+  pilot:        "historySearchPilot",
+  aircraftType: "historySearchAircraftType",
+  egowCode:     "historySearchEgowCode",
+  unitCode:     "historySearchUnitCode",
+  wtc:          "historySearchWtc",
+  flightType:   "historySearchFlightType",
+  depAd:        "historySearchDepAd",
+  arrAd:        "historySearchArrAd",
+};
+
+function getSearchTableFilterValues() {
+  const v = {};
+  for (const [key, id] of Object.entries(SEARCH_TABLE_FILTER_IDS)) {
+    const el = byId(id);
+    v[key] = el ? el.value.trim() : "";
+  }
+  return v;
+}
+
+function hasActiveSearchTableFilters(filters) {
+  return Object.values(filters).some(v => v !== "");
+}
+
+function movementMatchesSearchTableFilters(m, filters) {
+  // Date range: lexical YYYY-MM-DD comparison against operational date
+  const dof = getMovementOperationalDate(m);
+  const hasDateFilter = filters.dateFrom || filters.dateTo;
+  if (hasDateFilter) {
+    if (!dof) return false;
+    if (filters.dateFrom && dof < filters.dateFrom) return false;
+    if (filters.dateTo   && dof > filters.dateTo)   return false;
+  }
+
+  // Delegate remaining filters to the shared H4 matcher by building
+  // a filter object with the same keys (excluding H5-only dateFrom/dateTo)
+  const h4Filters = {
+    text:         filters.text,
+    callsign:     filters.callsign,
+    registration: filters.registration,
+    pilot:        filters.pilot,
+    aircraftType: filters.aircraftType,
+    egowCode:     filters.egowCode,
+    unitCode:     filters.unitCode,
+    wtc:          filters.wtc,
+    flightType:   filters.flightType,
+    depAd:        filters.depAd,
+    arrAd:        filters.arrAd,
+  };
+  return movementMatchesHistoryFilters(m, h4Filters);
+}
+
+function _searchTableTimesCompact(m) {
+  const ft = (m.flightType || "").toUpperCase();
+  if (ft === "DEP") {
+    return getATD(m) || getETD(m) || "—";
+  }
+  if (ft === "ARR") {
+    return getATA(m) || getETA(m) || "—";
+  }
+  if (ft === "LOC") {
+    const dep = getATD(m) || getETD(m) || "?";
+    const arr = getATA(m) || getETA(m) || "?";
+    return `${dep} → ${arr}`;
+  }
+  if (ft === "OVR") {
+    const eft = getACT(m) || getECT(m) || "?";
+    const lft = (m.arrActual && String(m.arrActual).trim()) ? String(m.arrActual).trim()
+              : (m.arrPlanned && String(m.arrPlanned).trim()) ? String(m.arrPlanned).trim()
+              : "?";
+    return `${eft} → ${lft}`;
+  }
+  const t = getATD(m) || getETD(m) || getATA(m) || getETA(m) || getACT(m) || getECT(m);
+  return t || "—";
+}
+
+function _searchTablePilotDisplay(m) {
+  const text = getHistoryPilotSearchText(m).trim();
+  return text || "—";
+}
+
+function _searchTableUnitCodeDisplay(m) {
+  const text = getHistoryUnitCodeSearchText(m).trim();
+  return text || "—";
+}
+
+function renderHistorySearchDetailRow(tbody, m) {
+  const tr = document.createElement("tr");
+  tr.className = "history-search-detail-row";
+
+  const dof      = escapeHtml(getMovementOperationalDate(m) || "—");
+  const pilot    = escapeHtml(_searchTablePilotDisplay(m));
+  const unitCode = escapeHtml(_searchTableUnitCodeDisplay(m));
+  const times    = escapeHtml(_searchTableTimesCompact(m));
+  const activity = _searchTableActivityDisplay(m); // pre-escaped HTML entity for &
+
+  const depRoute = m.depAd
+    ? `<span${m.depName ? ` title="${escapeHtml(m.depName)}"` : ""}>${escapeHtml(m.depAd)}</span>`
+    : "—";
+  const arrRoute = m.arrAd
+    ? `<span${m.arrName ? ` title="${escapeHtml(m.arrName)}"` : ""}>${escapeHtml(m.arrAd)}</span>`
+    : "—";
+
+  tr.innerHTML = `
+    <td colspan="15">
+      <div class="history-search-detail">
+        <div class="history-search-detail-grid">
+          <div><span class="hsd-label">Callsign</span><span>${escapeHtml(m.callsignCode || "—")}${m.callsignVoice ? ` <span class="cell-muted">(${escapeHtml(m.callsignVoice)})</span>` : ""}</span></div>
+          <div><span class="hsd-label">Registration</span><span>${escapeHtml(m.registration || "—")}</span></div>
+          <div><span class="hsd-label">Type</span><span>${escapeHtml(m.type || "—")}</span></div>
+          <div><span class="hsd-label">WTC</span><span>${escapeHtml(m.wtc || "—")}</span></div>
+          <div><span class="hsd-label">Flight type</span><span>${escapeHtml(m.flightType || "—")}</span></div>
+          <div><span class="hsd-label">Date</span><span>${dof}</span></div>
+          <div><span class="hsd-label">Route</span><span>${depRoute} → ${arrRoute}</span></div>
+          <div><span class="hsd-label">Times</span><span>${times}</span></div>
+          <div><span class="hsd-label">EGOW code</span><span>${escapeHtml(m.egowCode || "—")}</span></div>
+          <div><span class="hsd-label">EGOW unit</span><span>${unitCode}</span></div>
+          <div><span class="hsd-label">Pilot / PIC</span><span>${pilot}</span></div>
+          <div><span class="hsd-label">Activity</span><span>${activity}</span></div>
+          <div><span class="hsd-label">Status</span><span class="badge badge-success">Completed</span></div>
+          ${m.remarks ? `<div class="hsd-remarks"><span class="hsd-label">Remarks</span><span>${escapeHtml(m.remarks)}</span></div>` : ""}
+        </div>
+      </div>
+    </td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function _searchTableActivityDisplay(m) {
+  const parts = [];
+  if (m.tngCount > 0) parts.push(`T&amp;G ${m.tngCount}`);
+  if (m.osCount  > 0) parts.push(`O/S ${m.osCount}`);
+  if (m.fisCount > 0) parts.push(`FIS ${m.fisCount}`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+function _escapeCsvValue(value) {
+  const str = String(value == null ? "" : value);
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function renderHistorySearchTable() {
+  const tbody = byId("historySearchBody");
+  const countEl = byId("historySearchResultCount");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const filters = getSearchTableFilterValues();
+  const filtersActive = hasActiveSearchTableFilters(filters);
+
+  let movements = getMovements().filter(m => m.status === "COMPLETED");
+
+  if (filtersActive) {
+    movements = movements.filter(m => movementMatchesSearchTableFilters(m, filters));
+  }
+
+  // Sort newest first by operational date, then by completion time descending
+  movements = sortHistoryMovements(movements, "time", "desc");
+
+  if (countEl) {
+    const n = movements.length;
+    countEl.textContent = `${n} completed movement${n !== 1 ? "s" : ""}`;
+  }
+
+  if (movements.length === 0) {
+    const empty = document.createElement("tr");
+    const msg = filtersActive
+      ? "No completed movements match the current search."
+      : "No completed movements found.";
+    empty.innerHTML = `<td colspan="15" style="padding:8px; font-size:12px; color:#777;">${msg}</td>`;
+    tbody.appendChild(empty);
+    return;
+  }
+
+  for (const m of movements) {
+    const tr = document.createElement("tr");
+    tr.dataset.id = String(m.id);
+
+    const dof        = getMovementOperationalDate(m) || "—";
+    const callsign   = escapeHtml(m.callsignCode || "—");
+    const voiceSub   = m.callsignVoice ? `<div class="cell-muted" style="font-size:10px;">${escapeHtml(m.callsignVoice)}</div>` : "";
+    const reg        = escapeHtml(m.registration || "—");
+    const type       = escapeHtml(m.type || "—");
+    const wtc        = escapeHtml(m.wtc || "—");
+    const flightType = escapeHtml(m.flightType || "—");
+    const depAd      = escapeHtml(m.depAd || "—");
+    const arrAd      = escapeHtml(m.arrAd || "—");
+    const times      = escapeHtml(_searchTableTimesCompact(m));
+    const egowCode   = escapeHtml(m.egowCode || "—");
+    const unitCode   = escapeHtml(_searchTableUnitCodeDisplay(m));
+    const pilot      = escapeHtml(_searchTablePilotDisplay(m));
+    const activity   = _searchTableActivityDisplay(m); // already safe — only T&amp;G/O/S/FIS numbers
+    const depTitle   = m.depName ? ` title="${escapeHtml(m.depName)}"` : "";
+    const arrTitle   = m.arrName ? ` title="${escapeHtml(m.arrName)}"` : "";
+
+    tr.innerHTML = `
+      <td>${escapeHtml(dof)}</td>
+      <td><div class="cell-strong">${callsign}</div>${voiceSub}</td>
+      <td>${reg}</td>
+      <td>${type}</td>
+      <td>${wtc}</td>
+      <td>${flightType}</td>
+      <td><span${depTitle}>${depAd}</span></td>
+      <td><span${arrTitle}>${arrAd}</span></td>
+      <td style="white-space:nowrap;">${times}</td>
+      <td>${egowCode}</td>
+      <td>${unitCode}</td>
+      <td>${pilot}</td>
+      <td style="white-space:nowrap;">${activity}</td>
+      <td><span class="badge badge-success">Completed</span></td>
+      <td class="history-search-actions">
+        <button type="button" class="small-btn btnHistorySearchOpenInfo" aria-label="Open info">Info</button>
+        <button type="button" class="small-btn btnHistorySearchJumpDay" aria-label="Jump to day in Historic Strip Board">Jump</button>
+      </td>
+    `;
+
+    const infoBtn = tr.querySelector(".btnHistorySearchOpenInfo");
+    safeOn(infoBtn, "click", (e) => {
+      e.stopPropagation();
+      _searchTableExpandedId = _searchTableExpandedId === m.id ? null : m.id;
+      renderHistorySearchTable();
+    });
+
+    const jumpBtn = tr.querySelector(".btnHistorySearchJumpDay");
+    safeOn(jumpBtn, "click", (e) => {
+      e.stopPropagation();
+      const date = getMovementOperationalDate(m);
+      if (!date) {
+        showToast("No operational date available for this movement", "warning");
+        return;
+      }
+      historyCalendarSelectedDate = date;
+      activateMovementHistoryView("hist-view-strip-board");
+    });
+
+    tbody.appendChild(tr);
+
+    if (_searchTableExpandedId === m.id) {
+      renderHistorySearchDetailRow(tbody, m);
+    }
+  }
+}
+
+function exportHistorySearchCSV() {
+  const filters = getSearchTableFilterValues();
+  const filtersActive = hasActiveSearchTableFilters(filters);
+
+  let movements = getMovements().filter(m => m.status === "COMPLETED");
+  if (filtersActive) {
+    movements = movements.filter(m => movementMatchesSearchTableFilters(m, filters));
+  }
+  movements = sortHistoryMovements(movements, "time", "desc");
+
+  if (movements.length === 0) {
+    showToast("No completed movements to export", "warning");
+    return;
+  }
+
+  const headers = [
+    "Date",
+    "Callsign",
+    "Voice callsign",
+    "Registration",
+    "Type",
+    "WTC",
+    "Flight type",
+    "Dep AD",
+    "Arr AD",
+    "Times",
+    "EGOW code",
+    "EGOW unit code",
+    "Pilot",
+    "T&G",
+    "O/S",
+    "FIS",
+    "Remarks",
+    "Status",
+  ];
+
+  const rows = movements.map(m => [
+    getMovementOperationalDate(m) || "",
+    m.callsignCode || "",
+    m.callsignVoice || "",
+    m.registration || "",
+    m.type || "",
+    m.wtc || "",
+    m.flightType || "",
+    m.depAd || "",
+    m.arrAd || "",
+    _searchTableTimesCompact(m),
+    m.egowCode || "",
+    _searchTableUnitCodeDisplay(m) === "—" ? "" : _searchTableUnitCodeDisplay(m),
+    _searchTablePilotDisplay(m) === "—" ? "" : _searchTablePilotDisplay(m),
+    m.tngCount || 0,
+    m.osCount || 0,
+    m.fisCount || 0,
+    m.remarks || "",
+    "COMPLETED",
+  ]);
+
+  const csv = [
+    headers.map(_escapeCsvValue).join(","),
+    ...rows.map(row => row.map(_escapeCsvValue).join(",")),
+  ].join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `history-search-results-${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  showToast(`Exported ${movements.length} movements to CSV`, "success");
+}
+
+function initHistorySearchTable() {
+  const panel = byId("hist-view-search-table");
+  if (!panel || panel.dataset.bound === "true") return;
+  panel.dataset.bound = "true";
+
+  const textInputIds = [
+    SEARCH_TABLE_FILTER_IDS.dateFrom,
+    SEARCH_TABLE_FILTER_IDS.dateTo,
+    SEARCH_TABLE_FILTER_IDS.text,
+    SEARCH_TABLE_FILTER_IDS.callsign,
+    SEARCH_TABLE_FILTER_IDS.registration,
+    SEARCH_TABLE_FILTER_IDS.pilot,
+    SEARCH_TABLE_FILTER_IDS.aircraftType,
+    SEARCH_TABLE_FILTER_IDS.egowCode,
+    SEARCH_TABLE_FILTER_IDS.wtc,
+    SEARCH_TABLE_FILTER_IDS.depAd,
+    SEARCH_TABLE_FILTER_IDS.arrAd,
+  ];
+
+  for (const id of textInputIds) {
+    const el = byId(id);
+    if (el) el.addEventListener("input", () => renderHistorySearchTable());
+  }
+
+  const selectIds = [
+    SEARCH_TABLE_FILTER_IDS.flightType,
+    SEARCH_TABLE_FILTER_IDS.unitCode,
+  ];
+  for (const id of selectIds) {
+    const el = byId(id);
+    if (el) el.addEventListener("change", () => renderHistorySearchTable());
+  }
+
+  const clearBtn = byId("btnClearHistorySearch");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      for (const id of textInputIds) {
+        const el = byId(id);
+        if (el) el.value = "";
+      }
+      for (const id of selectIds) {
+        const el = byId(id);
+        if (el) el.value = "";
+      }
+      _searchTableExpandedId = null;
+      renderHistorySearchTable();
+    });
+  }
+
+  const exportBtn = byId("btnExportHistorySearchCsv");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportHistorySearchCSV);
   }
 }
 
