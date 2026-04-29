@@ -510,6 +510,71 @@
                     <button id="btnClearHistoryCalendarFilter" type="button" class="small-btn">Clear date filter</button>
                   </div>
 
+                  <div class="history-filter-panel" id="historyFilterPanel">
+                    <div class="history-filter-header">
+                      <span class="history-filter-title">Filter completed movements</span>
+                      <button id="btnClearHistoryFilters" type="button" class="small-btn">Clear filters</button>
+                    </div>
+
+                    <div class="history-filter-grid">
+                      <label class="history-filter-field">
+                        <span>Free text</span>
+                        <input id="historyFilterText" type="text" class="control-input" placeholder="Callsign, reg, pilot, route, remarks…" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Callsign</span>
+                        <input id="historyFilterCallsign" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Registration</span>
+                        <input id="historyFilterRegistration" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Pilot</span>
+                        <input id="historyFilterPilot" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Aircraft type</span>
+                        <input id="historyFilterAircraftType" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>EGOW code</span>
+                        <input id="historyFilterEgowCode" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>WTC</span>
+                        <input id="historyFilterWtc" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Flight type</span>
+                        <select id="historyFilterFlightType" class="control-select">
+                          <option value="">All</option>
+                          <option value="DEP">DEP</option>
+                          <option value="ARR">ARR</option>
+                          <option value="LOC">LOC</option>
+                          <option value="OVR">OVR</option>
+                        </select>
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Departure AD</span>
+                        <input id="historyFilterDepAd" type="text" class="control-input" autocomplete="off">
+                      </label>
+
+                      <label class="history-filter-field">
+                        <span>Arrival AD</span>
+                        <input id="historyFilterArrAd" type="text" class="control-input" autocomplete="off">
+                      </label>
+                    </div>
+                  </div>
+
                   <div class="table-container">
                     <table id="historyTable">
                       <thead>

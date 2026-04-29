@@ -8103,6 +8103,70 @@ function sortHistoryMovements(movements, column, direction) {
   });
 }
 
+/* ---- H4: Historic Strip Board structured filters ---- */
+
+const HISTORY_FILTER_IDS = {
+  text:         "historyFilterText",
+  callsign:     "historyFilterCallsign",
+  registration: "historyFilterRegistration",
+  pilot:        "historyFilterPilot",
+  aircraftType: "historyFilterAircraftType",
+  egowCode:     "historyFilterEgowCode",
+  wtc:          "historyFilterWtc",
+  flightType:   "historyFilterFlightType",
+  depAd:        "historyFilterDepAd",
+  arrAd:        "historyFilterArrAd",
+};
+
+function getHistoryFilterValues() {
+  const v = {};
+  for (const [key, id] of Object.entries(HISTORY_FILTER_IDS)) {
+    const el = byId(id);
+    v[key] = el ? el.value.trim() : "";
+  }
+  return v;
+}
+
+function hasActiveHistoryFilters(filters) {
+  return Object.values(filters).some(v => v !== "");
+}
+
+function _substringMatch(haystack, needle) {
+  return String(haystack || "").toUpperCase().includes(needle.toUpperCase());
+}
+
+function movementMatchesHistoryFilters(m, filters) {
+  // Free-text: OR across common display fields
+  if (filters.text) {
+    const needle = filters.text.toUpperCase();
+    const fields = [
+      m.callsignCode, m.callsignVoice, m.registration, m.type,
+      m.depAd, m.arrAd, m.egowCode, m.pilotName, m.remarks,
+      m.flightType, m.wtc,
+    ];
+    const hit = fields.some(f => String(f || "").toUpperCase().includes(needle));
+    if (!hit) return false;
+  }
+
+  // Structured filters: AND logic
+  if (filters.callsign) {
+    const n = filters.callsign.toUpperCase();
+    if (!_substringMatch(m.callsignCode, n) && !_substringMatch(m.callsignVoice, n)) return false;
+  }
+  if (filters.registration && !_substringMatch(m.registration, filters.registration)) return false;
+  if (filters.pilot       && !_substringMatch(m.pilotName,    filters.pilot))       return false;
+  if (filters.aircraftType && !_substringMatch(m.type,        filters.aircraftType)) return false;
+  if (filters.egowCode    && !_substringMatch(m.egowCode,     filters.egowCode))    return false;
+  if (filters.wtc         && !_substringMatch(m.wtc,          filters.wtc))         return false;
+  if (filters.flightType) {
+    if ((m.flightType || "").toUpperCase() !== filters.flightType.toUpperCase()) return false;
+  }
+  if (filters.depAd && !_substringMatch(m.depAd, filters.depAd)) return false;
+  if (filters.arrAd && !_substringMatch(m.arrAd, filters.arrAd)) return false;
+
+  return true;
+}
+
 /**
  * Render the History Board table
  * Shows COMPLETED movements only (Movement History is completed-movement history).
@@ -8191,14 +8255,24 @@ export function renderHistoryBoard() {
     }
   }
 
+  // H4: Apply structured filters
+  const _h4Filters = getHistoryFilterValues();
+  const _h4Active  = hasActiveHistoryFilters(_h4Filters);
+  if (_h4Active) {
+    movements = movements.filter(m => movementMatchesHistoryFilters(m, _h4Filters));
+  }
+
   // Sort movements
   const sorted = sortHistoryMovements(movements, historySortColumn, historySortDirection);
 
   if (sorted.length === 0) {
     const empty = document.createElement("tr");
+    const emptyMsg = _h4Active
+      ? "No completed movements match the selected filters."
+      : "No completed movements match the selected period.";
     empty.innerHTML = `
       <td colspan="8" style="padding:8px; font-size:12px; color:#777;">
-        No completed movements match the selected period.
+        ${emptyMsg}
       </td>
     `;
     tbody.appendChild(empty);
@@ -8363,6 +8437,7 @@ export function setupMovementHistoryViews() {
   });
 
   initHistoricMovementCalendar();
+  initHistoryFilters();
   activate("hist-view-strip-board");
 }
 
@@ -8519,6 +8594,49 @@ function initHistoricMovementCalendar() {
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       historyCalendarSelectedDate = "";
+      renderHistoryBoard();
+    });
+  }
+}
+
+/**
+ * H4: Bind structured filter controls once.
+ * Text inputs re-render on each keystroke; select re-renders on change.
+ * Clear button resets filter values only (does not touch period or calendar date).
+ */
+function initHistoryFilters() {
+  const panel = byId("historyFilterPanel");
+  if (!panel || panel.dataset.bound === "true") return;
+  panel.dataset.bound = "true";
+
+  const textInputIds = [
+    HISTORY_FILTER_IDS.text,
+    HISTORY_FILTER_IDS.callsign,
+    HISTORY_FILTER_IDS.registration,
+    HISTORY_FILTER_IDS.pilot,
+    HISTORY_FILTER_IDS.aircraftType,
+    HISTORY_FILTER_IDS.egowCode,
+    HISTORY_FILTER_IDS.wtc,
+    HISTORY_FILTER_IDS.depAd,
+    HISTORY_FILTER_IDS.arrAd,
+  ];
+
+  for (const id of textInputIds) {
+    const el = byId(id);
+    if (el) el.addEventListener("input", () => renderHistoryBoard());
+  }
+
+  const selectEl = byId(HISTORY_FILTER_IDS.flightType);
+  if (selectEl) selectEl.addEventListener("change", () => renderHistoryBoard());
+
+  const clearBtn = byId("btnClearHistoryFilters");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      for (const id of textInputIds) {
+        const el = byId(id);
+        if (el) el.value = "";
+      }
+      if (selectEl) selectEl.value = "";
       renderHistoryBoard();
     });
   }
