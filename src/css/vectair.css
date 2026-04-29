@@ -4195,6 +4195,13 @@ tr.strip.ft-ovr > td {
   text-decoration: underline;
 }
 
+/* Neutral affordance: faint ⇅ on all sortable columns before first click */
+.history-search-table thead th[data-search-sort]:not([data-search-sort-active])::after {
+  content: " \21C5";
+  font-size: 9px;
+  opacity: 0.3;
+}
+
 .history-search-table thead th[data-search-sort-active="true"]::after {
   content: " \25B2";
   font-size: 9px;
