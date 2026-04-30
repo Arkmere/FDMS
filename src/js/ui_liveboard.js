@@ -10951,25 +10951,15 @@ function _downloadCsvViaBrowser(csv, filename) {
 }
 
 async function _saveCsvWithNativeDialogOrDownload(csv, filename) {
-  const canUseTauri = typeof window !== "undefined" && (
-    window.__TAURI_INTERNALS__ ||
-    window.__TAURI__
-  );
+  const invoke = window.__TAURI__?.core?.invoke;
 
-  if (canUseTauri) {
+  if (typeof invoke === "function") {
     try {
-      const dialogMod = await import("@tauri-apps/plugin-dialog");
-      const fsMod = await import("@tauri-apps/plugin-fs");
-
-      const savePath = await dialogMod.save({
-        defaultPath: filename,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
+      const result = await invoke("save_text_file_with_dialog", {
+        filename,
+        contents: csv,
       });
-
-      if (!savePath) return "cancelled";
-
-      await fsMod.writeTextFile(savePath, csv);
-      return "saved";
+      return result === "cancelled" ? "cancelled" : "saved";
     } catch (err) {
       console.error("Native CSV save failed; falling back to browser download", err);
       _downloadCsvViaBrowser(csv, filename);
