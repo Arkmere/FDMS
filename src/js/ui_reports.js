@@ -264,28 +264,29 @@ function handleClearHours() {
 /**
  * Handle CSV export
  */
-function handleExportCSV() {
+async function handleExportCSV() {
   const movements = getMovementsForCurrentPeriod();
   const filename = `movements_${currentYear}-${String(currentMonth).padStart(2, '0')}.csv`;
-  exportMovementsToCSV(movements, filename);
+  const result = await exportMovementsToCSV(movements, filename);
+  _showExportToast(result, filename, 'CSV');
 }
 
 /**
  * Handle XLSX export
  */
-function handleExportXLSX() {
+async function handleExportXLSX() {
   const movements = getMovementsForCurrentPeriod();
   const hoursMap = loadHours();
   const monthlyReturn = computeMonthlyReturn(movements, currentYear, currentMonth, hoursMap);
   const filename = `monthly_return_${currentYear}-${String(currentMonth).padStart(2, '0')}.xlsx`;
-
-  exportMonthlyReturnToXLSX(monthlyReturn, movements, filename);
+  const result = await exportMonthlyReturnToXLSX(monthlyReturn, movements, filename);
+  _showExportToast(result, filename, 'XLSX');
 }
 
 /**
  * Handle Cancellations CSV export
  */
-function handleExportCancellationsCSV() {
+async function handleExportCancellationsCSV() {
   const report = computeCancellationReport(cancelStartDate, cancelEndDate);
   if (report.rows.length === 0) {
     showToast('No cancellations found for the selected date range.', 'info');
@@ -294,8 +295,22 @@ function handleExportCancellationsCSV() {
   const start  = cancelStartDate || 'all';
   const end    = cancelEndDate   || 'all';
   const filename = `cancellations_${start}_to_${end}.csv`;
-  exportCancellationsToCSV(report.rows, filename);
-  showToast(`Exported ${filename} — check your Downloads folder.`, 'success');
+  const result = await exportCancellationsToCSV(report.rows, filename);
+  _showExportToast(result, filename, 'CSV');
+}
+
+function _showExportToast(result, filename, label) {
+  if (result === 'saved') {
+    showToast(`${label} saved.`, 'success');
+  } else if (result === 'cancelled') {
+    showToast(`${label} export cancelled.`, 'info');
+  } else if (result === 'downloaded') {
+    showToast(`${filename} exported. Check your Downloads folder.`, 'success');
+  } else if (result === 'fallback') {
+    showToast(`Native save failed; ${label} downloaded instead. Check your Downloads folder.`, 'warning');
+  } else if (result === 'error') {
+    showToast(`${label} export failed.`, 'error');
+  }
 }
 
 /**
