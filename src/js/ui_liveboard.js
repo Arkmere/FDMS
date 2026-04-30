@@ -10940,7 +10940,48 @@ export function renderHistorySearchTable() {
   }
 }
 
-function exportHistorySearchCSV() {
+function _downloadCsvViaBrowser(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function _saveCsvWithNativeDialogOrDownload(csv, filename) {
+  const canUseTauri = typeof window !== "undefined" && (
+    window.__TAURI_INTERNALS__ ||
+    window.__TAURI__
+  );
+
+  if (canUseTauri) {
+    try {
+      const dialogMod = await import("@tauri-apps/plugin-dialog");
+      const fsMod = await import("@tauri-apps/plugin-fs");
+
+      const savePath = await dialogMod.save({
+        defaultPath: filename,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+
+      if (!savePath) return "cancelled";
+
+      await fsMod.writeTextFile(savePath, csv);
+      return "saved";
+    } catch (err) {
+      console.error("Native CSV save failed; falling back to browser download", err);
+      _downloadCsvViaBrowser(csv, filename);
+      return "fallback";
+    }
+  }
+
+  _downloadCsvViaBrowser(csv, filename);
+  return "downloaded";
+}
+
+async function exportHistorySearchCSV() {
   const filters = getSearchTableFilterValues();
   const filtersActive = hasActiveSearchTableFilters(filters);
 
@@ -11002,15 +11043,18 @@ function exportHistorySearchCSV() {
     ...rows.map(row => row.map(_escapeCsvValue).join(",")),
   ].join("\n");
 
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `flite-history-search-${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = `flite-history-search-${new Date().toISOString().split("T")[0]}.csv`;
+  const result = await _saveCsvWithNativeDialogOrDownload(csv, filename);
 
-  showToast(`Filtered history CSV exported. Check your Downloads folder.`, "success");
+  if (result === "saved") {
+    showToast("Filtered history CSV saved.", "success");
+  } else if (result === "cancelled") {
+    showToast("CSV export cancelled.", "info");
+  } else if (result === "downloaded") {
+    showToast("Filtered history CSV exported. Check your Downloads folder.", "success");
+  } else if (result === "fallback") {
+    showToast("Native save failed; CSV downloaded instead. Check your Downloads folder.", "warning");
+  }
 }
 
 function initHistorySearchTable() {
