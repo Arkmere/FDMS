@@ -24,6 +24,7 @@
 
 import { getMovements, getCancelledSorties, getElementAttributionIdentity, getResolvedElementPilot, resolveFormationElementIdentity } from './datamodel.js';
 import { getVKBRegistrations } from './vkb.js';
+import { saveTextFileWithDialogOrDownload, saveBinaryFileWithDialogOrDownload, downloadFileViaBrowser } from './export_utils.js';
 
 // ========================================
 // HOURS LOG MANAGEMENT
@@ -779,7 +780,7 @@ export function filterMovementsByPredicate(movements, predicate) {
  * @param {Array} movements - Movements to export
  * @param {string} filename - Filename for download
  */
-export function exportMovementsToCSV(movements, filename = 'movements.csv') {
+export async function exportMovementsToCSV(movements, filename = 'movements.csv') {
   const headers = [
     'Date', 'Callsign', 'Registration', 'Type', 'WTC', 'Flight Type', 'Rules',
     'Departure', 'Arrival', 'Dep Planned', 'Dep Actual', 'Arr Planned', 'Arr Actual',
@@ -837,7 +838,7 @@ export function exportMovementsToCSV(movements, filename = 'movements.csv') {
   }
 
   const csvContent = csvLines.join('\n');
-  downloadFile(csvContent, filename, 'text/csv');
+  return saveTextFileWithDialogOrDownload(csvContent, filename);
 }
 
 /**
@@ -847,7 +848,7 @@ export function exportMovementsToCSV(movements, filename = 'movements.csv') {
  * @param {Array} movements - All movements for detail sheet
  * @param {string} filename - Filename for download
  */
-export function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = 'monthly_return.xlsx') {
+export async function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = 'monthly_return.xlsx') {
   if (typeof XLSX === 'undefined') {
     alert('Excel export requires SheetJS library. Please contact support.');
     return;
@@ -961,27 +962,26 @@ export function exportMonthlyReturnToXLSX(monthlyReturn, movements, filename = '
   const ws2 = XLSX.utils.aoa_to_sheet(detailData);
   XLSX.utils.book_append_sheet(wb, ws2, 'Movement Details');
 
-  // Write and download
-  XLSX.writeFile(wb, filename);
+  // Tauri: use native Save As with base64-encoded binary.
+  // Browser: fall back to XLSX.writeFile (triggers browser download).
+  const base64Status = await saveBinaryFileWithDialogOrDownload(
+    XLSX.write(wb, { bookType: 'xlsx', type: 'base64' }),
+    filename,
+  );
+
+  if (base64Status === 'browser' || base64Status === 'fallback') {
+    try {
+      XLSX.writeFile(wb, filename);
+    } catch (e) {
+      console.error('XLSX.writeFile fallback failed', e);
+      return 'error';
+    }
+    return base64Status === 'fallback' ? 'fallback' : 'downloaded';
+  }
+
+  return base64Status; // "saved" | "cancelled"
 }
 
-/**
- * Helper to download a file in the browser
- * @param {string} content - File content
- * @param {string} filename - Filename
- * @param {string} mimeType - MIME type
- */
-function downloadFile(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 // ========================================
 // CANCELLATION REPORT (Ticket 6b)
@@ -1152,7 +1152,7 @@ export function computeCancellationReport(startDate, endDate) {
  * @param {Array}  rows     - Rows from computeCancellationReport().rows
  * @param {string} filename - Download filename
  */
-export function exportCancellationsToCSV(rows, filename) {
+export async function exportCancellationsToCSV(rows, filename) {
   const BOM = '\uFEFF';  // UTF-8 BOM for Excel compatibility
 
   const headers = [
@@ -1197,5 +1197,5 @@ export function exportCancellationsToCSV(rows, filename) {
   }
 
   const csv = BOM + lines.join('\r\n');
-  downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+  return saveTextFileWithDialogOrDownload(csv, filename);
 }

@@ -54,6 +54,7 @@ import {
 } from "./datamodel.js";
 
 import { showToast } from "./app.js";
+import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 
 import { onMovementUpdated, onMovementStatusChanged, clearStripLinks } from "./services/bookingSync.js";
 import { getBookingById, updateBookingById } from "./stores/bookingsStore.js";
@@ -9335,7 +9336,7 @@ export function renderCancelledSortiesLog() {
  * Export the cancelled sorties log to CSV.
  * Includes full audit fields plus a practical snapshot subset.
  */
-function exportCancelledSortiesCSV() {
+async function exportCancelledSortiesCSV() {
   const entries = getCancelledSorties();
 
   if (entries.length === 0) {
@@ -9419,15 +9420,18 @@ function exportCancelledSortiesCSV() {
     ...rows.map(row => row.map(escapeCSV).join(','))
   ].join('\n');
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `fdms-cancelled-sorties-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = `fdms-cancelled-sorties-${new Date().toISOString().split('T')[0]}.csv`;
+  const result = await saveTextFileWithDialogOrDownload(csv, filename);
 
-  showToast(`Exported ${entries.length} cancelled sorties to CSV`, 'success');
+  if (result === 'saved') {
+    showToast(`Cancelled sorties CSV saved.`, 'success');
+  } else if (result === 'cancelled') {
+    showToast('CSV export cancelled.', 'info');
+  } else if (result === 'downloaded') {
+    showToast(`Exported ${entries.length} cancelled sorties. Check your Downloads folder.`, 'success');
+  } else if (result === 'fallback') {
+    showToast('Native save failed; CSV downloaded instead. Check your Downloads folder.', 'warning');
+  }
 }
 
 /**
@@ -10456,7 +10460,7 @@ export function renderReportsSummary() {
  * Export history to CSV
  * Includes all relevant fields
  */
-function exportHistoryCSV() {
+async function exportHistoryCSV() {
   // Ticket 6a: Movement History exports COMPLETED only.
   // Cancelled sorties are exported separately from the Cancelled Sorties page.
   const movements = getMovements().filter(m => m.status === "COMPLETED");
@@ -10533,16 +10537,18 @@ function exportHistoryCSV() {
     ...rows.map(row => row.map(escapeCSV).join(','))
   ].join('\n');
 
-  // Download
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `fdms-movement-history-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = `fdms-movement-history-${new Date().toISOString().split('T')[0]}.csv`;
+  const result = await saveTextFileWithDialogOrDownload(csv, filename);
 
-  showToast(`Exported ${movements.length} completed movements to CSV`, 'success');
+  if (result === 'saved') {
+    showToast('Movement history CSV saved.', 'success');
+  } else if (result === 'cancelled') {
+    showToast('CSV export cancelled.', 'info');
+  } else if (result === 'downloaded') {
+    showToast(`Exported ${movements.length} completed movements. Check your Downloads folder.`, 'success');
+  } else if (result === 'fallback') {
+    showToast('Native save failed; CSV downloaded instead. Check your Downloads folder.', 'warning');
+  }
 }
 
 /**
@@ -10940,37 +10946,6 @@ export function renderHistorySearchTable() {
   }
 }
 
-function _downloadCsvViaBrowser(csv, filename) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function _saveCsvWithNativeDialogOrDownload(csv, filename) {
-  const invoke = window.__TAURI__?.core?.invoke;
-
-  if (typeof invoke === "function") {
-    try {
-      const result = await invoke("save_text_file_with_dialog", {
-        filename,
-        contents: csv,
-      });
-      return result === "cancelled" ? "cancelled" : "saved";
-    } catch (err) {
-      console.error("Native CSV save failed; falling back to browser download", err);
-      _downloadCsvViaBrowser(csv, filename);
-      return "fallback";
-    }
-  }
-
-  _downloadCsvViaBrowser(csv, filename);
-  return "downloaded";
-}
-
 async function exportHistorySearchCSV() {
   const filters = getSearchTableFilterValues();
   const filtersActive = hasActiveSearchTableFilters(filters);
@@ -11034,7 +11009,7 @@ async function exportHistorySearchCSV() {
   ].join("\n");
 
   const filename = `flite-history-search-${new Date().toISOString().split("T")[0]}.csv`;
-  const result = await _saveCsvWithNativeDialogOrDownload(csv, filename);
+  const result = await saveTextFileWithDialogOrDownload(csv, filename);
 
   if (result === "saved") {
     showToast("Filtered history CSV saved.", "success");
