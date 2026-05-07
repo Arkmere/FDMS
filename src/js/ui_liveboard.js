@@ -1201,12 +1201,12 @@ function bindPlannedTimesSync(startId, endId, durationId, opts = {}) {
     startEl.addEventListener('blur',  applyStartToDuration);
 
   } else {
-    /* ── DEP / LOC / OVR mode: ETD (startEl) = root, ETA (endEl) = dependent */
+    /* ── DEP / LOC / OVR mode: ETD (startEl) = root, ETA (endEl) = dependent
+       start changed   → end = start + duration
+       duration changed → end = start + duration
+       end changed      → duration = end − start                               */
 
-    // 'duration' | 'end' | null — which field the user last explicitly edited
-    let _lastTouched = null;
-
-    const applyDurationToEnd = () => {
+    const applyToEnd = () => {
       if (!endEl) return;
       const startMin = timeToMinutes(startEl.value);
       const dur = parseInt(durEl.value, 10);
@@ -1220,42 +1220,20 @@ function bindPlannedTimesSync(startId, endId, durationId, opts = {}) {
       const endMin   = timeToMinutes(endEl.value);
       if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return;
       let diff = endMin - startMin;
-      if (diff <= 0) diff += 1440; // overnight wrap
+      if (diff <= 0) diff += 1440;
       if (diff > 0 && diff <= 1440) durEl.value = String(diff);
     };
 
-    // Duration changed → update end-time
-    durEl.addEventListener('input', () => {
-      const dur = parseInt(durEl.value, 10);
-      if (!durEl.value.trim() || !(dur > 0)) {
-        _lastTouched = null; // cleared — stop overriding end until re-entered
-        return;
-      }
-      _lastTouched = 'duration';
-      applyDurationToEnd();
-    });
+    durEl.addEventListener('input', applyToEnd);
+    durEl.addEventListener('blur',  applyToEnd);
 
-    // End-time changed → update duration (skip for disabled fields, e.g. OVR ELFT)
+    startEl.addEventListener('input', applyToEnd);
+    startEl.addEventListener('blur',  applyToEnd);
+
     if (endEl && !endEl.disabled) {
-      const onEndEdit = () => {
-        if (!endEl.value.trim()) {
-          if (_lastTouched === 'end') _lastTouched = null;
-          return;
-        }
-        _lastTouched = 'end';
-        applyEndToDuration();
-      };
-      endEl.addEventListener('input', onEndEdit);
-      endEl.addEventListener('blur',  onEndEdit);
+      endEl.addEventListener('input', applyEndToDuration);
+      endEl.addEventListener('blur',  applyEndToDuration);
     }
-
-    // Start changed → recompute the last-touched counterpart
-    const onStartChange = () => {
-      if (_lastTouched === 'duration') applyDurationToEnd();
-      else if (_lastTouched === 'end') applyEndToDuration();
-    };
-    startEl.addEventListener('input', onStartChange);
-    startEl.addEventListener('blur',  onStartChange);
   }
 }
 
@@ -4026,6 +4004,20 @@ function enrichMovementData(movement) {
   const callsignCode = movement.callsignCode || '';
   const aircraftType = movement.type || '';
 
+  // Auto-populate EGOW code from callsign lookup — non-destructive
+  if (!movement.egowCode || movement.egowCode === '') {
+    const callsignData = lookupCallsign(callsignCode);
+    const egowFromCallsign =
+      callsignData?.['EGOW FLIGHT TYPE'] ||
+      callsignData?.['EGOW_CODE'] ||
+      callsignData?.['EGOW Code'] ||
+      callsignData?.['egowCode'] ||
+      '';
+    if (egowFromCallsign && egowFromCallsign !== '-') {
+      movement.egowCode = String(egowFromCallsign).trim().toUpperCase();
+    }
+  }
+
   // Auto-populate captain from EGOW codes
   if (!movement.captain || movement.captain === '') {
     const captain = lookupCaptainFromEgowCodes(callsignCode);
@@ -5792,7 +5784,10 @@ function openNewLocFlightModal() {
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+      showToast("Valid EGOW Code is required", "error");
+      return;
+    }
     if (egowCode === 'BM') {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
@@ -5941,7 +5936,10 @@ function openNewLocFlightModal() {
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
     const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (egowCode && !validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return; }
+    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+      showToast("Valid EGOW Code is required", "error");
+      return;
+    }
     if (egowCode === 'BM') {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
@@ -6912,12 +6910,31 @@ function openEditMovementModal(m) {
 
     const savedMovement = updateMovement(m.id, updates);
 
-    // If ATD was changed in the edit, propagate canonical timing recalculation
-    if (savedMovement && updates.depActual !== undefined) {
-      const timingPatch = recalculateTimingModel(savedMovement, 'depActual');
-      const isWeak = timingPatch._weakPrediction;
-      delete timingPatch._weakPrediction;
-      if (Object.keys(timingPatch).length > 0 && !isWeak) updateMovement(m.id, timingPatch);
+    // Propagate canonical timing recalculation from the timing field the operator actually changed.
+    // The edit form always submits all timing fields, so checking only for property presence is wrong.
+    if (savedMovement) {
+      const timingChangePriority = [
+        'depActual',
+        'depPlanned',
+        'arrActual',
+        'arrPlanned',
+        'durationMinutes'
+      ];
+
+      const changedTimingField = timingChangePriority.find(field => {
+        const before = m[field] ?? null;
+        const after = updates[field] ?? null;
+        return String(before ?? '') !== String(after ?? '');
+      });
+
+      if (changedTimingField) {
+        const timingPatch = recalculateTimingModel(savedMovement, changedTimingField);
+        const isWeak = timingPatch._weakPrediction;
+        delete timingPatch._weakPrediction;
+        if (Object.keys(timingPatch).length > 0 && !isWeak) {
+          updateMovement(m.id, timingPatch);
+        }
+      }
     }
 
     // Sync back to booking if this strip is linked

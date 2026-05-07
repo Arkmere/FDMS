@@ -11,7 +11,11 @@ Last updated: 2026-05-07 (Europe/London)
 - Native **Save As** export behaviour is now implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
 - Browser/download fallback remains available for non-Tauri/local-browser harness use.
 - `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
-- The next active engineering priority is the **EGOW / LOC / timing regression cluster**.
+- **EGOW / LOC / timing regression cluster is fixed** (branch `claude/fix-egow-loc-timing-Wqwjs`):
+  - LOC EGOW validation now rejects blank codes in both LOC save paths.
+  - Callsign-derived EGOW enrichment restored in `enrichMovementData()` (non-destructive).
+  - Edit-save timing recalculation now detects the actual changed timing field rather than always using `depActual`.
+  - LOC planned-time sync (`bindPlannedTimesSync` non-ARR mode) now always applies `start + duration → end` on start/duration change, and `end − start → duration` on end change.
 - V1 is not release-ready until the remaining V1 workstreams and acceptance sweep are complete.
 
 This file is the shared source of truth for the Manager–Worker workflow.
