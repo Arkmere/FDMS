@@ -10,3 +10,5 @@ working-tree-status.txt
 current-branch-files.txt
 branch-diff-stats.txt
 core-file-touches.txt
+# Local desktop shortcuts
+*.lnk
