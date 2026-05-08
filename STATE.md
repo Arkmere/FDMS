@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-07 (Europe/London)
+Last updated: 2026-05-08 (Europe/London)
 
 ## Current headline status
 
@@ -16,6 +16,9 @@ Last updated: 2026-05-07 (Europe/London)
   - Callsign-derived EGOW enrichment restored in `enrichMovementData()` (non-destructive).
   - Edit-save timing recalculation now detects the actual changed timing field rather than always using `depActual`.
   - LOC planned-time sync (`bindPlannedTimesSync` non-ARR mode) now always applies `start + duration → end` on start/duration change, and `end − start → duration` on end change.
+- **EGOW attribution and aircraft pilot data implemented** (branch `claude/egow-aircraft-datasets-CwnXX`):
+  - Expanded EGOW attribution using revised `FDMS_EGOW_CODES.csv` schema with `CALLSIGN_BASE`, `APPROVED_CONTRATION`, `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
+  - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv`.
 - V1 is not release-ready until the remaining V1 workstreams and acceptance sweep are complete.
 
 This file is the shared source of truth for the Manager–Worker workflow.
@@ -1386,3 +1389,40 @@ exact functions to modify
 exact behaviour to restore
 smoke tests
 docs impact
+
+---
+
+### EGOW attribution / aircraft pilot data implementation
+
+Implemented expanded EGOW attribution using the revised `FDMS_EGOW_CODES.csv` schema:
+
+```text
+CALLSIGN_BASE,APPROVED_CONTRATION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
+```
+
+Key changes:
+- `lookupEgowAttributionFromCallsign(callsignCode)` — new exported function in `vkb.js` implementing deterministic 4-priority lookup with numeric suffix splitting and blank-flight-number fallback.
+- `lookupCaptainFromEgowCodes()` and `lookupUnitCodeFromEgowCodes()` — updated to delegate to the new resolver.
+- `lookupCallsign()` — updated EGOW section to use new schema; returns `UC` field populated from `UNIT_CODE` for backward compatibility with existing callers.
+- `enrichMovementData()` in `ui_liveboard.js` — refactored to use `lookupEgowAttributionFromCallsign()` directly, populating `egowCode`, `unitCode`, `captain`, and `unitDesc` non-destructively.
+
+Implemented aircraft pilot suggestion loading using:
+
+```text
+FDMS_AIRCRAFT_PILOTS.csv
+REGISTRATION,FIXED_CALLSIGN,PILOT_NAME_LAST,PILOT_NAME_FIRST
+```
+
+Key changes:
+- `aircraftPilots: []` added to `vkbData`; loaded in `loadVKBData()` alongside other CSVs.
+- `lookupAircraftPilots(registration, fixedCallsign)` — new exported function; matches by normalised registration (hyphens removed) or fixed callsign; sorts alphabetically; disambiguates duplicate surnames with first-name initial.
+- New flight modal and edit modal PIC inputs now have `list` datalist wired to pilot suggestions.
+- Pilot suggestions are populated when registration or fixed callsign is entered; single-match auto-fills PIC if blank.
+
+Pilot lookup is static for V1. Learned PIC ranking by historical movement count is deferred post-launch.
+
+Post-launch backlog:
+- Add learned PIC ranking for aircraft with multiple associated pilots.
+- Rank candidate PIC names by historical use count from stored movement history.
+- Do not store manually maintained `PIC_COUNT` in CSV reference data.
+- If persistent learned ranking is later required, store it in a separate local learned-preferences store, not in the CSV.

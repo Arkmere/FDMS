@@ -76,7 +76,9 @@ import {
   lookupUnitFromCallsign,
   lookupOperatorFromCallsign,
   validateSquawkCode,
-  isKnownContraction
+  isKnownContraction,
+  lookupEgowAttributionFromCallsign,
+  lookupAircraftPilots
 } from "./vkb.js";
 
 /* -----------------------------
@@ -4004,25 +4006,20 @@ function enrichMovementData(movement) {
   const callsignCode = movement.callsignCode || '';
   const aircraftType = movement.type || '';
 
-  // Auto-populate EGOW code from callsign lookup — non-destructive
-  if (!movement.egowCode || movement.egowCode === '') {
-    const callsignData = lookupCallsign(callsignCode);
-    const egowFromCallsign =
-      callsignData?.['EGOW FLIGHT TYPE'] ||
-      callsignData?.['EGOW_CODE'] ||
-      callsignData?.['EGOW Code'] ||
-      callsignData?.['egowCode'] ||
-      '';
-    if (egowFromCallsign && egowFromCallsign !== '-') {
-      movement.egowCode = String(egowFromCallsign).trim().toUpperCase();
+  // EGOW attribution: non-destructively enrich from expanded EGOW lookup table
+  const egowAttrib = lookupEgowAttributionFromCallsign(callsignCode);
+  if (egowAttrib) {
+    if (!movement.egowCode || movement.egowCode === '') {
+      if (egowAttrib.egowCode) movement.egowCode = egowAttrib.egowCode;
     }
-  }
-
-  // Auto-populate captain from EGOW codes
-  if (!movement.captain || movement.captain === '') {
-    const captain = lookupCaptainFromEgowCodes(callsignCode);
-    if (captain) {
-      movement.captain = captain;
+    if (!movement.unitCode || movement.unitCode === '') {
+      if (egowAttrib.unitCode) movement.unitCode = egowAttrib.unitCode;
+    }
+    if (!movement.captain || movement.captain === '') {
+      if (egowAttrib.name) movement.captain = egowAttrib.name;
+    }
+    if (!movement.unitDesc || movement.unitDesc === '') {
+      if (egowAttrib.unit) movement.unitDesc = egowAttrib.unit;
     }
   }
 
@@ -4031,15 +4028,7 @@ function enrichMovementData(movement) {
     movement.pob = 2;
   }
 
-  // Auto-populate unit code from EGOW codes
-  if (!movement.unitCode || movement.unitCode === '') {
-    const unitCode = lookupUnitCodeFromEgowCodes(callsignCode);
-    if (unitCode) {
-      movement.unitCode = unitCode;
-    }
-  }
-
-  // Auto-populate unit description from callsign databases
+  // Auto-populate unit description from callsign databases (fallback for non-EGOW movements)
   if (!movement.unitDesc || movement.unitDesc === '') {
     const unitDesc = lookupUnitFromCallsign(callsignCode, aircraftType);
     if (unitDesc && unitDesc !== '-') {
@@ -4113,7 +4102,8 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           </div>
           <div class="modal-field">
             <label class="modal-label">PIC</label>
-            <input id="newCaptain" class="modal-input" placeholder="Pilot in Command" />
+            <input id="newCaptain" class="modal-input" placeholder="Pilot in Command" list="newCaptainPilotSuggestions" autocomplete="off" />
+            <datalist id="newCaptainPilotSuggestions"></datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -4425,6 +4415,19 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           typeInput.value = inferredType;
         }
       }
+
+      // Aircraft pilot suggestions from registration
+      const captainInput = document.getElementById('newCaptain');
+      const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
+      if (captainInput && pilotDatalist) {
+        const pilots = lookupAircraftPilots(regInput.value, '');
+        if (pilots.length > 0) {
+          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainInput.value.trim() && pilots.length === 1) {
+            captainInput.value = pilots[0].displayName;
+          }
+        }
+      }
     };
     regInput.addEventListener("input", applyNewRegAutofill);
     regInput.addEventListener("change", applyNewRegAutofill);
@@ -4457,8 +4460,23 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const registration = regData['REGISTRATION'] || '';
         if (registration && registration !== '-') {
           regInput.value = normalizeEuCivilRegistration(registration);
-          // Trigger registration input event to update dependent fields
+          // Trigger registration input event to update dependent fields (incl. pilot suggestions)
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+
+    // Aircraft pilot suggestions from fixed callsign (direct lookup, covers non-reg-matched cases)
+    if (fullCallsign) {
+      const captainInput = document.getElementById('newCaptain');
+      const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
+      if (captainInput && pilotDatalist) {
+        const pilots = lookupAircraftPilots('', fullCallsign);
+        if (pilots.length > 0) {
+          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainInput.value.trim() && pilots.length === 1) {
+            captainInput.value = pilots[0].displayName;
+          }
         }
       }
     }
@@ -6083,6 +6101,10 @@ function openEditMovementModal(m) {
   // Check if priority is enabled
   const hasPriority = m.priorityLetter && m.priorityLetter.length > 0;
 
+  // Pre-compute pilot suggestions for edit modal datalist
+  const editInitialPilots = lookupAircraftPilots(m.registration || '', (m.callsignCode || ''));
+  const editPilotOptions = editInitialPilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+
   openModal(`
     <div class="modal-header">
       <div>
@@ -6122,7 +6144,8 @@ function openEditMovementModal(m) {
           </div>
           <div class="modal-field">
             <label class="modal-label">PIC</label>
-            <input id="editCaptain" class="modal-input" value="${escapeHtml(m.captain || "")}" placeholder="Pilot in Command" />
+            <input id="editCaptain" class="modal-input" value="${escapeHtml(m.captain || "")}" placeholder="Pilot in Command" list="editCaptainPilotSuggestions" autocomplete="off" />
+            <datalist id="editCaptainPilotSuggestions">${editPilotOptions}</datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">Priority</label>
@@ -6448,6 +6471,19 @@ function openEditMovementModal(m) {
           typeInput.value = inferredType;
         }
       }
+
+      // Aircraft pilot suggestions from registration
+      const captainInput = document.getElementById('editCaptain');
+      const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
+      if (captainInput && pilotDatalist) {
+        const pilots = lookupAircraftPilots(regInput.value, '');
+        if (pilots.length > 0) {
+          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainInput.value.trim() && pilots.length === 1) {
+            captainInput.value = pilots[0].displayName;
+          }
+        }
+      }
     };
     regInput.addEventListener("input", applyRegAutofill);
     regInput.addEventListener("change", applyRegAutofill);
@@ -6480,8 +6516,23 @@ function openEditMovementModal(m) {
         const registration = regData['REGISTRATION'] || '';
         if (registration && registration !== '-') {
           regInput.value = registration;
-          // Trigger registration input event to update dependent fields
+          // Trigger registration input event to update dependent fields (incl. pilot suggestions)
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }
+
+    // Aircraft pilot suggestions from fixed callsign
+    if (fullCallsign) {
+      const captainInput = document.getElementById('editCaptain');
+      const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
+      if (captainInput && pilotDatalist) {
+        const pilots = lookupAircraftPilots('', fullCallsign);
+        if (pilots.length > 0) {
+          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
+          if (!captainInput.value.trim() && pilots.length === 1) {
+            captainInput.value = pilots[0].displayName;
+          }
         }
       }
     }

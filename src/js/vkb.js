@@ -13,6 +13,7 @@ const vkbData = {
   registrations: [],
   egowCodes: [],
   callsignKey: [],
+  aircraftPilots: [],
   loaded: false,
   loadError: null
 };
@@ -124,7 +125,8 @@ export async function loadVKBData() {
       locations,
       registrations,
       egowCodes,
-      callsignKey
+      callsignKey,
+      aircraftPilots
     ] = await Promise.all([
       loadCSV('./data/FDMS_AIRCRAFT_TYPES.csv'),
       loadCSV('./data/FDMS_CALLSIGNS_STANDARD.csv'),
@@ -132,7 +134,8 @@ export async function loadVKBData() {
       loadCSV('./data/FDMS_LOCATIONS_B_E_L.csv'),
       loadCSV('./data/FDMS_REGISTRATIONS.csv'),
       loadCSV('./data/FDMS_EGOW_CODES.csv'),
-      loadCSV('./data/CALLSIGN_KEY.csv')
+      loadCSV('./data/CALLSIGN_KEY.csv'),
+      loadCSV('./data/FDMS_AIRCRAFT_PILOTS.csv')
     ]);
 
     vkbData.aircraftTypes = aircraftTypes;
@@ -142,6 +145,7 @@ export async function loadVKBData() {
     vkbData.registrations = registrations;
     vkbData.egowCodes = egowCodes;
     vkbData.callsignKey = callsignKey;
+    vkbData.aircraftPilots = aircraftPilots;
     vkbData.loaded = true;
     vkbData.loadError = null;
 
@@ -154,6 +158,7 @@ export async function loadVKBData() {
     console.log(`VKB: Loaded ${locations.length} locations`);
     console.log(`VKB: Loaded ${registrations.length} registrations`);
     console.log(`VKB: Loaded ${egowCodes.length} EGOW codes`);
+    console.log(`VKB: Loaded ${aircraftPilots.length} aircraft pilot rows`);
     console.log(`VKB: Load complete in ${loadTime}ms`);
 
   } catch (error) {
@@ -177,7 +182,8 @@ export function getVKBStatus() {
       callsignsNonstandard: vkbData.callsignsNonstandard.length,
       locations: vkbData.locations.length,
       registrations: vkbData.registrations.length,
-      egowCodes: vkbData.egowCodes.length
+      egowCodes: vkbData.egowCodes.length,
+      aircraftPilots: vkbData.aircraftPilots.length
     }
   };
 }
@@ -457,6 +463,85 @@ export function lookupRegistrationByFixedCallsign(callsign) {
 }
 
 /**
+ * Look up expanded EGOW attribution from a callsign code.
+ * Handles base callsigns, approved contractions, and numeric suffixes.
+ * @param {string} callsignCode - Full callsign (e.g. "UAM03", "MERSY", "MERSY1", "MERSY 1")
+ * @returns {Object|null} Attribution object or null if not found
+ */
+export function lookupEgowAttributionFromCallsign(callsignCode) {
+  if (!vkbData.loaded || !callsignCode) return null;
+
+  // Normalise: uppercase, trim, remove internal whitespace
+  const norm = callsignCode.toUpperCase().trim().replace(/\s+/g, '');
+
+  // Split trailing numeric suffix: "UAM03" → base="UAM", flightNum="03"
+  const splitMatch = norm.match(/^([A-Z]+)(\d+)?$/);
+  if (!splitMatch) return null;
+
+  const base = splitMatch[1];
+  const flightNum = splitMatch[2] || '';
+
+  // Priority 1: CALLSIGN_BASE + FLIGHT_NUMBER exact match (non-blank flight number)
+  let row = null;
+  if (flightNum) {
+    row = vkbData.egowCodes.find(ec => {
+      const csBase = (ec['CALLSIGN_BASE'] || '').toUpperCase().trim();
+      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      return csBase === base && fNum === flightNum;
+    });
+  }
+
+  // Priority 2: APPROVED_CONTRATION + FLIGHT_NUMBER exact match
+  if (!row && flightNum) {
+    row = vkbData.egowCodes.find(ec => {
+      const csContr = (ec['APPROVED_CONTRATION'] || '').toUpperCase().trim();
+      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      return csContr && csContr === base && fNum === flightNum;
+    });
+  }
+
+  // Priority 3: CALLSIGN_BASE + blank FLIGHT_NUMBER fallback
+  if (!row) {
+    row = vkbData.egowCodes.find(ec => {
+      const csBase = (ec['CALLSIGN_BASE'] || '').toUpperCase().trim();
+      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      return csBase === base && fNum === '';
+    });
+  }
+
+  // Priority 4: APPROVED_CONTRATION + blank FLIGHT_NUMBER fallback
+  if (!row) {
+    row = vkbData.egowCodes.find(ec => {
+      const csContr = (ec['APPROVED_CONTRATION'] || '').toUpperCase().trim();
+      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      return csContr && csContr === base && fNum === '';
+    });
+  }
+
+  // Legacy fallback: old-schema 'Callsign' column
+  if (!row) {
+    row = vkbData.egowCodes.find(ec =>
+      (ec['Callsign'] || '').toUpperCase().trim() === norm
+    );
+  }
+
+  if (!row) return null;
+
+  return {
+    callsignBase: (row['CALLSIGN_BASE'] || '').trim(),
+    approvedContraction: (row['APPROVED_CONTRATION'] || '').trim(),
+    flightNumber: (row['FLIGHT_NUMBER'] || '').trim(),
+    egowCode: (row['EGOW_CODE'] || row['EGOW Code'] || '').trim(),
+    unit: (row['UNIT'] || '').trim(),
+    unitCode: (row['UNIT_CODE'] || row['UC'] || '').trim(),
+    name: (row['NAME'] || row['Name'] || '').trim(),
+    position: (row['POSITION'] || row['Position'] || '').trim(),
+    notes: (row['NOTES'] || '').trim(),
+    source: 'egowCodes'
+  };
+}
+
+/**
  * Look up a callsign in the VKB database
  * @param {string} callsign - Callsign to look up
  * @returns {Object|null} Callsign data or null if not found
@@ -466,13 +551,19 @@ export function lookupCallsign(callsign) {
 
   const normalized = callsign.toUpperCase().trim();
 
-  // First check EGOW codes (for unit code lookup)
-  const egowResult = vkbData.egowCodes.find(ec =>
-    (ec['Callsign'] || '').toUpperCase() === normalized
-  );
-
-  if (egowResult) {
-    return egowResult;
+  // First check EGOW codes using expanded schema resolver
+  const egowAttrib = lookupEgowAttributionFromCallsign(normalized);
+  if (egowAttrib) {
+    // Return normalized object with UC field for backward compat with existing callers
+    return {
+      'Callsign': normalized,
+      'UC': egowAttrib.unitCode,
+      'Name': egowAttrib.name,
+      'Unit': egowAttrib.unit,
+      'EGOW_CODE': egowAttrib.egowCode,
+      '_source': 'egowCodes',
+      '_egowAttrib': egowAttrib
+    };
   }
 
   // Search both standard and nonstandard callsigns
@@ -487,6 +578,67 @@ export function lookupCallsign(callsign) {
   }
 
   return result || null;
+}
+
+/**
+ * Look up aircraft pilots by registration or fixed callsign.
+ * @param {string} registration - Aircraft registration (e.g. "G-CKSR" or "GCKSR")
+ * @param {string} fixedCallsign - Fixed callsign (e.g. "STEARMAN28")
+ * @returns {Array} Sorted array of pilot objects
+ */
+export function lookupAircraftPilots(registration = '', fixedCallsign = '') {
+  if (!vkbData.loaded) return [];
+
+  const normReg = registration.toUpperCase().trim().replace(/-/g, '');
+  const normCs = fixedCallsign.toUpperCase().trim();
+
+  if (!normReg && !normCs) return [];
+
+  const matches = vkbData.aircraftPilots.filter(row => {
+    const rowReg = (row['REGISTRATION'] || '').toUpperCase().trim().replace(/-/g, '');
+    const rowCs = (row['FIXED_CALLSIGN'] || '').toUpperCase().trim();
+    return (normReg && rowReg === normReg) || (normCs && rowCs === normCs);
+  });
+
+  if (matches.length === 0) return [];
+
+  // Count last names to detect duplicates for disambiguation
+  const lastNameCounts = {};
+  for (const row of matches) {
+    const last = (row['PILOT_NAME_LAST'] || '').trim().toUpperCase();
+    lastNameCounts[last] = (lastNameCounts[last] || 0) + 1;
+  }
+
+  // Sort alphabetically by last name then first name
+  const sorted = [...matches].sort((a, b) => {
+    const lastA = (a['PILOT_NAME_LAST'] || '').toUpperCase();
+    const lastB = (b['PILOT_NAME_LAST'] || '').toUpperCase();
+    if (lastA !== lastB) return lastA.localeCompare(lastB);
+    return (a['PILOT_NAME_FIRST'] || '').toUpperCase().localeCompare(
+      (b['PILOT_NAME_FIRST'] || '').toUpperCase()
+    );
+  });
+
+  return sorted.map(row => {
+    const lastName = (row['PILOT_NAME_LAST'] || '').trim();
+    const firstName = (row['PILOT_NAME_FIRST'] || '').trim();
+    const isDuplicate = lastNameCounts[lastName.toUpperCase()] > 1;
+
+    let displayName = lastName;
+    if (isDuplicate && firstName) {
+      displayName = `${lastName} ${firstName.charAt(0)}`;
+    }
+    const fullName = firstName ? `${lastName} ${firstName}` : lastName;
+
+    return {
+      registration: (row['REGISTRATION'] || '').trim(),
+      fixedCallsign: (row['FIXED_CALLSIGN'] || '').trim(),
+      lastName,
+      firstName,
+      displayName,
+      fullName
+    };
+  });
 }
 
 /**
@@ -667,34 +819,24 @@ export function getVoiceCallsignForDisplay(contraction, registration) {
 
 /**
  * Look up captain name from EGOW codes
- * @param {string} callsignCode - Full callsign code (e.g., "UAM11")
+ * @param {string} callsignCode - Full callsign code (e.g., "UAM11", "MERSY1")
  * @returns {string} Captain name or empty string
  */
 export function lookupCaptainFromEgowCodes(callsignCode) {
   if (!vkbData.loaded || !callsignCode) return '';
-
-  const normalized = callsignCode.toUpperCase().trim();
-  const egowRecord = vkbData.egowCodes.find(ec =>
-    (ec['Callsign'] || '').toUpperCase().trim() === normalized
-  );
-
-  return egowRecord ? (egowRecord['Name'] || '').trim() : '';
+  const attrib = lookupEgowAttributionFromCallsign(callsignCode);
+  return attrib ? attrib.name : '';
 }
 
 /**
  * Look up unit code from EGOW codes
- * @param {string} callsignCode - Full callsign code (e.g., "UAM11")
+ * @param {string} callsignCode - Full callsign code (e.g., "UAM11", "MERSY1")
  * @returns {string} Unit code (L, M, A) or empty string
  */
 export function lookupUnitCodeFromEgowCodes(callsignCode) {
   if (!vkbData.loaded || !callsignCode) return '';
-
-  const normalized = callsignCode.toUpperCase().trim();
-  const egowRecord = vkbData.egowCodes.find(ec =>
-    (ec['Callsign'] || '').toUpperCase().trim() === normalized
-  );
-
-  return egowRecord ? (egowRecord['UC'] || '').trim() : '';
+  const attrib = lookupEgowAttributionFromCallsign(callsignCode);
+  return attrib ? attrib.unitCode : '';
 }
 
 /**
