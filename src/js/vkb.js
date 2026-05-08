@@ -505,14 +505,36 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
   // Normalise flight number for comparison only (strips leading zeroes)
   const flightNum = normalizeFlightNumber(splitMatch[2] || '');
 
-  // Priority 1: CALLSIGN_BASE + FLIGHT_NUMBER exact normalised match
+  // Priority 1: CALLSIGN_BASE + FLIGHT_NUMBER exact normalised match.
+  // Domain rule: individual-pilot callsign families (e.g. UAM) use leading-zero
+  // format for single-digit numbers (UAM01..UAM09). If the operator enters a
+  // bare single digit without a leading zero (e.g. "UAM3"), do NOT silently
+  // resolve it as UAM03. The check is skipped for formation families whose
+  // highest flight number is < 10 (e.g. VITAL1, MERSY1 — those families do
+  // not pad single digits). Formation element callsigns whose base has an
+  // APPROVED_CONTRACTION are reached via Priority 2 anyway (e.g. MERSY2).
   let row = null;
   if (flightNum) {
+    // Detect whether the raw input suffix was a single digit with no leading zero.
+    const rawSuffix = splitMatch[2] || '';
+    const inputIsSingleDigitNoLeadingZero = /^\d$/.test(rawSuffix); // exactly one digit
+
     row = vkbData.egowCodes.find(ec => {
       const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
       const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csBase === base && fNum === flightNum;
     });
+
+    // If we found a match but the input was a bare single digit, check whether
+    // this base family contains multi-digit flight numbers (>= 10). If it does,
+    // the family uses leading-zero protocol for 1-9 and the input is malformed.
+    if (row && inputIsSingleDigitNoLeadingZero) {
+      const familyHasMultiDigit = vkbData.egowCodes.some(ec => {
+        const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
+        return csBase === base && parseInt(ec['FLIGHT_NUMBER'] || '0', 10) >= 10;
+      });
+      if (familyHasMultiDigit) row = null;
+    }
   }
 
   // Priority 2: APPROVED_CONTRACTION + FLIGHT_NUMBER exact normalised match

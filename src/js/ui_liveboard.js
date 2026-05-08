@@ -4048,6 +4048,24 @@ function enrichMovementData(movement) {
 }
 
 /**
+ * Auto-fill an input non-destructively, tracking what was last auto-filled.
+ * Overwrites the field only when it is blank or still shows the previous autofill value.
+ * Stores the applied value in dataset.autofillValue so that subsequent autofills
+ * can tell the difference between a user edit and a tracked autofill.
+ */
+function applyTrackedAutofill(inputEl, value) {
+  if (!inputEl || !value) return;
+  const next = String(value).trim();
+  if (!next) return;
+  const current = inputEl.value.trim();
+  const previousAuto = inputEl.dataset.autofillValue || '';
+  if (!current || current === previousAuto) {
+    inputEl.value = next;
+    inputEl.dataset.autofillValue = next;
+  }
+}
+
+/**
  * Returns true if the UTC/Local time-mode toggle should be shown in new-strip forms.
  * Controlled by Admin tri-state policy config.newFormUtcLocalTogglePolicy:
  *   "show"  — always visible
@@ -4423,9 +4441,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainInput.value.trim() && pilots.length === 1) {
-            captainInput.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     };
@@ -4453,20 +4469,13 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       }
     }
 
-    // EGOW attribution: code, unit, PIC — non-destructive (only fills blank fields)
+    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       if (egowAttrib) {
-        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
-          egowCodeInput.value = egowAttrib.egowCode;
-        }
-        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
-          unitCodeInput.value = egowAttrib.unitCode;
-        }
-        const captainEl = document.getElementById('newCaptain');
-        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
-          captainEl.value = egowAttrib.name;
-        }
+        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
+        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
+        applyTrackedAutofill(document.getElementById('newCaptain'), egowAttrib.name);
       }
     }
 
@@ -4491,9 +4500,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
         const pilots = lookupAircraftPilots('', fullCallsign);
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainInput.value.trim() && pilots.length === 1) {
-            captainInput.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     }
@@ -5248,6 +5255,11 @@ function openNewLocFlightModal() {
             <select id="newLocWtc" class="modal-input"></select>
           </div>
           <div class="modal-field">
+            <label class="modal-label">PIC</label>
+            <input id="newLocCaptain" class="modal-input" placeholder="Pilot in Command" list="newLocCaptainPilotSuggestions" autocomplete="off" />
+            <datalist id="newLocCaptainPilotSuggestions"></datalist>
+          </div>
+          <div class="modal-field">
             <label class="modal-label">Priority</label>
             <select id="locPriorityLetter" class="modal-select">
               <option value="">-</option>
@@ -5380,15 +5392,6 @@ function openNewLocFlightModal() {
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
             <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
-          </div>
-          <div class="modal-field">
-            <label class="modal-label">PIC</label>
-            <input id="newLocCaptain"
-                   class="modal-input"
-                   placeholder="Pilot in Command"
-                   list="newLocCaptainPilotSuggestions"
-                   autocomplete="off" />
-            <datalist id="newLocCaptainPilotSuggestions"></datalist>
           </div>
         </div>
       </section>
@@ -5598,9 +5601,7 @@ function openNewLocFlightModal() {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainEl.value.trim() && pilots.length === 1) {
-            captainEl.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
         }
       }
     };
@@ -5625,20 +5626,13 @@ function openNewLocFlightModal() {
       }
     }
 
-    // EGOW attribution: code, unit, PIC — non-destructive
+    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       if (egowAttrib) {
-        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
-          egowCodeInput.value = egowAttrib.egowCode;
-        }
-        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
-          unitCodeInput.value = egowAttrib.unitCode;
-        }
-        const captainEl = document.getElementById('newLocCaptain');
-        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
-          captainEl.value = egowAttrib.name;
-        }
+        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
+        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
+        applyTrackedAutofill(document.getElementById('newLocCaptain'), egowAttrib.name);
       }
     }
 
@@ -5661,9 +5655,7 @@ function openNewLocFlightModal() {
         const pilots = lookupAircraftPilots('', fullCallsign);
         if (pilots.length > 0) {
           pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainEl.value.trim() && pilots.length === 1) {
-            captainEl.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
         }
       }
     }
@@ -6552,9 +6544,7 @@ function openEditMovementModal(m) {
         const pilots = lookupAircraftPilots(regInput.value, '');
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainInput.value.trim() && pilots.length === 1) {
-            captainInput.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     };
@@ -6582,20 +6572,13 @@ function openEditMovementModal(m) {
       }
     }
 
-    // EGOW attribution: code, unit, PIC — non-destructive
+    // EGOW attribution: code, unit, PIC — tracked autofill (overwrites previous autofill, preserves manual)
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       if (egowAttrib) {
-        if (egowCodeInput && !egowCodeInput.value.trim() && egowAttrib.egowCode) {
-          egowCodeInput.value = egowAttrib.egowCode;
-        }
-        if (unitCodeInput && !unitCodeInput.value.trim() && egowAttrib.unitCode) {
-          unitCodeInput.value = egowAttrib.unitCode;
-        }
-        const captainEl = document.getElementById('editCaptain');
-        if (captainEl && !captainEl.value.trim() && egowAttrib.name) {
-          captainEl.value = egowAttrib.name;
-        }
+        applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode);
+        applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode);
+        applyTrackedAutofill(document.getElementById('editCaptain'), egowAttrib.name);
       }
     }
 
@@ -6620,9 +6603,7 @@ function openEditMovementModal(m) {
         const pilots = lookupAircraftPilots('', fullCallsign);
         if (pilots.length > 0) {
           pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (!captainInput.value.trim() && pilots.length === 1) {
-            captainInput.value = pilots[0].displayName;
-          }
+          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     }

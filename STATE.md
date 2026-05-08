@@ -19,8 +19,10 @@ Last updated: 2026-05-08 (Europe/London)
 - **EGOW attribution consolidated** (branch `claude/consolidate-egow-attribution-clean`):
   - Expanded EGOW attribution using corrected `FDMS_EGOW_CODES.csv` schema: `CALLSIGN_BASE`, `APPROVED_CONTRACTION` (corrected spelling), `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
   - Resolver supports numeric suffix, leading-zero normalisation, blank `FLIGHT_NUMBER` fallback, and `APPROVED_CONTRACTION` alias with backward-compat typo fallback.
-  - `lookupEgowAttributionFromCallsign()` is wired form-level across all three modal paths: `openNewFlightModal` (DEP/ARR/OVR), `openNewLocFlightModal` (LOC), `openEditMovementModal`. Visible EGOW Code, EGOW Unit, and PIC are populated before save validation. Manual entries remain authoritative.
-  - LOC creation modal now includes PIC field (`newLocCaptain`) with aircraft-pilot datalist (`newLocCaptainPilotSuggestions`). Both LOC save paths persist `captain`.
+  - **Individual-pilot callsign leading-zero rule**: bases whose highest FLIGHT_NUMBER is ≥ 10 (e.g. UAM) require zero-padded single-digit inputs. UAM3 does not resolve; UAM03 resolves correctly. Formation-element bases with all flight numbers < 10 (e.g. VITAL1) and contraction-routed families (e.g. MERSY2) are not affected.
+  - `lookupEgowAttributionFromCallsign()` is wired form-level across all three modal paths: `openNewFlightModal` (DEP/ARR/OVR), `openNewLocFlightModal` (LOC), `openEditMovementModal`. Visible EGOW Code, EGOW Unit, and PIC are populated before save validation.
+  - **Tracked autofill provenance** (`dataset.autofillValue`): EGOW Code, EGOW Unit, and PIC auto-fills are tracked per field. When the callsign changes, a field updates only if it is blank or still shows the previous autofill value — so UAM03→UAM32 updates PIC from JENKINS to HAIGH, but a manually typed value is never overwritten. Same tracking applied to aircraft-pilot single-match auto-fills.
+  - **LOC PIC layout parity**: `newLocCaptain` field is now in the Identity section (matching DEP/ARR/OVR modal), not the EGOW/Operational section. Both LOC save paths persist `captain`.
   - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv` wired to pilot datalists in new-flight, LOC, and edit modals.
   - `enrichMovementData()` retained as final non-destructive safety net.
   - `FDMS_REGISTRATIONS.csv` untouched; verified at **25,713 lines**.
