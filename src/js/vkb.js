@@ -463,39 +463,64 @@ export function lookupRegistrationByFixedCallsign(callsign) {
 }
 
 /**
+ * Normalise a callsign token for EGOW lookup matching only.
+ * Uppercase, trim, collapse internal whitespace.
+ * Does NOT alter stored or displayed callsigns.
+ */
+function normalizeCallsignToken(value) {
+  return String(value ?? '').toUpperCase().trim().replace(/\s+/g, '');
+}
+
+/**
+ * Normalise a flight number for EGOW lookup matching only.
+ * Strips leading zeroes by parsing as integer so "02", "2", "002" all match.
+ * Blank input stays blank (not 0) — blank FLIGHT_NUMBER is the base-strip fallback.
+ * Does NOT alter stored or displayed callsigns.
+ */
+function normalizeFlightNumber(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return '';
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? String(n) : s.toUpperCase();
+}
+
+/**
  * Look up expanded EGOW attribution from a callsign code.
  * Handles base callsigns, approved contractions, and numeric suffixes.
+ * Flight-number normalisation is lookup-only. It does not alter stored/displayed callsigns.
  * @param {string} callsignCode - Full callsign (e.g. "UAM03", "MERSY", "MERSY1", "MERSY 1")
  * @returns {Object|null} Attribution object or null if not found
  */
 export function lookupEgowAttributionFromCallsign(callsignCode) {
   if (!vkbData.loaded || !callsignCode) return null;
 
-  // Normalise: uppercase, trim, remove internal whitespace
-  const norm = callsignCode.toUpperCase().trim().replace(/\s+/g, '');
+  // Normalise input for matching: uppercase, trim, remove internal whitespace
+  const norm = normalizeCallsignToken(callsignCode);
 
   // Split trailing numeric suffix: "UAM03" → base="UAM", flightNum="03"
   const splitMatch = norm.match(/^([A-Z]+)(\d+)?$/);
   if (!splitMatch) return null;
 
   const base = splitMatch[1];
-  const flightNum = splitMatch[2] || '';
+  // Normalise flight number for comparison only (strips leading zeroes)
+  const flightNum = normalizeFlightNumber(splitMatch[2] || '');
 
-  // Priority 1: CALLSIGN_BASE + FLIGHT_NUMBER exact match (non-blank flight number)
+  // Priority 1: CALLSIGN_BASE + FLIGHT_NUMBER exact normalised match
   let row = null;
   if (flightNum) {
     row = vkbData.egowCodes.find(ec => {
-      const csBase = (ec['CALLSIGN_BASE'] || '').toUpperCase().trim();
-      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
+      const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csBase === base && fNum === flightNum;
     });
   }
 
-  // Priority 2: APPROVED_CONTRATION + FLIGHT_NUMBER exact match
+  // Priority 2: APPROVED_CONTRACTION + FLIGHT_NUMBER exact normalised match
   if (!row && flightNum) {
     row = vkbData.egowCodes.find(ec => {
-      const csContr = (ec['APPROVED_CONTRATION'] || '').toUpperCase().trim();
-      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      // Support corrected spelling; fall back to old typo for any legacy files
+      const csContr = normalizeCallsignToken(ec['APPROVED_CONTRACTION'] || ec['APPROVED_CONTRATION']);
+      const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csContr && csContr === base && fNum === flightNum;
     });
   }
@@ -503,17 +528,17 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
   // Priority 3: CALLSIGN_BASE + blank FLIGHT_NUMBER fallback
   if (!row) {
     row = vkbData.egowCodes.find(ec => {
-      const csBase = (ec['CALLSIGN_BASE'] || '').toUpperCase().trim();
-      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
+      const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csBase === base && fNum === '';
     });
   }
 
-  // Priority 4: APPROVED_CONTRATION + blank FLIGHT_NUMBER fallback
+  // Priority 4: APPROVED_CONTRACTION + blank FLIGHT_NUMBER fallback
   if (!row) {
     row = vkbData.egowCodes.find(ec => {
-      const csContr = (ec['APPROVED_CONTRATION'] || '').toUpperCase().trim();
-      const fNum = (ec['FLIGHT_NUMBER'] || '').trim();
+      const csContr = normalizeCallsignToken(ec['APPROVED_CONTRACTION'] || ec['APPROVED_CONTRATION']);
+      const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csContr && csContr === base && fNum === '';
     });
   }
@@ -521,7 +546,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
   // Legacy fallback: old-schema 'Callsign' column
   if (!row) {
     row = vkbData.egowCodes.find(ec =>
-      (ec['Callsign'] || '').toUpperCase().trim() === norm
+      normalizeCallsignToken(ec['Callsign']) === norm
     );
   }
 
@@ -529,7 +554,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
 
   return {
     callsignBase: (row['CALLSIGN_BASE'] || '').trim(),
-    approvedContraction: (row['APPROVED_CONTRATION'] || '').trim(),
+    approvedContraction: (row['APPROVED_CONTRACTION'] || row['APPROVED_CONTRATION'] || '').trim(),
     flightNumber: (row['FLIGHT_NUMBER'] || '').trim(),
     egowCode: (row['EGOW_CODE'] || row['EGOW Code'] || '').trim(),
     unit: (row['UNIT'] || '').trim(),

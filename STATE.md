@@ -17,7 +17,7 @@ Last updated: 2026-05-08 (Europe/London)
   - Edit-save timing recalculation now detects the actual changed timing field rather than always using `depActual`.
   - LOC planned-time sync (`bindPlannedTimesSync` non-ARR mode) now always applies `start + duration → end` on start/duration change, and `end − start → duration` on end change.
 - **EGOW attribution and aircraft pilot data implemented** (branch `claude/egow-aircraft-datasets-CwnXX`):
-  - Expanded EGOW attribution using revised `FDMS_EGOW_CODES.csv` schema with `CALLSIGN_BASE`, `APPROVED_CONTRATION`, `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
+  - Expanded EGOW attribution using revised `FDMS_EGOW_CODES.csv` schema with `CALLSIGN_BASE`, `APPROVED_CONTRACTION`, `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
   - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv`.
 - V1 is not release-ready until the remaining V1 workstreams and acceptance sweep are complete.
 
@@ -1397,11 +1397,11 @@ docs impact
 Implemented expanded EGOW attribution using the revised `FDMS_EGOW_CODES.csv` schema:
 
 ```text
-CALLSIGN_BASE,APPROVED_CONTRATION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
+CALLSIGN_BASE,APPROVED_CONTRACTION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
 ```
 
 Key changes:
-- `lookupEgowAttributionFromCallsign(callsignCode)` — new exported function in `vkb.js` implementing deterministic 4-priority lookup with numeric suffix splitting and blank-flight-number fallback.
+- `lookupEgowAttributionFromCallsign(callsignCode)` — new exported function in `vkb.js` implementing deterministic 4-priority lookup with numeric suffix splitting and blank-flight-number fallback. EGOW attribution lookup treats numeric suffixes with and without leading zeroes as equivalent for matching only. Callsign display/storage remains unchanged.
 - `lookupCaptainFromEgowCodes()` and `lookupUnitCodeFromEgowCodes()` — updated to delegate to the new resolver.
 - `lookupCallsign()` — updated EGOW section to use new schema; returns `UC` field populated from `UNIT_CODE` for backward compatibility with existing callers.
 - `enrichMovementData()` in `ui_liveboard.js` — refactored to use `lookupEgowAttributionFromCallsign()` directly, populating `egowCode`, `unitCode`, `captain`, and `unitDesc` non-destructively.
