@@ -1,47 +1,40 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-11 (Europe/London, rev 2)
+Last updated: 2026-05-11 (Europe/London, rev 3 — roadmap consolidation)
 
-## Current headline status
-
-- **Main branch is the authoritative baseline.**
-- **Vectair Flite** (“Flite”) is the current product name.
-- Legacy references to **FDMS**, **FDMS Lite**, or **Vectair FDMS** refer to the same product unless explicitly stated otherwise.
-- **H5b — Functional consolidation / shared export correction is complete and closed.**
-- Native **Save As** export behaviour is now implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
-- Browser/download fallback remains available for non-Tauri/local-browser harness use.
-- `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
-- **EGOW / LOC / timing regression cluster is fixed** (branch `claude/fix-egow-loc-timing-Wqwjs`):
-  - LOC EGOW validation now rejects blank codes in both LOC save paths.
-  - Callsign-derived EGOW enrichment restored in `enrichMovementData()` (non-destructive).
-  - Edit-save timing recalculation now detects the actual changed timing field rather than always using `depActual`.
-  - LOC planned-time sync (`bindPlannedTimesSync` non-ARR mode) now always applies `start + duration → end` on start/duration change, and `end − start → duration` on end change.
-- **EGOW attribution consolidated** (branch `claude/consolidate-egow-attribution-clean`):
-  - Expanded EGOW attribution using corrected `FDMS_EGOW_CODES.csv` schema: `CALLSIGN_BASE`, `APPROVED_CONTRACTION` (corrected spelling), `FLIGHT_NUMBER`, `EGOW_CODE`, `UNIT`, `UNIT_CODE`, `NAME`, `POSITION`, `NOTES`.
-  - Resolver supports numeric suffix, leading-zero normalisation, blank `FLIGHT_NUMBER` fallback, and `APPROVED_CONTRACTION` alias with backward-compat typo fallback.
-  - **Individual-pilot callsign leading-zero rule**: bases whose highest FLIGHT_NUMBER is ≥ 10 (e.g. UAM) require zero-padded single-digit inputs. UAM3 does not resolve; UAM03 resolves correctly. Formation-element bases with all flight numbers < 10 (e.g. VITAL1) and contraction-routed families (e.g. MERSY2) are not affected.
-  - `lookupEgowAttributionFromCallsign()` is wired form-level across all three modal paths: `openNewFlightModal` (DEP/ARR/OVR), `openNewLocFlightModal` (LOC), `openEditMovementModal`. Visible EGOW Code, EGOW Unit, and PIC are populated before save validation.
-  - **Tracked autofill provenance** (`dataset.autofillValue`): EGOW Code, EGOW Unit, and PIC auto-fills are tracked per field. When the callsign changes, a field updates only if it is blank or still shows the previous autofill value — so UAM03→UAM32 updates PIC from JENKINS to HAIGH, but a manually typed value is never overwritten. Same tracking applied to aircraft-pilot single-match auto-fills.
-  - **Stale autofill clearing** (`clearTrackedAutofill`): When attribution changes to unresolved (callsign not found) or returns a blank value for a specific field, any previously auto-filled value is cleared per-field. Manual entries are never cleared. Pattern applied in all three modal EGOW blocks.
-  - **Untracked EGOW Unit legacy path removed**: The `lookupCallsign` / `unitData['UC']` direct-write block that bypassed `dataset.autofillValue` has been removed from all three `updateCallsignDerivedFields` functions. EGOW Unit is now exclusively written by `applyTrackedAutofill` via the EGOW attribution resolver, making `clearTrackedAutofill` effective for unit clearing.
-  - **Callsign derivation responds to `change` events**: All three modal paths now attach both `input` and `change` listeners on callsign code and flight number inputs, ensuring paste, autocomplete selection, and browser-autofill also trigger EGOW/PIC attribution.
-  - **Registration fixed-callsign population triggers derivation**: After populating callsign code and flight number from a `FIXED C/S` registration lookup, all three registration autofill paths now call `updateCallsignDerivedFields()` directly, so EGOW Code, EGOW Unit, and PIC are populated through the same tracked path with `dataset.autofillValue` set.
-  - **UAM family fallback row**: A blank-FLIGHT_NUMBER row for `UAM` (EGOW Code = BM) is appended to both `FDMS_EGOW_CODES.csv` files. Unlisted UAM flight numbers (e.g. UAM99) now resolve to BM. UNIT, UNIT_CODE, and NAME are intentionally blank for this fallback row.
-  - **Malformed-input safeguard**: When Priority 1 rejects a bare-single-digit suffix as malformed (e.g. UAM3 in a leading-zero family), `lookupEgowAttributionFromCallsign()` now returns `null` immediately without falling through to Priority 3/4 base-strip fallbacks. UAM3 cannot acquire BM via the UAM family fallback.
-  - **LOC PIC layout parity**: `newLocCaptain` field is now in the Identity section (matching DEP/ARR/OVR modal), not the EGOW/Operational section. Both LOC save paths persist `captain`.
-  - Aircraft pilot suggestion loading from `FDMS_AIRCRAFT_PILOTS.csv` wired to pilot datalists in new-flight, LOC, and edit modals.
-  - `enrichMovementData()` retained as final non-destructive safety net.
-  - `FDMS_REGISTRATIONS.csv` untouched; verified at **25,713 lines**.
-  - Post-launch backlog: learned PIC ranking; alphanumeric flight-suffix support beyond pure digit suffixes.
-- V1 is not release-ready until the remaining V1 workstreams and acceptance sweep are complete.
-
-This file is the shared source of truth for the Manager–Worker workflow.
+This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
 - **Product Owner / SME:** Stuart
 - **Solutions Architect & QA Lead:** ChatGPT
 - **Production Engineer:** Claude Code
 
-ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maintains the continuity layer. Claude implements tickets only. Claude must not be asked to diagnose root cause or infer design direction.
+ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maintains the documentation/continuity layer. Claude implements precise tickets only. Claude must not be asked to diagnose root cause, infer product direction, or choose architecture independently.
+
+---
+
+## 0. Current headline status
+
+- **Main branch is the authoritative baseline.**
+- **Vectair Flite** (“Flite”) is the current product name.
+- Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
+- **V1 is not release-ready.**
+- The current next engineering item is:
+
+```text
+Live Board summary counter aggregation and computed tooltips
+```
+
+- The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
+- History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
+- Formation implementation through **FR-15** is complete for V1 launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
+- Native **Save As** export behaviour is implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
+- Browser/download fallback remains available for non-Tauri/local-browser harness use.
+- `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
+- V1 release scope is now explicitly confirmed as including:
+  - Create From workflow
+  - METAR Builder
+  - full offline standalone Desktop Productization
+- MAB package filtering is confirmed as **post-V1**.
 
 ---
 
@@ -51,201 +44,396 @@ The product is branded:
 
 ```text
 Vectair Flite
+```
 
 Short form:
 
+```text
 Flite
+```
 
 Older development material may refer to the same application as:
 
+```text
 FDMS
 FDMS Lite
 Vectair FDMS
+Vectair FDMS Lite
+```
 
 These are legacy names for the same product unless the context explicitly distinguishes them.
 
-Flite is a deliberate contraction of FDMS + light. New tickets, documentation, release notes, screenshots, and architecture summaries should use Vectair Flite or Flite by default.
+Flite is a deliberate contraction of FDMS + light. New tickets, documentation, release notes, screenshots, and architecture summaries should use **Vectair Flite** or **Flite** by default.
 
 Do not casually revert to older FDMS naming in new material.
 
-2. Runtime and delivery model
-2.1 Product definition
+---
 
-Vectair Flite is not a website and not a hosted web app.
+## 2. Repository, branch, and historical anchors
+
+### 2.1 Repository
+
+Local repository:
+
+```text
+C:\Users\dmshs\FDMS
+```
+
+GitHub repository:
+
+```text
+Arkmere/FDMS
+```
+
+### 2.2 Authoritative branch
+
+```text
+main
+```
+
+`main` is the authoritative working baseline unless explicitly stated otherwise.
+
+### 2.3 Known historical anchors
+
+The following branches/tags may exist as intentional history/fallback points:
+
+```text
+legacy/pre-desktop-main
+baseline/pre-desktop-productization
+flite-pre-desktop-baseline-2026-03
+```
+
+Do not delete or reinterpret these casually.
+
+### 2.4 Latest important merged EGOW baseline
+
+The latest closed EGOW consolidation work was merged to `main` at:
+
+```text
+73023df Fix EGOW Unit provenance, add change listeners, trigger derivation from reg autofill
+```
+
+Relevant recent EGOW commits include:
+
+```text
+73023df Fix EGOW Unit provenance, add change listeners, trigger derivation from reg autofill
+17f19cf Add stale autofill clearing, UAM family fallback, and malformed-input safeguard
+339a7c7 Correct LOC PIC layout, tracked autofill, and single-digit callsign guard
+a11918e Consolidate EGOW attribution and timing fixes
+cd343bc Fix EGOW schema spelling and flight-number lookup normalisation
+```
+
+---
+
+## 3. Runtime and delivery model
+
+### 3.1 Product definition
+
+Vectair Flite is **not** a website and **not** a hosted web app.
 
 Flite is a local flight-data management application for Windows and Linux. It currently uses HTML/CSS/JS internally and is being productized through Tauri.
 
-The local Python server remains a development/runtime convenience only.
+The local Python server is a development/runtime convenience only and must not be required for normal V1 operation.
 
-2.2 Current development environment
+### 3.2 V1 desktop productization requirement
+
+V1 Desktop Productization means:
+
+```text
+Flite must be a fully independent, offline-capable, installable desktop application.
+It must not depend on a browser, a Python development server, or internet connectivity for normal core operation.
+```
+
+V1 desktop productization must include, at minimum:
+
+- packaged application build;
+- local asset/data loading inside the installed app;
+- normal offline operation using bundled/saved critical data;
+- no dependency on `python -m http.server` for normal use;
+- verified native Save As/export behaviour;
+- clear local data persistence and backup/restore expectations;
+- installation/update/troubleshooting documentation;
+- sufficient crash/error visibility for internal operational use.
+
+Signed installers, automatic updates, and polished public distribution infrastructure may be deferred unless they become necessary for the first release.
+
+### 3.3 Current development environment
 
 Development OS:
 
+```text
 Windows
+```
 
 Operational target:
 
+```text
 Linux, with Windows development/testing
+```
 
-Current runtime during development:
+Current browser harness:
 
+```powershell
 cd C:\Users\dmshs\FDMS\src
 python -m http.server 8000
+```
 
-Then, in a second terminal when using Tauri:
+Browser URL:
 
+```text
+http://localhost:8000/
+```
+
+Current Tauri development run:
+
+```powershell
 cd C:\Users\dmshs\FDMS
 cargo tauri dev
+```
 
-Tauri waits for the frontend dev server at:
+Tauri currently waits for the frontend dev server at:
 
+```text
 http://localhost:8000/
-2.3 Persistence model
+```
+
+This is acceptable for development only. It is not acceptable as the V1 product runtime.
+
+### 3.4 Known binary / launcher references
+
+Known app binary path from prior context:
+
+```text
+C:\Users\dmshs\FDMS\target\debug\vectair-flite.exe
+```
+
+Known launcher from prior context:
+
+```text
+launch-flite.ps1
+```
+
+### 3.5 Persistence model
 
 Current persistence model:
 
+```text
 localStorage
+```
+
+Known localStorage key:
+
+```text
+vectair_fdms_movements_v3
+```
 
 Current app model:
 
+```text
 single-client local state
+```
 
 There is currently:
 
-no backend
-no multi-user concurrency model
-no hosted/cloud storage model
-no server-side database in the V1 baseline
-2.4 Cache warning
+- no backend;
+- no hosted/cloud storage model;
+- no multi-user concurrency model;
+- no server-side database in the V1 baseline.
+
+SQLite / SQL-backed persistence is **not automatically V1**. It should only be promoted into V1 if Desktop Productization exposes a hard reliability, backup, migration, or packaging problem that cannot be responsibly solved with the current storage model.
+
+Longer-term persistence should move toward an explicit storage-adapter architecture, likely including SQLite or another robust local store.
+
+### 3.6 Cache warning
 
 Browser/WebView cache can show stale JS/CSS.
 
 When validating JS/CSS behaviour:
 
+```text
 DevTools → Network → Disable cache → Reload
+```
 
-In the Tauri app, the in-app Admin → System Status → Reload App control should be used where available.
+In the Tauri app, use:
 
-2.5 Local-only files
+```text
+Admin → System Status → Reload App
+```
+
+where available.
+
+### 3.7 Local-only files
 
 The following file is local-only and must remain untracked:
 
+```text
 Vectair Flite.lnk
+```
 
-.gitignore should exclude local Windows shortcut files:
+`.gitignore` should exclude local Windows shortcut files:
 
+```text
 *.lnk
+```
 
 Do not commit local shortcuts or local-only investigation scratch files.
 
-3. Repository and branch baseline
-3.1 Repository
+---
 
-Local repository:
+## 4. Current source layout and architecture map
 
-C:\Users\dmshs\FDMS
+Known source layout:
 
-Likely GitHub repository:
-
-Arkmere/FDMS
-3.2 Authoritative branch
-main
-
-main is the authoritative working baseline unless explicitly stated otherwise.
-
-3.3 Known historical anchors
-
-The following branches/tags may exist as intentional history/fallback points:
-
-legacy/pre-desktop-main
-baseline/pre-desktop-productization
-flite-pre-desktop-baseline-2026-03
-
-Do not delete or reinterpret these casually.
-
-3.4 Current merged baseline
-
-The following workstreams should be treated as merged and complete for current planning purposes:
-
-UTC-first timing hardening, subject to the current regression noted below
-Day Timeline presentation tranche
-cancellation / deleted-strip lifecycle tranche
-cancellation reporting
-formation implementation through FR-15
-formation expanded child-strip display refactor
-History Retrieval H1–H5b
-Native Save As export consolidation H5b
-4. Current active defect / next engineering priority
-### 4.1 Resolved: EGOW / LOC / timing regression cluster
-
-The EGOW / LOC / timing regression cluster has been resolved and merged into `main` at commit `73023df`.
-
-Resolved scope included:
-
-- LOC EGOW validation now rejects blank and invalid EGOW codes where required.
-- Callsign-derived EGOW enrichment has been restored and consolidated through `lookupEgowAttributionFromCallsign()`.
-- Visible EGOW Code, EGOW Unit, and PIC fields now use tracked autofill provenance via `dataset.autofillValue`.
-- Stale autofill clearing now removes previous system-filled values when attribution becomes unresolved or partially blank, while preserving manual overrides.
-- The legacy untracked EGOW Unit writer has been removed.
-- UAM leading-zero semantics are enforced: `UAM03` resolves, `UAM3` does not.
-- UAM family fallback supports unknown UAM numbers such as `UAM99` resolving to `BM` only, with blank EGOW Unit and PIC.
-- LOC PIC layout now matches DEP/ARR/OVR modal layout.
-- LOC planned-time sync and edit-save timing recalculation have been restored.
-- ARR Active no longer fabricates ATD.
-- OVR semantics remain unchanged.
-
-Preserve the EGOW / LOC / timing smoke tests as regression tests for future related changes, but do not treat this cluster as active work.
-
-Claude must not be asked to investigate from scratch. ChatGPT must inspect current implementation, state actual cause, exact files to change, and exact behaviour required before Claude receives a patch ticket.
-
-Status
-ACTIVE — V1 blocker
-5. Core architecture
-
-Current major code responsibilities:
-
+```text
 src/index.html
-  Shell, tab structure, major panels.
-
-src/js/app.js
-  Boot/wiring, tab init, high-level rendering hooks.
-
-src/js/ui_liveboard.js
-  Live Board, History, lifecycle actions, modals, inline editing, strip renderers,
-  formation expanded display, formation child-strip UI.
-
-src/js/datamodel.js
-  Movement storage, config, initialization, timing helpers, formation helpers,
-  lifecycle stores, localStorage persistence.
-
-src/js/reporting.js
-  Reporting and official return logic.
-
-src/js/ui_reports.js
-  Reports UI wiring.
-
-src/js/export_utils.js
-  Shared export/save helpers for CSV/text and binary export paths.
-
-src/js/services/bookingSync.js
-  Booking ↔ strip linkage reconciliation.
-
-src/js/stores/bookingsStore.js
-  Booking persistence/access layer.
-
 src/css/vectair.css
-  Main styling, Live Board styling, History styling, Reports styling,
-  formation child-strip styling.
+src/js/app.js
+src/js/datamodel.js
+src/js/ui_liveboard.js
+src/js/ui_booking.js
+src/js/vkb.js
+src/js/reporting.js
+src/js/ui_reports.js
+src/js/export_utils.js
+src/js/services/bookingSync.js
+src/js/stores/bookingsStore.js
+src/data/*.csv
+src-tauri/
+docs/
+STATE.md
+```
+
+### 4.1 Loading invariant
+
+`src/index.html` must load:
+
+```text
+js/app.js
+```
+
+as the single application entry point.
+
+Do not regress to a state where the UI appears but buttons, filters, sorting, colour logic, or feature wiring are non-functional because `app.js` is not loaded.
+
+### 4.2 Major code responsibilities
+
+`src/index.html`
+
+- Shell, tab structure, major panels.
+
+`src/js/app.js`
+
+- Boot/wiring, tab initialization, high-level rendering hooks.
+
+`src/js/ui_liveboard.js`
+
+- Live Board, History, lifecycle actions, modals, inline editing, strip renderers, formation expanded display, formation child-strip UI.
+
+`src/js/datamodel.js`
+
+- Movement storage, config, initialization, timing helpers, formation helpers, lifecycle stores, localStorage persistence.
+
+`src/js/vkb.js`
+
+- Static VKB CSV loading and lookup helpers.
+
+`src/js/reporting.js`
+
+- Reporting and official return logic.
+
+`src/js/ui_reports.js`
+
+- Reports UI wiring.
+
+`src/js/export_utils.js`
+
+- Shared export/save helpers for CSV/text and binary export paths.
+
+`src/js/services/bookingSync.js`
+
+- Booking ↔ strip linkage reconciliation.
+
+`src/js/stores/bookingsStore.js`
+
+- Booking persistence/access layer.
+
+`src/css/vectair.css`
+
+- Main styling, Live Board styling, History styling, Reports styling, formation child-strip styling.
 
 Tauri-specific files:
 
+```text
 src-tauri/Cargo.toml
 src-tauri/Cargo.lock
 src-tauri/src/lib.rs
 src-tauri/tauri.conf.json
 src-tauri/capabilities/default.json
-6. Non-negotiable behaviour invariants
-6.1 UTC authority
+```
+
+---
+
+## 5. Completed / merged baseline
+
+The following workstreams should be treated as merged and complete for current planning purposes.
+
+| Workstream | Status |
+|---|---|
+| Core Live Board strip workflow | Complete baseline, with current counter/tooltips work still open |
+| UTC-first timing hardening | Complete baseline |
+| Day Timeline presentation tranche | Complete baseline |
+| Cancellation / deleted-strip lifecycle tranche | Complete |
+| Cancellation reporting | Complete |
+| Formation implementation through FR-15 | Complete for V1 launch |
+| Formation expanded child-strip display refactor | Complete |
+| History Retrieval H1–H5b | Complete |
+| Native Save As export consolidation H5b | Complete |
+| EGOW / LOC / timing regression cluster | Fixed and merged at `73023df` |
+| EGOW attribution consolidation | Fixed and merged at `73023df` |
+| Aircraft pilot suggestions | Implemented using `FDMS_AIRCRAFT_PILOTS.csv` |
+| Registration CSV restoration | `FDMS_REGISTRATIONS.csv` verified at 25,713 lines |
+
+---
+
+## 6. Current active engineering priority
+
+### 6.1 Immediate next item
+
+```text
+Live Board summary counter aggregation and computed tooltips
+```
+
+This is the next highest-value engineering item because it is visible operationally, bounded, and must be corrected before Monthly Return reconciliation.
+
+Expected scope:
+
+- inspect `src/js/ui_liveboard.js`;
+- inspect `src/js/datamodel.js`;
+- find summary/stat aggregation paths;
+- find tooltip rendering paths;
+- verify DEP / ARR / LOC / OVR / T&G / O/S semantics;
+- ensure OVR is excluded from runway totals;
+- ensure BM / BC / VM / VC / TOTAL counters are computed consistently;
+- add or repair explanatory computed tooltips;
+- preserve the EGOW / LOC / timing regression baseline.
+
+Claude must not be asked to investigate from scratch. ChatGPT must inspect the current implementation, state the actual cause, state exact files to change, and write a precise implementation ticket.
+
+### 6.2 Next major integrity item
+
+```text
+Monthly Return ghost-count contamination
+```
+
+This should follow the Live Board counter work while the counting/reporting model is mentally loaded.
+
+Monthly Return, Dashboard, and Insights use nominal strip-type reporting unless explicitly redesigned.
+
+---
+
+## 7. Non-negotiable behaviour invariants
+
+### 7.1 UTC authority
 
 UTC is authoritative.
 
@@ -253,48 +441,58 @@ Stored operational strip times are UTC.
 
 Local time is presentation/input only. Local input must convert back to UTC before save.
 
-Canonical time fields:
+Canonical time fields include:
 
+```text
 depPlanned
 depActual
 arrPlanned
 arrActual
 depActualExact
+```
 
 Operational fields use:
 
+```text
 HH:MM
+```
 
 Exact WTC anchor uses:
 
+```text
 HH:MM:SS
-6.2 Event-based vs nominal reporting split
+```
+
+### 7.2 Event-based vs nominal reporting split
 
 Two reporting models intentionally coexist.
 
-Live Board daily stats
+#### Live Board daily stats
 
-Event-based / EGOW-realized:
+Live Board daily stats are event-based / EGOW-realized:
 
-DEP counts only when departure actually occurred.
-ARR counts only when arrival actually occurred.
-LOC counts based on realized departure/arrival events plus T&G / O/S rules.
-OVR contributes 0 to runway totals.
-OVR remains a separate counter.
-Monthly Return / Dashboard / Insights
+- DEP counts only when departure actually occurred.
+- ARR counts only when arrival actually occurred.
+- LOC counts based on realized departure/arrival events plus T&G / O/S rules.
+- T&G counts as 2 runway movements.
+- O/S counts as 1 runway movement.
+- OVR contributes 0 to runway totals.
+- OVR remains a separate counter.
 
-Nominal strip-type model:
+#### Monthly Return / Dashboard / Insights
 
-LOC = 2
-DEP = 1
-ARR = 1
-OVR = 0
-T&G = +2
-O/S = +1
+Monthly Return / Dashboard / Insights use the nominal strip-type model:
 
-These must not be silently merged.
+- LOC = 2
+- DEP = 1
+- ARR = 1
+- OVR = 0
+- T&G = +2
+- O/S = +1
 
-6.3 OVR semantics
+These models must not be silently merged.
+
+### 7.3 OVR semantics
 
 OVR is excluded from runway Daily Movement Totals.
 
@@ -302,43 +500,50 @@ OVR is counted separately.
 
 OVR timing uses off-frequency / left-frequency semantics:
 
+```text
 EOFT / AOFT
 ELFT / ALFT
-6.4 ARR activation
+```
+
+### 7.4 ARR activation
 
 ARR Active is status-only and must not fabricate ATD.
 
-6.5 Booking/strip links
+### 7.5 Booking/strip links
 
 A movement may carry:
 
+```text
 bookingId
+```
 
 A booking may carry:
 
+```text
 linkedStripId
+```
 
-bookingSync.reconcileLinks() remains the authority for deterministic repair/clear behaviour on load.
+`bookingSync.reconcileLinks()` remains the authority for deterministic repair/clear behaviour on load.
 
-6.6 Modal lifecycle
+### 7.6 Modal lifecycle
 
 All modal close paths must use the established modal close helpers.
 
 Avoid ad-hoc modal teardown.
 
-6.7 Formation model boundary
+### 7.7 Formation model boundary
 
 Formation child cards are not independent normal movement records. They are UI representations of formation elements and must continue to use the existing formation-element update path.
 
-Do not route formation element edits through ordinary movement updateMovement() semantics unless a dedicated architecture ticket changes this.
+Do not route formation element edits through ordinary `updateMovement()` semantics unless a dedicated architecture ticket changes this.
 
-6.8 History model boundary
+### 7.8 History model boundary
 
 Movement History is completed-movement history unless a dedicated future ticket broadens it.
 
 Cancelled Sorties and Deleted Strips remain their own History subtabs and should not be silently mixed into Movement History.
 
-6.9 Export model boundary
+### 7.9 Export model boundary
 
 All user-facing CSV/XLSX exports in the Tauri desktop app should use native Save As where implemented.
 
@@ -346,161 +551,323 @@ Browser Blob/download fallback remains valid when not running under Tauri.
 
 Do not reintroduce direct frontend imports from Tauri plugin packages such as:
 
+```text
 @tauri-apps/plugin-dialog
 @tauri-apps/plugin-fs
+```
 
 The static/non-bundled frontend cannot safely resolve those module specifiers.
 
 Use the shared helper layer:
 
+```text
 src/js/export_utils.js
+```
 
-and the registered Tauri invoke commands instead.
+and registered Tauri invoke commands.
 
-7. Timing and timeline baseline
+### 7.10 VKB mutability and historical truth
 
-The timing model was previously hardened and should remain stable, subject to the active regression in section 4.
+VKB lookup data is mutable. Historical movement records must not be retroactively reinterpreted by later VKB edits.
 
-7.1 Timing normalization
+Changing a pilot assignment, aircraft association, callsign/fleet allocation, registration record, or EGOW flight-number row must affect future lookups only unless the operator explicitly chooses a controlled historical correction workflow.
+
+Movement records should preserve the resolved values that applied when the movement was created/completed.
+
+Example:
+
+```text
+April: UAM10 = Pilot A
+May:   UAM10 = Pilot B
+```
+
+April movements must continue to show Pilot A after the May assignment change.
+
+---
+
+## 8. Timing and timeline baseline
+
+### 8.1 Timing normalization
 
 Settled model:
 
-one timing model per movement
-inline edit and modal edit should use the same semantics
-Timeline is a projection of resolved timing, not a separate timing engine
-7.2 Activate semantics
-DEP → stamps ATD if absent
-LOC → stamps ATD if absent
-OVR → stamps AOFT/ACT if absent
-ARR → status-only; no ATD fabrication
-7.3 Complete semantics
-DEP → no new end-side time
-LOC → stamps ATA only if absent
-ARR → stamps ATA only if absent
-OVR → stamps actual end-side time only if absent
-7.4 Rounding
+- one timing model per movement;
+- inline edit and modal edit should use the same semantics;
+- Timeline is a projection of resolved timing, not a separate timing engine.
+
+### 8.2 Activate semantics
+
+| Movement type | Activate behaviour |
+|---|---|
+| DEP | stamps ATD if absent |
+| LOC | stamps ATD if absent |
+| OVR | stamps AOFT / actual off-frequency if absent |
+| ARR | status-only; no ATD fabrication |
+
+### 8.3 Complete semantics
+
+| Movement type | Complete behaviour |
+|---|---|
+| DEP | no new end-side time |
+| LOC | stamps ATA only if absent |
+| ARR | stamps ATA only if absent |
+| OVR | stamps actual end-side time only if absent |
+
+### 8.4 Rounding
 
 Active and Complete auto-stamps use nearest-minute rounding:
 
+```text
 00–29 seconds → round down
 30–59 seconds → round up
+```
 
 Exact second-bearing WTC time is preserved separately where relevant.
 
-7.5 Inline time mode
+### 8.5 Inline time mode
 
 Implemented:
 
-inline time labels explicitly toggle estimate vs actual mode
-mode is UI session state, not persisted
-actual mode if actual exists; estimate mode otherwise
-explicit operator toggle survives re-renders for the session
-7.6 Timeline presentation
+- inline time labels explicitly toggle estimate vs actual mode;
+- mode is UI session state, not persisted;
+- actual mode if actual exists; estimate mode otherwise;
+- explicit operator toggle survives re-renders for the session.
+
+### 8.6 Timeline presentation
 
 Complete for V1 presentation:
 
-dual UTC/local ruler
-secondary local ruler can be hidden when operationally same as UTC
-UTC/local ruler order can be swapped
-internal timeline header strip removed
-top and bottom rulers define timeline boundaries
-quarter-hour and half-hour ticks implemented
-Timeline remains display-only; UTC authority unchanged
-8. Lifecycle model
-8.1 Governing rule
+- dual UTC/local ruler;
+- secondary local ruler can be hidden when operationally same as UTC;
+- UTC/local ruler order can be swapped;
+- internal timeline header strip removed;
+- top and bottom rulers define timeline boundaries;
+- quarter-hour and half-hour ticks implemented.
+
+Timeline remains display-only. UTC authority is unchanged.
+
+---
+
+## 9. Lifecycle model
+
+### 9.1 Governing rule
 
 Operational views and ordinary reports use current-state truth.
 
-A strip appears according to where it currently is:
-
-Current state	Appears in
-PLANNED / ACTIVE	Live Board
-COMPLETED	Movement History
-CANCELLED	Cancelled Sorties
-Soft-deleted	Deleted Strips
-Purged	Nowhere
+| Current state | Appears in |
+|---|---|
+| PLANNED / ACTIVE | Live Board |
+| COMPLETED | Movement History |
+| CANCELLED | Cancelled Sorties |
+| Soft-deleted | Deleted Strips |
+| Purged | Nowhere |
 
 Historical lifecycle/audit records may be retained but must not override current-state operational views.
 
-8.2 History IA
+### 9.2 History IA
 
 History has three top-level subtabs:
 
+```text
 Movement History
 Cancelled Sorties
 Deleted Strips
+```
 
-Movement History now has internal views:
+Movement History has internal views:
 
+```text
 Historic Strip Board
 Historic Movement Calendar
 Search / Table
-8.3 Cancelled Sorties
+```
+
+### 9.3 Cancelled Sorties
 
 Implemented:
 
-cancellation modal with reason/note
-cancellation log/audit layer
-Cancelled Sorties page
-sort/filter/export
-current-state editability
-reason edit
-reinstatement
-delete from cancelled flow via soft-delete pathway
-native Save As CSV export path
+- cancellation modal with reason/note;
+- cancellation log/audit layer;
+- Cancelled Sorties page;
+- sort/filter/export;
+- current-state editability;
+- reason edit;
+- reinstatement;
+- delete from cancelled flow via soft-delete pathway;
+- native Save As CSV export path.
 
 Cancelled Sorties is a current-state view. A row belongs there only if the underlying movement still exists and its current status is:
 
+```text
 CANCELLED
-8.4 Reinstatement
+```
+
+### 9.4 Reinstatement
 
 Reinstatement target state:
 
+```text
 PLANNED
+```
 
 Rule:
 
+```text
 newStartTime = max(originalPlanned, now + typeOffset)
+```
 
 Original planned time comes from immutable snapshot.
 
-8.5 Deleted Strips
+### 9.5 Deleted Strips
 
 Implemented:
 
-soft-delete retention store
-full movement snapshot
-deletedAt
-expiresAt
-booking link cleared
-strip removed from active movement store
-Deleted Strips tab
-restore logic
-purge of expired entries
+- soft-delete retention store;
+- full movement snapshot;
+- `deletedAt`;
+- `expiresAt`;
+- booking link cleared;
+- strip removed from active movement store;
+- Deleted Strips tab;
+- restore logic;
+- purge of expired entries.
 
 Retention period:
 
+```text
 24 hours
+```
 
-Admin configurability deferred.
+Admin configurability is deferred.
 
-8.6 Cancellation reporting
+### 9.6 Cancellation reporting
 
 Implemented as a current-state operational report.
 
 Delivered:
 
-date range
-cancellation KPIs
-reason breakdown
-movement type breakdown
-ranked aircraft/type/captain/route breakdowns
-row-level cancellation detail
-CSV export via native Save As in Tauri
+- date range;
+- cancellation KPIs;
+- reason breakdown;
+- movement type breakdown;
+- ranked aircraft/type/captain/route breakdowns;
+- row-level cancellation detail;
+- CSV export via native Save As in Tauri.
 
-Historical lifecycle-event analytics are not included and remain a possible future reporting mode.
+Historical lifecycle-event analytics are not included and remain a future reporting mode.
 
-9. Formation baseline
+---
+
+## 10. EGOW attribution / aircraft pilot baseline
+
+### 10.1 Status
+
+The EGOW / LOC / timing regression cluster has been resolved and merged into `main` at commit:
+
+```text
+73023df
+```
+
+This area is a regression baseline, not an active workstream.
+
+### 10.2 Resolved scope
+
+Resolved scope included:
+
+- LOC EGOW validation rejects blank and invalid EGOW codes where required.
+- Callsign-derived EGOW enrichment has been restored and consolidated through `lookupEgowAttributionFromCallsign()`.
+- Visible EGOW Code, EGOW Unit, and PIC fields use tracked autofill provenance via `dataset.autofillValue`.
+- Stale autofill clearing removes previous system-filled values when attribution becomes unresolved or partially blank, while preserving manual overrides.
+- The legacy untracked EGOW Unit writer has been removed.
+- UAM leading-zero semantics are enforced: `UAM03` resolves, `UAM3` does not.
+- UAM family fallback supports unknown UAM numbers such as `UAM99` resolving to `BM` only, with blank EGOW Unit and PIC.
+- LOC PIC layout matches DEP/ARR/OVR modal layout.
+- LOC planned-time sync and edit-save timing recalculation have been restored.
+- ARR Active no longer fabricates ATD.
+- OVR semantics remain unchanged.
+
+### 10.3 EGOW schema
+
+Implemented expanded EGOW attribution using the revised `FDMS_EGOW_CODES.csv` schema:
+
+```text
+CALLSIGN_BASE,APPROVED_CONTRACTION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
+```
+
+`APPROVED_CONTRACTION` is the corrected spelling. Backward-compatible fallback for the old typo `APPROVED_CONTRATION` may remain where needed.
+
+### 10.4 Resolver behaviour
+
+`lookupEgowAttributionFromCallsign(callsignCode)` implements deterministic lookup with:
+
+- numeric suffix splitting;
+- lookup-only leading-zero normalization;
+- `CALLSIGN_BASE + FLIGHT_NUMBER`;
+- `APPROVED_CONTRACTION + FLIGHT_NUMBER`;
+- blank `FLIGHT_NUMBER` base fallback;
+- blank `FLIGHT_NUMBER` contraction fallback;
+- malformed-input guard for leading-zero families.
+
+Stored/displayed callsigns must not be rewritten by lookup normalization.
+
+### 10.5 UAM / formation callsign rule
+
+Individual single-aircraft pilot callsigns must include a leading zero.
+
+Correct:
+
+```text
+UAM01
+UAM02
+UAM03
+```
+
+Malformed:
+
+```text
+UAM1
+UAM2
+UAM3
+```
+
+Formation element callsigns do not use leading zero:
+
+```text
+MERSY1
+MERSY2
+CNNCT1
+```
+
+`UAM3` must not resolve and must not fall through to the UAM family fallback. `MERSY2` must resolve via formation/contraction route and remain displayed/stored as `MERSY2`.
+
+### 10.6 Aircraft pilot suggestions
+
+Implemented aircraft pilot suggestion loading using:
+
+```text
+FDMS_AIRCRAFT_PILOTS.csv
+REGISTRATION,FIXED_CALLSIGN,PILOT_NAME_LAST,PILOT_NAME_FIRST
+```
+
+Implemented behaviour:
+
+- `aircraftPilots: []` is loaded in VKB data.
+- `lookupAircraftPilots(registration, fixedCallsign)` matches by normalized registration or fixed callsign.
+- Duplicate surnames may be disambiguated with first-name initial.
+- New flight, LOC, and edit modal PIC inputs have pilot datalists.
+- Single-match auto-fill uses tracked autofill behaviour and preserves manual values.
+
+Pilot lookup is static for V1. Learned PIC ranking is post-launch.
+
+### 10.7 EGOW / LOC / timing regression baseline
+
+Future work touching attribution, validation, timing, activation, or movement counting must preserve the smoke tests in section 21.6.
+
+---
+
+## 11. Formation baseline
+
+### 11.1 Status
 
 Formation workstream is complete for V1 launch purposes.
 
@@ -508,24 +875,27 @@ The primary implementation tranche FR-02 through FR-15 is complete. The expanded
 
 Further polish is deferred to post-launch backlog unless a specific launch-blocking defect appears.
 
-9.1 Formation master
+### 11.2 Formation master
 
 The master strip is the formation summary shell. It holds top-level movement fields and a nested formation object containing:
 
+```text
 formation.label
 formation.wtcCurrent
 formation.wtcMax
 formation.shared
 formation.elements[]
+```
 
-The master does not flatten element truth. It summarises individually tracked elements.
+The master does not flatten element truth. It summarizes individually tracked elements.
 
-9.2 Formation elements
+### 11.3 Formation elements
 
-Each formation.elements[] entry represents a real aircraft in the formation.
+Each `formation.elements[]` entry represents a real aircraft in the formation.
 
 Each element can carry or resolve:
 
+```text
 callsign
 reg
 type
@@ -547,251 +917,280 @@ underlyingCallsign
 pilotName
 overrides
 ordinal
-9.3 Shared/default model
+```
 
-formation.shared is the shared/default layer.
+### 11.4 Shared/default model
 
-Elements inherit from shared defaults unless they have an override. Divergence is tracked through the element overrides dict.
+`formation.shared` is the shared/default layer.
 
-9.4 Callsign convention
+Elements inherit from shared defaults unless they have an override. Divergence is tracked through the element `overrides` dictionary.
+
+### 11.5 Callsign convention
 
 Element callsigns use the formation element callsign as the operational display callsign.
 
 Examples:
 
+```text
 MERSY1
 MERSY2
 CNNCT1
 MEMORIAL1
+```
 
-Generic crew/callsign attribution such as UAM03 / UNIFORM is secondary detail text only and must not replace the element callsign in the primary callsign position.
+Generic crew/callsign attribution such as `UAM03` / `UNIFORM` is secondary detail text only and must not replace the element callsign in the primary callsign position.
 
-9.5 Movement counting
+### 11.6 Movement counting
 
 Per-element movement counting is implemented.
 
-getResolvedFormationMovements() sums per-element nominal movement contributions, resolving T&G / O/S / FIS / inherited values as appropriate.
+`getResolvedFormationMovements()` sums per-element nominal movement contributions, resolving T&G / O/S / FIS / inherited values as appropriate.
 
-9.6 Dynamic WTC
-
-Implemented:
-
-wtcCurrent = highest WTC among PLANNED/ACTIVE elements
-wtcMax = highest WTC across all elements regardless of status
-wtcMax does not decrease due to lifecycle/status changes
-9.7 Divergence
+### 11.7 Dynamic WTC
 
 Implemented:
 
-elements hold independent statuses
-diverged child cards are visually marked
-parent summary derives conservative status
-master status cascade rules are preserved
+- `wtcCurrent` = highest WTC among PLANNED/ACTIVE elements.
+- `wtcMax` = highest WTC across all elements regardless of status.
+- `wtcMax` does not decrease due to lifecycle/status changes.
+
+### 11.8 Divergence
+
+Implemented:
+
+- elements hold independent statuses;
+- diverged child cards are visually marked;
+- parent summary derives conservative status;
+- master status cascade rules are preserved.
 
 Master cascade rules:
 
-master → COMPLETED cascades PLANNED/ACTIVE elements to COMPLETED; CANCELLED preserved
-master → CANCELLED cascades PLANNED/ACTIVE elements to CANCELLED; COMPLETED preserved
-no cascade on activation
-9.8 Per-element outcome/diversion
+- master → COMPLETED cascades PLANNED/ACTIVE elements to COMPLETED; CANCELLED preserved.
+- master → CANCELLED cascades PLANNED/ACTIVE elements to CANCELLED; COMPLETED preserved.
+- no cascade on activation.
+
+### 11.9 Per-element outcome/diversion
 
 Implemented:
 
+```text
 NORMAL
 DIVERTED
 CHANGED
 CANCELLED
+```
 
 Also implemented:
 
-actual destination
-outcome time
-reason/note
+- actual destination;
+- outcome time;
+- reason/note.
 
 Outcome/diversion controls remain available, but they are visually secondary to ordinary operational strip controls.
 
-9.9 Per-element attribution and pilot identity
+### 11.10 Per-element attribution and pilot identity
 
 Implemented:
 
-manual attribution callsign
-manual pilot name
-VKB-aware resolution assistance
-reporting attribution by resolved identity where applicable
-9.10 Expanded formation display
+- manual attribution callsign;
+- manual pilot name;
+- VKB-aware resolution assistance;
+- reporting attribution by resolved identity where applicable.
+
+### 11.11 Expanded formation display
 
 Launch baseline:
 
-formation summary section
-shared/defaults section
-child element stack
-each element renders as a subordinate strip-style card
-child cards use normal flight-type colour language
-child card primary callsign is the element callsign
-attribution/pilot identity appears as secondary/detail information
-T&G / O/S / FIS / timing are usable primary operational controls
-outcome/diversion fields are available but visually de-emphasised
-child stack spans the expanded formation panel width
-no accepted launch baseline should produce page/board overspan
-9.11 Completed formation tickets
-Ticket	Delivered
-FR-02	Activation UX
-FR-03	Draft memory / in-session persistence
-FR-04	Callsign generation
-FR-05	Shared/default model
-FR-06	Enrichment
-FR-07	Master-first seeding
-FR-08	Element-first synthesis / load-time normalization
-FR-09	Field-level inheritance tracking
-FR-10	Per-element movement counting
-FR-11	Dynamic WTC
-FR-12	Expanded strip display
-FR-13	Lifecycle divergence
-FR-13b	Per-element diversion / outcome detail
-FR-14	Per-element pilot attribution
-FR-14b	VKB-aware identity resolution assistance
-FR-15	Documentation closeout
-Post-FR polish	Child element display refactored into strip-style cards
-9.12 Formation post-launch backlog
+- formation summary section;
+- shared/defaults section;
+- child element stack;
+- each element renders as a subordinate strip-style card;
+- child cards use normal flight-type colour language;
+- child card primary callsign is the element callsign;
+- attribution/pilot identity appears as secondary/detail information;
+- T&G / O/S / FIS / timing are usable primary operational controls;
+- outcome/diversion fields are available but visually de-emphasised;
+- child stack spans the expanded formation panel width;
+- no accepted launch baseline should produce page/board overspan.
+
+### 11.12 Completed formation tickets
+
+| Ticket | Delivered |
+|---|---|
+| FR-02 | Activation UX |
+| FR-03 | Draft memory / in-session persistence |
+| FR-04 | Callsign generation |
+| FR-05 | Shared/default model |
+| FR-06 | Enrichment |
+| FR-07 | Master-first seeding |
+| FR-08 | Element-first synthesis / load-time normalization |
+| FR-09 | Field-level inheritance tracking |
+| FR-10 | Per-element movement counting |
+| FR-11 | Dynamic WTC |
+| FR-12 | Expanded strip display |
+| FR-13 | Lifecycle divergence |
+| FR-13b | Per-element diversion / outcome detail |
+| FR-14 | Per-element pilot attribution |
+| FR-14b | VKB-aware identity resolution assistance |
+| FR-15 | Documentation closeout |
+| Post-FR polish | Child element display refactored into strip-style cards |
+
+### 11.13 Formation post-launch backlog
 
 Deferred to post-launch unless promoted:
 
-visual density tuning
-spacing/typography refinement
-inherited/shared value signalling
-3+ element UX refinement
-narrow-window/responsive refinement
-formation creation via “number of aircraft” count field
-automatic master → element propagation after element set is established
-deeper formation profile architecture
-formation analytics/reporting refinements
-multiple WTC scheme support per formation
-advanced lifecycle/presentation enhancements
-10. History Retrieval / Discovery workstream
-10.1 Status
+- visual density tuning;
+- spacing/typography refinement;
+- inherited/shared value signalling;
+- 3+ element UX refinement;
+- narrow-window/responsive refinement;
+- formation creation via “number of aircraft” count field;
+- automatic master → element propagation after element set is established;
+- deeper formation profile architecture;
+- formation analytics/reporting refinements;
+- multiple WTC scheme support per formation;
+- advanced lifecycle/presentation enhancements.
 
-History Retrieval / Discovery is now substantially implemented through H5b.
+---
 
-H6 polish / integration remains open.
+## 12. History Retrieval / Discovery baseline
 
-10.2 Product problem
+### 12.1 Status
+
+History Retrieval / Discovery is implemented through H5b.
+
+H6 polish / integration remains open and is V1-required closeout.
+
+### 12.2 Product problem
 
 The original Movement History strip board was adequate for short-range review but did not scale well for finding older completed movements.
 
 Operators now have three historical access modes:
 
-strip-board review
-calendar-based date discovery
-search/table-based movement discovery
+- strip-board review;
+- calendar-based date discovery;
+- search/table-based movement discovery.
 
 These sit under Movement History and remain separate from Cancelled Sorties and Deleted Strips.
 
-10.3 Current IA
+### 12.3 Current IA
 
 Top-level History IA:
 
+```text
 History
 ├─ Movement History
 ├─ Cancelled Sorties
 └─ Deleted Strips
+```
 
 Movement History internal IA:
 
+```text
 Movement History
 ├─ Historic Strip Board
 ├─ Historic Movement Calendar
 └─ Search / Table
-10.4 Completed phases
-Phase	Status
-H1	Complete — Movement History default changed to Today
-H2	Complete — Movement History internal subview shell
-H3	Complete — Historic Movement Calendar
-H4	Complete — Historic Strip Board structured filters
-H5	Complete — Search / Table view
-H5b	Complete — Shared export correction / native Save As consolidation
-H6	Open — polish, edge cases, documentation, integration closeout
-10.5 H1 complete
+```
+
+### 12.4 Completed phases
+
+| Phase | Status |
+|---|---|
+| H1 | Complete — Movement History default changed to Today |
+| H2 | Complete — Movement History internal subview shell |
+| H3 | Complete — Historic Movement Calendar |
+| H4 | Complete — Historic Strip Board structured filters |
+| H5 | Complete — Search / Table view |
+| H5b | Complete — Shared export correction / native Save As consolidation |
+| H6 | Open — polish, edge cases, documentation, integration closeout |
+
+### 12.5 H1 complete
 
 Movement History now defaults to:
 
+```text
 Today
+```
 
 Movement History remains completed-only.
 
 Cancelled Sorties and Deleted Strips remain separate.
 
-10.6 H2 complete
+### 12.6 H2 complete
 
 Movement History has internal views:
 
-Historic Strip Board
-Historic Movement Calendar
-Search / Table
+- Historic Strip Board;
+- Historic Movement Calendar;
+- Search / Table.
 
 Historic Strip Board remains the default internal Movement History view.
 
-10.7 H3 complete
+### 12.7 H3 complete
 
 Historic Movement Calendar implemented.
 
 Baseline behaviour:
 
-month view for completed movements
-operational date / m.dof used as date anchor
-Previous / Next / Today calendar controls
-day summary counts
-military/civilian/other summary via EGOW classification
-clicking a day opens that day in Historic Strip Board
-selected-date banner/chip with clear behaviour
+- month view for completed movements;
+- operational date / `m.dof` used as date anchor;
+- Previous / Next / Today calendar controls;
+- day summary counts;
+- military/civilian/other summary via EGOW classification;
+- clicking a day opens that day in Historic Strip Board;
+- selected-date banner/chip with clear behaviour.
 
 Ctrl-click / Shift-click multi-date selection remains deferred unless promoted.
 
-10.8 H4 complete
+### 12.8 H4 complete
 
 Historic Strip Board now has structured AND filters.
 
 Implemented filters include:
 
-callsign
-registration
-pilot/PIC/attribution
-aircraft type
-EGOW code
-EGOW unit code
-WTC
-flight type
-departure AD
-arrival AD
-free-text search
+- callsign;
+- registration;
+- pilot/PIC/attribution;
+- aircraft type;
+- EGOW code;
+- EGOW unit code;
+- WTC;
+- flight type;
+- departure AD;
+- arrival AD;
+- free-text search.
 
 Filter notes:
 
-registration matching normalises punctuation/hyphens, so G-GORV and GGORV match equivalently
-pilot/PIC matching searches known pilot, PIC, attribution, and formation element identity fields
-EGOW unit code supports token-based matching
-Clear filters clears structured controls only; period/calendar selection remains independent
-10.9 H5 complete
+- registration matching normalises punctuation/hyphens, so `G-GORV` and `GGORV` match equivalently;
+- pilot/PIC matching searches known pilot, PIC, attribution, and formation element identity fields;
+- EGOW unit code supports token-based matching;
+- Clear filters clears structured controls only; period/calendar selection remains independent.
+
+### 12.9 H5 complete
 
 Search / Table implemented.
 
 Current Search / Table features:
 
-structured search across completed movement history
-date from / date to filters using operational date / DOF
-normalised registration matching
-widened pilot/PIC/attribution matching
-EGOW unit-code token matching
-row count display
-15-column table
-Open info action
-View day / jump-to-day action
-filtered CSV export
-column sorting
-row-limit guard / visible cap
-export all filtered rows rather than only visible capped rows
+- structured search across completed movement history;
+- date from / date to filters using operational date / DOF;
+- normalized registration matching;
+- widened pilot/PIC/attribution matching;
+- EGOW unit-code token matching;
+- row count display;
+- 15-column table;
+- Open info action;
+- View day / jump-to-day action;
+- filtered CSV export;
+- column sorting;
+- row-limit guard / visible cap;
+- export all filtered rows rather than only visible capped rows.
 
 Current columns:
 
+```text
 Date
 Callsign
 Registration
@@ -807,106 +1206,638 @@ Pilot
 Activity
 Status
 Actions
-10.10 H5b complete
+```
+
+### 12.10 H5b complete
 
 H5b corrected and consolidated exports.
 
 Native Save As now works in Tauri for:
 
-Historic Strip Board CSV export
-Search / Table filtered CSV export
-Cancelled Sorties CSV export
-Reports CSV export
-Reports XLSX export
-Reports Cancellation CSV export
+- Historic Strip Board CSV export;
+- Search / Table filtered CSV export;
+- Cancelled Sorties CSV export;
+- Reports CSV export;
+- Reports XLSX export;
+- Reports Cancellation CSV export.
 
 Shared export helper:
 
+```text
 src/js/export_utils.js
+```
 
 Tauri native commands include text and binary save paths.
 
 XLSX export uses base64/native binary save rather than an unsafe frontend plugin import.
 
-Cargo.lock records the required base64 dependency.
+`Cargo.lock` records the required base64 dependency.
 
 Browser fallback remains available outside Tauri.
 
-10.11 H6 open
+### 12.11 H6 open
 
 H6 is the remaining History closeout phase.
 
 Candidate H6 tasks:
 
-improve visual grouping between Historic Strip Board, Calendar, and Search / Table
-reduce filter-panel clutter
-consider collapsible filter groups
-make selected-day state and cleared-filter behaviour clearer
-improve empty-state wording
-ensure all export names and success/cancel/fallback toasts are consistent
-check accessibility basics on new controls
-check narrow-window behaviour
-update user docs
-update STATE.md status references so History no longer appears “planned / not implemented”
-perform one final History-specific smoke pass
+- improve visual grouping between Historic Strip Board, Calendar, and Search / Table;
+- reduce filter-panel clutter;
+- consider collapsible filter groups;
+- make selected-day state and cleared-filter behaviour clearer;
+- improve empty-state wording;
+- ensure all export names and success/cancel/fallback toasts are consistent;
+- check accessibility basics on new controls;
+- check narrow-window behaviour;
+- update user docs;
+- update `STATE.md` status references so History no longer appears planned/not implemented;
+- perform one final History-specific smoke pass.
 
 Status:
 
+```text
 OPEN — V1 polish / closeout
-11. Export baseline
-11.1 Export model
+```
 
-All relevant exports should now route through shared helper functions.
+---
+
+## 13. Export baseline
+
+### 13.1 Export model
+
+All relevant exports should route through shared helper functions.
 
 Text/CSV helper:
 
+```text
 saveTextFileWithDialogOrDownload(text, filename)
+```
 
 Binary/XLSX helper:
 
+```text
 saveBinaryFileWithDialogOrDownload(base64, filename)
+```
 
 Browser fallback helper:
 
+```text
 downloadFileViaBrowser(content, filename, mimeType)
-11.2 Native Tauri behaviour
+```
+
+### 13.2 Native Tauri behaviour
 
 When running in Tauri, exports should use:
 
+```text
 window.__TAURI__.core.invoke(...)
+```
 
 Registered native save commands handle:
 
-text file Save As
-binary/base64 file Save As
-11.3 Browser fallback behaviour
+- text file Save As;
+- binary/base64 file Save As.
+
+### 13.3 Browser fallback behaviour
 
 When not running in Tauri:
 
-CSV/text exports should fall back to Blob download
-XLSX export may use browser/XLSX library download behaviour where appropriate
-11.4 Completed native Save As paths
+- CSV/text exports fall back to Blob download;
+- XLSX export may use browser/XLSX library download behaviour where appropriate.
+
+### 13.4 Completed native Save As paths
 
 The following are implemented and accepted after H5b:
 
-History → Historic Strip Board → Export as CSV
-History → Search / Table → Export filtered CSV
-History → Cancelled Sorties → Export CSV
-Reports → Export CSV
-Reports → Export XLSX
-Reports → Cancellation view → Export Cancellations CSV
-11.5 Known export testing caveat
+- History → Historic Strip Board → Export as CSV;
+- History → Search / Table → Export filtered CSV;
+- History → Cancelled Sorties → Export CSV;
+- Reports → Export CSV;
+- Reports → Export XLSX;
+- Reports → Cancellation view → Export Cancellations CSV.
+
+### 13.5 Known export testing caveat
 
 A stale WebView/browser cache previously made working export code appear broken.
 
 When export behaviour appears inconsistent, reload cleanly before diagnosing:
 
+```text
 Admin → System Status → Reload App
+```
 
 or:
 
+```text
 DevTools → Network → Disable cache → Reload
-12. Documentation workstream
+```
+
+---
+
+## 14. Booking baseline
+
+### 14.1 Current booking model
+
+Booking workflow exists as part of the current functional baseline.
+
+Known implementation areas:
+
+```text
+src/js/ui_booking.js
+src/js/services/bookingSync.js
+src/js/stores/bookingsStore.js
+```
+
+Known booking sync fields:
+
+```text
+movement.bookingId
+booking.linkedStripId
+booking.schedule.plannedTimeLocalHHMM
+booking.schedule.plannedTimeKind
+```
+
+`bookingSync.reconcileLinks()` is the authority for deterministic booking/strip link repair/clear behaviour on load.
+
+### 14.2 V1 booking boundary
+
+Core booking creation/sync is V1 baseline.
+
+Booking confirmation email, pilot briefing pack, and GAR note are post-launch/V2.
+
+### 14.3 Post-launch booking profile expansion
+
+The current booking profile system is limited. V2 should expand it into richer visitor, aircraft, operator, and contact profiles.
+
+Possible future profile fields:
+
+```text
+aircraft registration
+aircraft type
+WTC
+operator
+owner/contact
+regular pilot(s)
+home aerodrome
+billing/charging defaults
+training-rate eligibility
+parking preferences/defaults
+frequent routing
+special handling notes
+documents/briefing requirements
+GAR relevance if applicable
+```
+
+The later architecture decision is whether this remains booking-only or becomes part of a wider local VKB profile system.
+
+---
+
+## 15. VKB data architecture baseline and long-term direction
+
+### 15.1 Current V1 data approach
+
+Current V1 data approach is static/local CSV packs.
+
+Known current/local static CSV data includes:
+
+```text
+FDMS_REGISTRATIONS.csv
+FDMS_EGOW_CODES.csv
+FDMS_AIRCRAFT_PILOTS.csv
+FDMS_LOCATIONS_B_E_L.csv
+```
+
+Other data sets include callsigns, locations, aircraft types, registrations, EGOW codes, and aircraft pilots.
+
+### 15.2 V1 offline data requirement
+
+V1 must remain functional offline using bundled or saved critical data.
+
+This does not require the full VKB to be bundled locally for V1. It does require enough saved/local data for normal core operations.
+
+### 15.3 Long-term cloud + saved VKB model
+
+Long-term VKB architecture is:
+
+```text
+Cloud VKB + saved local packs
+```
+
+Cloud mode:
+
+- full VKB API access when online;
+- authoritative or fuller data set;
+- future data update/provenance pipeline.
+
+Saved mode:
+
+- smaller local data packs;
+- region/country/operator-scoped subsets;
+- sufficient for normal offline operations most of the time;
+- user-selectable critical data footprint.
+
+Existing filenames such as:
+
+```text
+FDMS_LOCATIONS_B_E_L.csv
+```
+
+demonstrate the intended regional-pack approach.
+
+`B`, `E`, and `L` are operational region groupings used for Flite/VKB data packaging. Regional inclusion may include aerodromes that do not have an ICAO location indicator. For example, an aerodrome such as Kirkbride may be classified operationally under region `E` for Flite/VKB purposes even though it does not have an assigned ICAO code.
+
+Do not assume that inclusion in a regional location file means the location itself has an ICAO indicator.
+
+### 15.4 Future local pack model
+
+Future saved/local VKB packs may include:
+
+```text
+locations by ICAO region / country / theatre
+registrations by country
+callsigns by state/operator/region/package
+aircraft types globally or by operational relevance
+EGOW-local critical pack
+user-defined critical pack
+```
+
+This is V2+ unless a minimum subset is required by V1 Desktop Productization.
+
+---
+
+## 16. V1 roadmap classification
+
+### 16.1 Confirmed V1 required workstreams
+
+The current confirmed V1 required list is:
+
+1. Live Board summary counter aggregation and computed tooltips.
+2. Monthly Return ghost-count contamination.
+3. Desktop Productization audit.
+4. Create From workflow.
+5. METAR Builder.
+6. H6 History polish / closeout.
+7. Desktop Productization implementation / offline installable build.
+8. Documentation refresh.
+9. Final V1 regression and acceptance sweep.
+10. V1 release candidate / freeze decision.
+
+### 16.2 Priority rationale
+
+The recommended implementation order is intentional:
+
+1. Live Board counters/tooltips and Monthly Return contamination should be handled together because they both touch movement-counting semantics.
+2. Desktop Productization audit should happen early to expose any structural packaging/offline blockers.
+3. Create From and METAR Builder should be implemented before the final packaging pass because they affect the V1 feature surface.
+4. H6 History polish should close once remaining V1 functional behaviour is stable.
+5. Full Desktop Productization implementation/package pass should happen after the feature surface stabilizes.
+6. Documentation should follow the final V1 behaviour.
+7. Final acceptance sweep and freeze come last.
+
+### 16.3 V1 item detail
+
+#### A. Live Board summary counter aggregation and computed tooltips
+
+Status:
+
+```text
+ACTIVE — next engineering priority
+```
+
+Purpose:
+
+- make visible Live Board counters trustworthy;
+- clarify BM / BC / VM / VC / TOTAL composition;
+- keep OVR excluded from runway totals;
+- show OVR separately;
+- preserve T&G = 2 and O/S = 1;
+- provide computed explanatory tooltips.
+
+#### B. Monthly Return ghost-count contamination
+
+Status:
+
+```text
+V1 required
+```
+
+Purpose:
+
+- ensure Monthly Return is not contaminated by ghost, deleted, cancelled, or stale movements;
+- preserve the nominal reporting model;
+- keep nominal reporting distinct from Live Board event-based reporting.
+
+#### C. Desktop Productization audit
+
+Status:
+
+```text
+V1 required — early audit
+```
+
+Purpose:
+
+- confirm whether current Tauri configuration can load assets/data without the Python server;
+- identify blockers to offline installed operation;
+- determine whether current localStorage persistence is sufficient for V1 or whether storage changes are required;
+- identify packaging/documentation tasks before final productization.
+
+#### D. Create From workflow
+
+Status:
+
+```text
+V1 required
+```
+
+Purpose:
+
+- convert the older “Duplicate → Create from…” concept into a clear Create From workflow;
+- allow efficient creation of related movements;
+- preserve timing/lifecycle semantics;
+- distinguish duplicate, create-from, reciprocal, booking-derived, and formation-derived flows;
+- avoid copying lifecycle-specific fields incorrectly.
+
+#### E. METAR Builder
+
+Status:
+
+```text
+V1 required
+```
+
+Purpose:
+
+- selectable/editable METAR components;
+- generated plain-text METAR-style output;
+- copy/paste into email or operational communication;
+- validation/formatting assistance sufficient for local operational use.
+
+#### F. H6 History polish / integration
+
+Status:
+
+```text
+V1 required closeout
+```
+
+Purpose:
+
+- close remaining visual, documentation, wording, export-toast, edge-case, and smoke-test issues after H1–H5b.
+
+#### G. Desktop Productization implementation / offline installable build
+
+Status:
+
+```text
+V1 required
+```
+
+Purpose:
+
+- produce a fully independent, offline-capable, installable desktop application;
+- remove any normal-use dependency on Python server/browser harness;
+- document backup/update/troubleshooting procedures;
+- verify native exports and local data behaviour in the packaged app.
+
+#### H. Documentation refresh
+
+Status:
+
+```text
+Required before V1 freeze
+```
+
+Documentation must reflect:
+
+- product name: Vectair Flite;
+- current Tauri desktop runtime/productization state;
+- installable/offline V1 behaviour;
+- local development run process;
+- backup/restore behaviour;
+- native Save As export behaviour;
+- History Retrieval H1–H5b completion;
+- H6 status if still open;
+- formation launch baseline;
+- Create From and METAR Builder behaviour;
+- known limitations;
+- V1 release scope and exclusions.
+
+#### I. Final V1 acceptance sweep
+
+Status:
+
+```text
+Required before V1 freeze
+```
+
+Must include the smoke/regression areas in section 21.
+
+---
+
+## 17. V2 / post-launch workstreams
+
+### 17.1 API / VKB integration
+
+Move beyond static/downloaded packs toward fuller Vectair-backed knowledge integration.
+
+Includes:
+
+- VKB API access;
+- online/offline mode handling;
+- formal data update/provenance pipeline;
+- cloud + saved data mode;
+- region/country/operator-scoped saved packs.
+
+### 17.2 VKB editable knowledge, local overrides, audit history, and rollback
+
+V2 should provide user-side editability for selected VKB-derived datasets and local operational knowledge.
+
+This includes, at minimum:
+
+- richer booking/visitor/aircraft profiles;
+- controlled add/edit/remove tools for local VKB records;
+- local override handling for VKB-sourced data;
+- change history with timestamp, old value, new value, affected record, and source/note;
+- future user attribution if user profiles are introduced;
+- rollback/undo for local data edits;
+- validity-period or retirement handling for changing callsign/pilot/aircraft assignments;
+- protection against retrospective alteration of historical movement records.
+
+Datasets requiring user-editable local management include:
+
+```text
+FDMS_AIRCRAFT_PILOTS
+FDMS_EGOW_CODES
+FDMS_REGISTRATIONS
+```
+
+Operational use cases include:
+
+- changing based aircraft lists;
+- changing BC aircraft details;
+- changing pilots associated with aircraft;
+- changing BM flight-number/pilot assignments;
+- adding/removing/editing aircraft registration records;
+- retaining historical truth when assignments change month-to-month.
+
+Architectural direction:
+
+```text
+Cloud VKB source data
+→ saved local VKB packs
+→ local user overrides
+→ audited local change log
+→ movement records store resolved historical snapshots
+```
+
+Do not design this as a simple live lookup that retroactively changes historical movement records.
+
+### 17.3 Booking confirmation email / pilot briefing / GAR note
+
+Includes:
+
+- booking confirmation email to booker;
+- cost breakdown;
+- confirmed itinerary;
+- pilot briefing output;
+- airfield operating information;
+- station / ATC notes;
+- GAR note for arrivals/departures outside contiguous UK;
+- explicit note that GAR is not managed by ATC.
+
+### 17.4 Booking re-linkage
+
+Improve linkage between booking records and created/planned strips after edits, lifecycle changes, deletion, restore, or manual correction.
+
+### 17.5 Deleted-strip retention configurability
+
+Make deleted-strip retention configurable in Admin.
+
+Current retention remains:
+
+```text
+24 hours
+```
+
+### 17.6 Historical lifecycle analysis
+
+Potential future analytics:
+
+- planned → active → completed/cancelled/deleted transitions;
+- timing deltas;
+- lifecycle event reports;
+- cancellation-event-only date analytics;
+- audit dashboard for transitions.
+
+### 17.7 Callsign family grouping
+
+Group related callsigns/families for display, filtering, and analysis.
+
+Useful for:
+
+- UAM-style pilot callsigns;
+- formation families;
+- unit/operator callsign patterns.
+
+### 17.8 Notification / reminder system
+
+Potential scope:
+
+- toast notifications;
+- one-off reminders;
+- recurring reminders;
+- calendar-linked reminders;
+- METAR observations;
+- ASP updates;
+- optional chime/sound;
+- unfocused/minimized attention indicator.
+
+Do not assume native taskbar flashing. Use title/tab/app attention indicators where appropriate.
+
+### 17.9 MAB package filter
+
+Status:
+
+```text
+Post-V1 / public-release hardening
+```
+
+The MAB package filter is deferred until after V1.
+
+It should eventually allow Flite/VKB users to include, exclude, or inspect MoD A Block / MAB callsign package entries separately from ordinary callsign records.
+
+It is not required for the first V1 release.
+
+### 17.10 Advanced persistence / storage adapter
+
+Possible future move away from localStorage toward:
+
+- SQLite;
+- explicit local storage adapter;
+- migration/versioning support;
+- backup/export/import hardening;
+- better auditability;
+- possible multi-device or multi-user modes only if product direction changes.
+
+### 17.11 Advanced export-location management
+
+Potential Admin section:
+
+```text
+Export & File Locations
+```
+
+Possible settings:
+
+- Ask every time;
+- default export folder;
+- separate folders by export type;
+- remember last export location.
+
+Current accepted behaviour is Save As.
+
+### 17.12 Formation post-launch enhancements
+
+See section 11.13.
+
+---
+
+## 18. Rolling / lower-priority backlog
+
+The following are not V1 blockers unless explicitly promoted:
+
+- dynamic local timezone abbreviation rendering;
+- advanced formation analytics;
+- 3+ element formation layout refinement;
+- Admin-configurable export locations;
+- full backend/database architecture;
+- multi-user/concurrent operations model;
+- signed builds and auto-update if not completed as part of V1 productization;
+- learned PIC ranking by historical movement count;
+- alphanumeric flight-suffix support beyond pure digit suffixes;
+- public/open release hardening beyond the installable V1 baseline.
+
+---
+
+## 19. Deprecated / superseded / no longer active
+
+| Item | Status |
+|---|---|
+| Hosted/web-app interpretation | Superseded. Flite is desktop-local, not a hosted web app. |
+| Python local server as product runtime | Superseded for V1. It remains development-only. |
+| Electron-first productization | Superseded by Tauri-first strategy unless confirmed WebView2 blockers force reconsideration. |
+| Direct frontend imports from Tauri plugins | Prohibited. Use shared export helper and registered Tauri invoke commands. |
+| Formation continuation as unresolved V1 blocker | Superseded. Formation is V1-complete unless defect found. |
+| EGOW/LOC/timing as active defect | Superseded. It is a regression baseline. |
+| UAM single-digit permissiveness | Superseded. `UAM03` valid; `UAM3` malformed. |
+| OVR included in runway totals | Invalid. OVR is separate and excluded from runway totals. |
+| Monthly Return using Live Board event-based model | Invalid unless explicitly redesigned. Monthly Return remains nominal strip-type based. |
+| MAB as V1 requirement | Superseded. MAB is post-V1/public-release hardening. |
+
+---
+
+## 20. Documentation workstream
 
 Documentation is a parallel continuity layer owned by ChatGPT.
 
@@ -914,14 +1845,18 @@ Claude remains the engineer.
 
 Living documentation set:
 
+```text
 README.md
 Quick_Start_Guide.md
 User_Guide.md
 Install_Update_Backup_Troubleshooting.md
 docs/architecture/FORMATIONS.md
+STATE.md
+```
 
 For every future implementation ticket, explicitly state one of:
 
+```text
 Docs: no change
 Docs: update README
 Docs: update Quick Start
@@ -929,500 +1864,258 @@ Docs: update User Guide
 Docs: update Install/Update/Backup/Troubleshooting
 Docs: update architecture doc
 Docs: update STATE.md
+```
 
 Documentation principles:
 
-accurate beats complete
-concise beats exhaustive
-current behaviour beats aspirational behaviour
-provisional areas should be labelled plainly
-use Vectair Flite / Flite naming by default
-12.1 Required documentation refresh before V1
+- accurate beats complete;
+- concise beats exhaustive;
+- current behaviour beats aspirational behaviour;
+- provisional areas should be labelled plainly;
+- use Vectair Flite / Flite naming by default.
+
+### 20.1 Required documentation refresh before V1
 
 Before V1 release, documentation must be updated to reflect:
 
-product name: Vectair Flite
-Tauri desktop runtime/productization state
-local development run process
-backup/restore behaviour
-native Save As export behaviour
-History Retrieval H1–H5b completion
-History H6 status if still open
-formation launch baseline
-known limitations
-V1 release scope and exclusions
+- product name: Vectair Flite;
+- fully independent offline installable desktop model;
+- local development run process;
+- packaged app launch/install behaviour;
+- backup/restore behaviour;
+- native Save As export behaviour;
+- History Retrieval H1–H5b completion;
+- H6 status if still open;
+- formation launch baseline;
+- Create From workflow;
+- METAR Builder;
+- known limitations;
+- V1 release scope and exclusions.
 
 Status:
 
+```text
 REQUIRED BEFORE V1 FREEZE
-13. Known limitations and deliberate boundaries
-13.1 Cancellation analytics
+```
 
-Current cancellation reporting is current-state operational reporting only.
+---
 
-Deferred:
-
-historical lifecycle-event analytics
-audit dashboard for all lifecycle transitions
-cancellation-event-only date analytics
-13.2 Deleted-strip retention configurability
-
-Retention is currently hardcoded to:
-
-24 hours
-
-Admin configurability deferred.
-
-13.3 Booking re-linkage on restore
-
-Restoring a deleted strip does not automatically restore booking linkage.
-
-Operator re-links manually if needed.
-
-13.4 Manual purge-now action
-
-Not implemented.
-
-Deferred until a safe confirmation model is scoped.
-
-13.5 API / VKB integration
-
-Full Vectair-backed API / VKB integration is not in the current functional baseline.
-
-This is a V2 workstream.
-
-13.6 METAR Builder
-
-Still V1-scoped unless consciously deferred to V1.1.
-
-Not yet implemented.
-
-13.7 Desktop productization
-
-Partially advanced through Tauri work, but not yet complete as a final installed-product model.
-
-13.8 Formation polish
-
-Launch-acceptable formation display is complete.
-
-Deferred:
-
-tighter visual density
-richer inherited/shared value indicators
-3+ element layout refinement
-responsive/narrow-window refinement
-formation analytics enhancements
-13.9 Advanced export-location preferences
-
-Not implemented.
-
-Deferred:
-
-Admin-configurable export folders
-separate default folders by export type
-“Ask every time” vs “use default folder” export preference
-
-Current accepted behaviour is Save As.
-
-14. V1 roadmap classification
-14.1 V1 blockers
-
-The following must be resolved before V1 release:
-
-EGOW / LOC / timing regression cluster
-minimum desktop productization definition and implementation
-documentation refresh
-final release acceptance sweep
-The following remain relevant before V1 release:
-
-- minimum desktop productization definition and implementation
-- documentation refresh
-- V1 freeze / release decision
-- regression preservation for resolved EGOW / LOC / timing behaviour
-
-### 14.2 V1 required / candidate workstreams
-
-#### A. Resolved baseline: EGOW / LOC / timing fix
-
-Resolved and merged into `main` at `73023df`.
-
-This area should now be treated as a regression baseline, not an active workstream. Future changes touching callsign attribution, EGOW validation, LOC timing, edit timing, ARR activation, or OVR handling must preserve the smoke-test behaviours recorded in section 18.6.
-B. H6 History polish / integration
-
-Remaining closeout after H1–H5b.
-
-May be lightweight if current UI is acceptable, but should not be left undocumented.
-
-C. Create From workflow
-
-Purpose:
-
-convert the older “Duplicate → Create from…” concept into a clear Create From workflow
-allow efficient creation of related movements
-preserve timing/lifecycle semantics
-distinguish duplicate, create-from, reciprocal, booking-derived, and formation-derived flows
-
-This remains the most likely “forgotten” V1 feature.
-
-D. Minimum Desktop Productization
-
-V1 productization floor should be defined explicitly.
-
-Potential V1-minimum scope:
-
-repeatable Tauri launch/build flow
-packaged desktop build
-clear installation/update instructions
-local data persistence/backup expectations documented
-native Save As exports verified
-no reliance on accidental browser cache state
-basic crash/error visibility sufficient for internal use
-
-Full signed builds and auto-update may be deferred if they would delay V1.
-
-E. METAR Builder
-
-Still historically V1-scoped.
-
-Purpose:
-
-selectable/editable METAR components
-generated plain-text METAR-style output
-copy/paste into email or operational communication
-
-Should be either:
-
-implemented before V1
-
-or explicitly moved to:
-
-V1.1
-F. Documentation refresh
-
-Required before V1 freeze.
-
-G. Final acceptance sweep
-
-Required before V1 freeze.
-
-15. V2 workstreams
-15.1 API / VKB integration
-
-Move beyond static/downloaded packs toward fuller Vectair-backed knowledge integration.
-
-15.2 Booking confirmation email / pilot briefing / GAR note
-
-Includes:
-
-booking confirmation email
-pilot briefing output
-GAR note for arrivals/departures outside contiguous UK
-explicit note that GAR is not managed by ATC
-15.3 Advanced export-location management
-
-Potential Admin section:
-
-Export & File Locations
-
-Possible settings:
-
-Ask every time
-default export folder
-separate folders by export type
-remember last export location
-
-Not part of current H5b closure.
-
-16. Rolling / lower-priority backlog
-
-The following are not V1 blockers unless explicitly promoted:
-
-booking re-linkage on deleted-strip restore
-deleted-strip retention configurability
-historical lifecycle event analysis
-callsign family grouping
-notification/reminder system
-dynamic local timezone abbreviation rendering
-formation visual polish and extended formation UX improvements
-advanced formation analytics
-3+ element formation layout refinement
-Admin-configurable export locations
-full backend/database architecture
-multi-user/concurrent operations model
-full API/VKB live integration
-## 17. Recommended next implementation order
-
-### 17.1 Immediate next item
-
-1. Live Board summary counter aggregation and computed tooltips
-
-Reason:
-
-The EGOW / LOC / timing regression cluster is now resolved and merged into `main` at `73023df`. The next highest-value engineering item is the Live Board summary counter work, because it is visible operationally, bounded in scope, and should be corrected before Monthly Return reconciliation work.
-
-Recommended order:
-
-1. Live Board summary counter aggregation and computed tooltips
-2. Monthly Return ghost-count contamination
-3. Day Timeline fixed DEP/ARR display windows
-4. Semantic refinement / WTC exact-time display / rounding polish
-
-Reason:
-
-17.2 Then close History properly
-2. H6 History polish / integration
-
-Reason:
-
-H1–H5b are complete. H6 should either be completed as a light closeout or consciously reduced to documentation/status polish.
-
-17.3 Then implement the remaining operational feature
-3. Create From workflow
-
-Reason:
-
-This is the most likely forgotten V1 feature and supports efficient operational strip creation.
-
-17.4 Then define and execute V1 desktop floor
-4. Minimum Desktop Productization
-
-Reason:
-
-The app cannot be called V1-ready merely because it runs in a dev harness. V1 needs a defined desktop delivery baseline.
-
-17.5 Then decide METAR Builder
-5. METAR Builder — implement or defer explicitly to V1.1
-
-Reason:
-
-It is historically V1-scoped but may be safely deferred if the V1 release definition is narrowed to the core flight-data management product.
-
-17.6 Then documentation
-6. Documentation refresh
-
-Reason:
-
-Docs must match current behaviour before release freeze.
-
-17.7 Then acceptance
-7. Full V1 acceptance sweep
-
-Reason:
-
-The app has many interacting operational paths. V1 requires a structured manual acceptance pass.
-
-17.8 Then freeze
-8. V1 freeze / release candidate
-
-After freeze:
-
-only release blockers and hotfixes should be accepted
-no new feature work without explicit deferral/release decision
-18. Smoke testing baseline
+## 21. Smoke testing and acceptance baseline
 
 Primary acceptance remains Stuart’s manual verification.
 
-18.1 General local validation
+### 21.1 General local validation
 
 Browser harness:
 
+```powershell
 cd C:\Users\dmshs\FDMS\src
 python -m http.server 8000
+```
 
 Browser URL:
 
+```text
 http://localhost:8000/
+```
 
 Tauri development run:
 
+```powershell
 cd C:\Users\dmshs\FDMS
 cargo tauri dev
+```
 
 When testing JS/CSS:
 
+```text
 DevTools → Network → Disable cache → Reload
+```
 
-or use:
+or:
 
+```text
 Admin → System Status → Reload App
-18.2 Registration data integrity check
+```
+
+### 21.2 Registration data integrity check
 
 After rebases, merges, or large file operations, verify:
 
+```powershell
 (Get-Content .\src\data\FDMS_REGISTRATIONS.csv).Count
+```
 
 Expected:
 
+```text
 25713
-18.3 Export smoke baseline
+```
+
+### 21.3 Export smoke baseline
 
 Minimum export smoke:
 
-History → Historic Strip Board → Export as CSV opens Save As
-History → Search / Table → Export filtered CSV opens Save As
-History → Cancelled Sorties → Export CSV opens Save As
-Reports → Export CSV opens Save As
-Reports → Export XLSX opens Save As and writes valid .xlsx
-Reports → Cancellation view → Export Cancellations CSV opens Save As
-cancelling a Save As dialog produces cancellation/info toast
-no @tauri-apps/plugin-dialog module-specifier error
-18.4 Formation launch-complete smoke baseline
+- History → Historic Strip Board → Export as CSV opens Save As.
+- History → Search / Table → Export filtered CSV opens Save As.
+- History → Cancelled Sorties → Export CSV opens Save As.
+- Reports → Export CSV opens Save As.
+- Reports → Export XLSX opens Save As and writes valid `.xlsx`.
+- Reports → Cancellation view → Export Cancellations CSV opens Save As.
+- Cancelling a Save As dialog produces cancellation/info toast.
+- No `@tauri-apps/plugin-dialog` module-specifier error.
+
+### 21.4 Formation launch-complete smoke baseline
 
 Formation accepted for launch purposes after smoke confirming:
 
-child element strips render as full-width subordinate strip-style cards
-element callsign is primary
-attribution/pilot identity is secondary
-T&G/O/S/FIS/timing usable as operational controls
-outcome/diversion available but visually secondary
-no datamodel/schema migration
-no observed counting/WTC/lifecycle regression sufficient to block launch
+- child element strips render as full-width subordinate strip-style cards;
+- element callsign is primary;
+- attribution/pilot identity is secondary;
+- T&G / O/S / FIS / timing usable as operational controls;
+- outcome/diversion available but visually secondary;
+- no datamodel/schema migration;
+- no counting/WTC/lifecycle regression sufficient to block launch.
 
 Further formation polish goes to post-launch backlog unless a specific bug is found.
 
-18.5 History smoke baseline
+### 21.5 History smoke baseline
 
 Minimum History smoke:
 
-Movement History defaults to Today
-Historic Strip Board renders completed movements only
-Calendar view summarises days using completed movements only
-single-click calendar day opens Historic Strip Board for that day
-structured filters use AND semantics
-Search / Table results match filter criteria
-Search / Table export exports all filtered rows, not only visible capped rows
-Cancelled Sorties and Deleted Strips remain unaffected
-all History exports use native Save As in Tauri
-### 18.6 EGOW / LOC / timing regression smoke baseline
+- Movement History defaults to Today.
+- Historic Strip Board renders completed movements only.
+- Calendar view summarizes days using completed movements only.
+- Single-click calendar day opens Historic Strip Board for that day.
+- Structured filters use AND semantics.
+- Search / Table results match filter criteria.
+- Search / Table export exports all filtered rows, not only visible capped rows.
+- Cancelled Sorties and Deleted Strips remain unaffected.
+- All History exports use native Save As in Tauri.
 
-Resolved and merged into `main` at `73023df`.
+### 21.6 EGOW / LOC / timing regression smoke baseline
+
+Resolved and merged into `main` at:
+
+```text
+73023df
+```
 
 These tests must be preserved as regression coverage for future changes touching attribution, validation, timing, activation, or movement counting.
 
 Smoke must include:
 
-DEP creation with valid callsign/EGOW enrichment
-ARR creation with valid callsign/EGOW enrichment
-LOC creation requires valid EGOW
-LOC creation rejects blank EGOW where required
-LOC ETD/start-time edit recalculates ETA/end-time
-duration arrow changes still recalculate expected times
-existing strip dep/start-time edit recalculates dependent arr/end-time where appropriate
-OVR timing labels and semantics remain EOFT/AOFT/ELFT/ALFT
-ARR Active remains status-only and does not fabricate ATD
-UTC/local entry still stores UTC authority
-18.7 Final V1 acceptance sweep
+- `UAM03` → BM / L / JENKINS.
+- `UAM99` → BM / blank / blank.
+- `UAM32` → BM / A / HAIGH.
+- `XXX99` → blank / blank / blank.
+- `UAM3` → no EGOW autofill.
+- `MERSY2` → BM / L and remains displayed/stored as `MERSY2`.
+- Manual EGOW/PIC overrides are preserved.
+- LOC stale-clear behaviour works.
+- Edit modal stale-clear behaviour works.
+- DEP creation with valid callsign/EGOW enrichment.
+- ARR creation with valid callsign/EGOW enrichment.
+- LOC creation requires valid EGOW.
+- LOC creation rejects blank EGOW where required.
+- LOC ETD/start-time edit recalculates ETA/end-time.
+- Duration arrow changes still recalculate expected times.
+- Existing strip dep/start-time edit recalculates dependent arr/end-time where appropriate.
+- OVR timing labels and semantics remain EOFT/AOFT/ELFT/ALFT.
+- ARR Active remains status-only and does not fabricate ATD.
+- UTC/local entry still stores UTC authority.
+
+### 21.7 V1 feature smoke baseline
 
 Before V1 freeze, test:
 
-new strip creation: DEP, ARR, LOC, OVR
-UTC/local entry and display
-Activate / Complete semantics
-inline edits
-EGOW code validation and autofill
-movement counts
-Monthly Return / Dashboard / Insights
-History: board, calendar, search/table, exports
-Cancelled Sorties
-Deleted Strips restore/purge
-formations
-booking-linked strip creation/update
-backup/restore
-desktop launch/package behaviour
-native Save As exports
-registration CSV integrity
-19. Manager–Worker operating rules
-19.1 ChatGPT
-
-ChatGPT is the:
-
-thinker
-architect
-diagnostician
-root-cause finder
-ticket writer
-QA lead
-documentation continuity owner
-
-ChatGPT must:
-
-inspect current implementation before writing tickets
-identify actual cause
-state exact files to change
-state exact behaviour change required
-write narrow implementation tickets
-prevent drift
-19.2 Claude Code
-
-Claude is the:
-
-production engineer
-implementer
-
-Claude must not be asked to:
-
-diagnose root cause
-infer product direction
-choose architecture independently
-speculate about intended behaviour
-19.3 Operating rule
-
-No Claude prompt should be issued until ChatGPT has already stated:
-
-actual cause
-exact files to change
-exact behaviour change required
-acceptance tests
-documentation impact
-20. Immediate next action
-
-The next work item is:
-
-**Live Board summary counter aggregation and computed tooltips**
-
-Before producing a Claude prompt, ChatGPT should inspect the relevant current files on `main`, especially:
-
-- `src/js/ui_liveboard.js`
-- any summary/stat aggregation helpers
-- any tooltip/computed-count rendering paths
-- movement counting logic for DEP, ARR, LOC, OVR, T&G, and O/S
-- EGOW-based civil/military classification only where it contributes to displayed summary counters
-
-The resolved EGOW / LOC / timing cluster should remain part of regression testing, not the active implementation target.
+- new strip creation: DEP, ARR, LOC, OVR;
+- UTC/local entry and display;
+- Activate / Complete semantics;
+- inline edits;
+- EGOW code validation and autofill;
+- movement counts;
+- Live Board counter tooltips;
+- Monthly Return / Dashboard / Insights;
+- History: board, calendar, search/table, exports;
+- Cancelled Sorties;
+- Deleted Strips restore/purge;
+- formations;
+- booking-linked strip creation/update;
+- Create From workflow;
+- METAR Builder;
+- backup/restore;
+- desktop launch/package behaviour;
+- offline use without Python server;
+- native Save As exports;
+- registration CSV integrity.
 
 ---
 
-### EGOW attribution / aircraft pilot data implementation
+## 22. Manager–Worker operating rules
 
-Implemented expanded EGOW attribution using the revised `FDMS_EGOW_CODES.csv` schema:
+### 22.1 ChatGPT
+
+ChatGPT is the:
+
+- thinker;
+- architect;
+- diagnostician;
+- root-cause finder;
+- ticket writer;
+- QA lead;
+- documentation continuity owner.
+
+ChatGPT must:
+
+- inspect current implementation before writing tickets;
+- identify actual cause;
+- state exact files to change;
+- state exact behaviour change required;
+- write narrow implementation tickets;
+- prevent drift.
+
+### 22.2 Claude Code
+
+Claude is the:
+
+- production engineer;
+- implementer.
+
+Claude must not be asked to:
+
+- diagnose root cause;
+- infer product direction;
+- choose architecture independently;
+- speculate about intended behaviour.
+
+### 22.3 Operating rule
+
+No Claude prompt should be issued until ChatGPT has already stated:
+
+- actual cause;
+- exact files to change;
+- exact behaviour change required;
+- acceptance tests;
+- documentation impact.
+
+---
+
+## 23. Immediate next action
+
+The next work item is:
 
 ```text
-CALLSIGN_BASE,APPROVED_CONTRACTION,FLIGHT_NUMBER,EGOW_CODE,UNIT,UNIT_CODE,NAME,POSITION,NOTES
+Live Board summary counter aggregation and computed tooltips
 ```
 
-Key changes:
-- `lookupEgowAttributionFromCallsign(callsignCode)` — new exported function in `vkb.js` implementing deterministic 4-priority lookup with numeric suffix splitting and blank-flight-number fallback. EGOW attribution lookup treats numeric suffixes with and without leading zeroes as equivalent for matching only. Callsign display/storage remains unchanged.
-- `lookupCaptainFromEgowCodes()` and `lookupUnitCodeFromEgowCodes()` — updated to delegate to the new resolver.
-- `lookupCallsign()` — updated EGOW section to use new schema; returns `UC` field populated from `UNIT_CODE` for backward compatibility with existing callers.
-- `enrichMovementData()` in `ui_liveboard.js` — refactored to use `lookupEgowAttributionFromCallsign()` directly, populating `egowCode`, `unitCode`, `captain`, and `unitDesc` non-destructively.
+Before producing a Claude prompt, ChatGPT should inspect the relevant current files on `main`, especially:
 
-Implemented aircraft pilot suggestion loading using:
+- `src/js/ui_liveboard.js`;
+- `src/js/datamodel.js`;
+- summary/stat aggregation helpers;
+- tooltip/computed-count rendering paths;
+- movement counting logic for DEP, ARR, LOC, OVR, T&G, and O/S;
+- EGOW-based civil/military classification only where it contributes to displayed summary counters.
 
-```text
-FDMS_AIRCRAFT_PILOTS.csv
-REGISTRATION,FIXED_CALLSIGN,PILOT_NAME_LAST,PILOT_NAME_FIRST
-```
-
-Key changes:
-- `aircraftPilots: []` added to `vkbData`; loaded in `loadVKBData()` alongside other CSVs.
-- `lookupAircraftPilots(registration, fixedCallsign)` — new exported function; matches by normalised registration (hyphens removed) or fixed callsign; sorts alphabetically; disambiguates duplicate surnames with first-name initial.
-- New flight modal and edit modal PIC inputs now have `list` datalist wired to pilot suggestions.
-- Pilot suggestions are populated when registration or fixed callsign is entered; single-match auto-fills PIC if blank.
-
-Pilot lookup is static for V1. Learned PIC ranking by historical movement count is deferred post-launch.
-
-Post-launch backlog:
-- Add learned PIC ranking for aircraft with multiple associated pilots.
-- Rank candidate PIC names by historical use count from stored movement history.
-- Do not store manually maintained `PIC_COUNT` in CSV reference data.
-- If persistent learned ranking is later required, store it in a separate local learned-preferences store, not in the CSV.
+The resolved EGOW / LOC / timing cluster should remain part of regression testing, not the active implementation target.
