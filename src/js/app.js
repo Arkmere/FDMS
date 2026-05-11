@@ -1728,36 +1728,25 @@ function getTodayDateString() {
  * @returns {string}
  */
 function _liveBoardTooltip(category, stats) {
+  if (category === "Total") return "TOTAL";
+  if (category === "BC")    return "BASED CIVILIAN";
+  if (category === "BM") {
+    const u = stats.BM.units;
+    return `BASED MILITARY\n${u.AEF} AEF, ${u.LUAS} LUAS, ${u.MASUAS} MASUAS`;
+  }
+  if (category === "VM") {
+    const e = stats.VM.egowCodes;
+    return `VISITING MILITARY\n${e.VM} VM, ${e.VMH} VMH, ${e.VNH} VNH`;
+  }
+  if (category === "VC") {
+    const e = stats.VC.egowCodes;
+    return `VISITING CIVILIAN\n${e.VC} VC, ${e.VCH} VCH`;
+  }
   if (category === "OVR") {
-    return [
-      "Overflights/FIS today.",
-      "Shown separately and excluded from runway totals.",
-      `Current strip/FIS contribution: ${stats.OVR.breakdown.strips} strip(s).`,
-    ].join("\n");
+    const bd = stats.OVR.breakdown;
+    return `OVERFLIGHTS\n${bd.military} MILITARY, ${bd.civilian} CIVILIAN`;
   }
-  if (category === "Total") {
-    const { BM, BC, VM, VC, totalRunway } = stats;
-    return [
-      "Total runway movements today.",
-      "BM + BC + VM + VC.",
-      "Excludes OVR.",
-      `Current total: BM ${BM.total} + BC ${BC.total} + VM ${VM.total} + VC ${VC.total} = ${totalRunway}.`,
-    ].join("\n");
-  }
-  const cat = stats[category];
-  const bd  = cat.breakdown;
-  const isFamilyBucket = cat.codes.length > 1;
-  const codeDesc = isFamilyBucket
-    ? `${category}-family EGOW codes`
-    : `EGOW code ${category}`;
-  const lines = [
-    `${category} runway movements today.`,
-    `Includes realized DEP/ARR/LOC/T&G/O/S contributions for ${codeDesc}.`,
-  ];
-  if (isFamilyBucket) lines.push(`Included codes: ${cat.codes.join(", ")}.`);
-  lines.push("Excludes OVR.");
-  lines.push(`Current breakdown: DEP x ${bd.dep}, ARR x ${bd.arr}, LOC base x ${bd.locBase}, T&G x ${bd.tng}, O/S x ${bd.os}.`);
-  return lines.join("\n");
+  return "";
 }
 
 /**

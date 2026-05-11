@@ -11790,20 +11790,39 @@ function _formationEgowBreakdown(m) {
 export function calculateLiveBoardSummaryStats(movements) {
   const today = getTodayDateString();
 
-  const mkCat = (codes) => ({
-    total: 0,
-    codes,
-    breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
-  });
-
   const stats = {
-    BM:          mkCat(["BM"]),
-    BC:          mkCat(["BC"]),
-    VM:          mkCat(["VM", "VMH", "VNH"]),
-    VC:          mkCat(["VC", "VCH"]),
-    OVR:         { total: 0, breakdown: { strips: 0 } },
+    BM: {
+      total: 0,
+      codes: ["BM"],
+      breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
+      units: { AEF: 0, LUAS: 0, MASUAS: 0 },
+    },
+    BC: {
+      total: 0,
+      codes: ["BC"],
+      breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
+    },
+    VM: {
+      total: 0,
+      codes: ["VM", "VMH", "VNH"],
+      breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
+      egowCodes: { VM: 0, VMH: 0, VNH: 0 },
+    },
+    VC: {
+      total: 0,
+      codes: ["VC", "VCH"],
+      breakdown: { dep: 0, arr: 0, locBase: 0, tng: 0, os: 0 },
+      egowCodes: { VC: 0, VCH: 0 },
+    },
+    OVR: {
+      total: 0,
+      breakdown: { strips: 0, military: 0, civilian: 0 },
+    },
     totalRunway: 0,
   };
+
+  const MIL_EGOW = new Set(["BM", "VM", "VMH", "VNH"]);
+  const CIV_EGOW = new Set(["BC", "VC", "VCH"]);
 
   const seen = new Set();
   for (const m of movements) {
@@ -11812,19 +11831,22 @@ export function calculateLiveBoardSummaryStats(movements) {
     if (seen.has(m.id)) continue;
     seen.add(m.id);
 
+    const { egowFlightType } = classifyMovement(m);
+
     if (isOverflight(m)) {
       stats.OVR.total++;
       stats.OVR.breakdown.strips++;
+      if (MIL_EGOW.has(egowFlightType))      stats.OVR.breakdown.military++;
+      else if (CIV_EGOW.has(egowFlightType)) stats.OVR.breakdown.civilian++;
       continue;
     }
 
     const contrib = egowRunwayContribution(m);
-    const { egowFlightType } = classifyMovement(m);
     let cat = null;
-    if      (egowFlightType === "BM")                          cat = "BM";
-    else if (egowFlightType === "BC")                          cat = "BC";
-    else if (["VM", "VMH", "VNH"].includes(egowFlightType))   cat = "VM";
-    else if (["VC", "VCH"].includes(egowFlightType))          cat = "VC";
+    if      (egowFlightType === "BM")                        cat = "BM";
+    else if (egowFlightType === "BC")                        cat = "BC";
+    else if (["VM", "VMH", "VNH"].includes(egowFlightType)) cat = "VM";
+    else if (["VC", "VCH"].includes(egowFlightType))        cat = "VC";
 
     if (cat) {
       stats[cat].total += contrib;
@@ -11834,6 +11856,17 @@ export function calculateLiveBoardSummaryStats(movements) {
       stats[cat].breakdown.locBase += bd.locBase;
       stats[cat].breakdown.tng     += bd.tng;
       stats[cat].breakdown.os      += bd.os;
+
+      if (cat === "BM") {
+        const uc = (m.unitCode || "").toUpperCase().trim();
+        if      (uc === "A") stats.BM.units.AEF    += contrib;
+        else if (uc === "L") stats.BM.units.LUAS   += contrib;
+        else if (uc === "M") stats.BM.units.MASUAS += contrib;
+      } else if (cat === "VM" && egowFlightType in stats.VM.egowCodes) {
+        stats.VM.egowCodes[egowFlightType] += contrib;
+      } else if (cat === "VC" && egowFlightType in stats.VC.egowCodes) {
+        stats.VC.egowCodes[egowFlightType] += contrib;
+      }
     }
   }
 
