@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-13 (Europe/London, rev 7 — DP-04 package.json identity and Tauri scripts)
+Last updated: 2026-05-13 (Europe/London, rev 8 — DP-05 README desktop rewrite and STATE consolidation)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -18,24 +18,41 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **Vectair Flite** (“Flite”) is the current product name.
 - Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
 - **V1 is not release-ready.**
-- The current next engineering item is: **DP-05 — README / Getting Started rewrite for desktop launch and release build.**
+- The current phase is **Desktop Productization / V1 closeout**.
+- The current next engineering item is: **DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**
 
-- **DP-04 (Update package.json identity and add Tauri dev/build scripts)** is implemented on branch `claude/package-json-tauri-scripts-RMAsu`; smoke testing pending before merge. `package.json` name is now `vectair-flite`; description updated; `tauri:dev` and `tauri:build` scripts added.
-- **DP-03 (Vendor SheetJS for offline operation)** is implemented on branch `claude/vendor-sheetjs-offline-HRqTc`; smoke testing pending before merge. SheetJS (xlsx 0.18.5) is now vendored at `src/lib/xlsx.full.min.js`; CDN reference removed. Offline XLSX export blocker is addressed pending smoke test.
-- **Desktop Productization audit** is implemented on branch `claude/desktop-productization-audit-BsDcx`; review pending. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
-- ~~**One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.~~ **Resolved by DP-03.**
-- **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
+Recently closed / consolidated:
+
 - **Live Board summary counter aggregation and computed tooltips** is complete and merged.
+- **Monthly Return ghost-count contamination** is complete and merged.
+- **Desktop Productization audit** is complete as the planning baseline. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
+- **DP-03 — Vendor SheetJS for offline operation** is complete and merged. SheetJS `xlsx` 0.18.5 is vendored at `src/lib/xlsx.full.min.js`; the CDN reference has been removed.
+- **DP-04 — package.json identity and Tauri dev/build scripts** is complete and merged. `package.json` uses `vectair-flite` and includes `tauri:dev` / `tauri:build` scripts.
+- **DP-05 — README / Getting Started rewrite for desktop launch and release build** is complete and pushed.
+
+Current open V1 closeout sequence:
+
+1. **DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**
+2. **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**
+3. **DP-08 — First full release build smoke test on Windows.**
+4. **Create From workflow.**
+5. **METAR Builder.**
+6. **H6 History polish / integration closeout.**
+7. **Installation / Update / Backup / Troubleshooting documentation.**
+8. **Final V1 regression and acceptance sweep.**
+
+Other current anchors:
+
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
 - History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
-- Formation implementation through **FR-15** is complete for  launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
+- Formation implementation through **FR-15** is complete for launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
 - Native **Save As** export behaviour is implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
 - Browser/download fallback remains available for non-Tauri/local-browser harness use.
 - `FDMS_REGISTRATIONS.csv` has been restored and verified at **25,713 lines**.
-- V1 release scope is now explicitly confirmed as including:
-  - Create From workflow
-  - METAR Builder
-  - full offline standalone Desktop Productization
+- V1 release scope is confirmed as including:
+  - Create From workflow;
+  - METAR Builder;
+  - full offline standalone Desktop Productization.
 - MAB package filtering is confirmed as **post-V1**.
 
 ---
@@ -176,8 +193,8 @@ Linux, with Windows development/testing
 Current browser harness:
 
 ```powershell
-cd C:\Users\dmshs\FDMS\src
-python -m http.server 8000
+cd C:\Users\dmshs\FDMS
+python -m http.server 8000 --directory src
 ```
 
 Browser URL:
@@ -190,16 +207,22 @@ Current Tauri development run:
 
 ```powershell
 cd C:\Users\dmshs\FDMS
+npm run tauri:dev
+```
+
+Equivalent direct command:
+
+```powershell
 cargo tauri dev
 ```
 
-Tauri currently waits for the frontend dev server at:
+Tauri development mode currently waits for the frontend dev server at:
 
 ```text
 http://localhost:8000/
 ```
 
-This is acceptable for development only. It is not acceptable as the V1 product runtime.
+This is acceptable for development only. It is not acceptable as the V1 product runtime. A packaged release build bundles `src/` directly and must not require the Python development server.
 
 ### 3.4 Known binary / launcher references
 
@@ -223,10 +246,16 @@ Current persistence model:
 localStorage
 ```
 
-Known localStorage key:
+Known localStorage keys requiring backup/restore coverage:
 
 ```text
 vectair_fdms_movements_v3
+vectair_fdms_config
+cancelled_sorties_v1
+deleted_strips_v1
+booking_profiles_v1
+calendar_events_v1
+hours_log_v1
 ```
 
 Current app model:
@@ -383,7 +412,11 @@ The following workstreams should be treated as merged and complete for current p
 |---|---|
 | Core Live Board strip workflow | Complete baseline |
 | Live Board counter aggregation and computed tooltips | Complete — merged |
-| Monthly Return ghost-count contamination | Implemented on branch; smoke testing pending |
+| Monthly Return ghost-count contamination | Complete — merged |
+| Desktop Productization audit | Complete — planning baseline |
+| DP-03 — Vendor SheetJS for offline operation | Complete — merged |
+| DP-04 — package.json identity and Tauri scripts | Complete — merged |
+| DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -404,33 +437,71 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-05 — README / Getting Started rewrite for desktop launch and release build
-
-DP-03 (Vendor SheetJS) is implemented on branch claude/vendor-sheetjs-offline-HRqTc; smoke testing pending before merge.
-DP-04 (package.json identity and Tauri scripts) is implemented on branch claude/package-json-tauri-scripts-RMAsu; smoke testing pending before merge.
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
 ```
+
+DP-03, DP-04, and DP-05 are complete. The immediate documentation clean-up is now done; do not reopen README work unless a later feature changes behaviour.
+
+DP-06 must not be applied as a blind `tauri.conf.json` edit. Before issuing the implementation ticket, inspect current frontend and Tauri files for:
+
+```text
+inline <script>
+inline event handlers such as onclick=""
+eval() or new Function()
+remote scripts, styles, fonts, images, or connect targets
+data: or blob: URL requirements
+inline style requirements
+Tauri scheme / asset loading requirements
+```
+
+A likely CSP candidate from the desktop audit is:
+
+```text
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+```
+
+However, the final CSP must be based on inspection of the current codebase, not assumption.
 
 ### 6.2 Next productization sequence
 
-After DP-04, continue the desktop productization closeout sequence:
+Continue the desktop productization closeout sequence:
 
-~~DP-03 — Vendor SheetJS for offline operation~~ **Implemented; smoke testing pending.**
-~~DP-04 — Update package.json identity and add Tauri dev/build scripts~~ **Implemented; smoke testing pending.**
-DP-05 — Rewrite README / Getting Started for desktop launch and release build
+```text
 DP-06 — Enable and smoke-test CSP after SheetJS is vendored
 DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
 DP-08 — First full release build smoke test on Windows
+```
+
+If DP-08 reveals release-build or packaging issues, those productization defects take priority over feature continuation.
+
+### 6.3 Remaining V1 sequence
+
+After the immediate desktop productization closeout items, the remaining V1 work is:
+
+```text
+Create From workflow
+METAR Builder
+H6 History polish / integration closeout
+Installation / Update / Backup / Troubleshooting documentation
+Final V1 regression and acceptance sweep
+```
+
+### 6.4 Reporting invariants
 
 Monthly Return, Dashboard, and Insights retain the nominal strip-type reporting model unless explicitly redesigned:
 
+```text
 LOC = 2
 DEP = 1
 ARR = 1
 OVR = 0
 T&G = +2
 O/S = +1
+```
 
 Live Board daily counters remain separate and event-based / EGOW-realized.
+
+OVR is excluded from runway movement totals and counted separately.
 
 ---
 
@@ -1475,25 +1546,30 @@ This is V2+ unless a minimum subset is required by V1 Desktop Productization.
 The current confirmed V1 required list is:
 
 1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete — merged.**
-2. ~~Monthly Return ghost-count contamination.~~ **Implemented on branch; smoke testing pending.**
-3. Desktop Productization audit.
-4. Create From workflow.
-5. METAR Builder.
-6. H6 History polish / integration closeout.
-7. Full Desktop Productization implementation / offline installable build.
-8. Documentation refresh.
-9. Final V1 regression and acceptance sweep.
+2. ~~Monthly Return ghost-count contamination.~~ **Complete — merged.**
+3. ~~Desktop Productization audit.~~ **Complete — planning baseline.**
+4. ~~DP-03 — Vendor SheetJS for offline operation.~~ **Complete — merged.**
+5. ~~DP-04 — package.json identity and Tauri dev/build scripts.~~ **Complete — merged.**
+6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
+7. DP-06 — Enable and smoke-test CSP after SheetJS is vendored.
+8. DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.
+9. DP-08 — First full release build smoke test on Windows.
+10. Create From workflow.
+11. METAR Builder.
+12. H6 History polish / integration closeout.
+13. Installation / Update / Backup / Troubleshooting documentation.
+14. Final V1 regression and acceptance sweep.
 
 ### 16.2 Priority rationale
 
-The recommended implementation order is intentional:
+The recommended order is now productization-first:
 
-1. Live Board counters/tooltips and Monthly Return contamination should be handled together because they both touch movement-counting semantics.
-2. Desktop Productization audit should happen early to expose any structural packaging/offline blockers.
-3. Create From and METAR Builder should be implemented before the final packaging pass because they affect the V1 feature surface.
-4. H6 History polish should close once remaining V1 functional behaviour is stable.
-5. Full Desktop Productization implementation/package pass should happen after the feature surface stabilizes.
-6. Documentation should follow the final V1 behaviour.
+1. CSP should be addressed after SheetJS vendoring because ordinary operation no longer needs the CDN XLSX dependency.
+2. Backup/restore coverage should be confirmed before a release build, because the V1 persistence model remains localStorage.
+3. The first full release build smoke test should happen before additional feature continuation, because packaging defects may affect architecture and documentation.
+4. Create From and METAR Builder should be implemented before final V1 documentation and regression because they affect the user-facing feature surface.
+5. H6 History polish should close once remaining V1 functional behaviour is stable.
+6. Installation / Update / Backup / Troubleshooting documentation should be finalized after productization behaviour is known.
 7. Final acceptance sweep and freeze come last.
 
 ### 16.3 V1 item detail
@@ -1503,62 +1579,184 @@ The recommended implementation order is intentional:
 Status:
 
 ```text
-COMPLETE — smoke testing required
+COMPLETE — merged
 ```
 
 Delivered:
 
 - `calculateLiveBoardSummaryStats()` in `ui_liveboard.js` returns structured per-category breakdown.
-- VM bucket: VM, VMH, VNH. VC bucket: VC, VCH. OVR excluded from runway totals.
-- Per-category breakdown: DEP, ARR, LOC base, T&G, O/S counts.
-- Formation contributions counted per element via `_formationEgowBreakdown()`.
-- Computed `title` tooltips set dynamically on each `.stat-item` element on every update.
-- Static misleading HTML `title` attributes removed from `index.html`.
-- `updateDailyStats()` in `app.js` uses the new structured function.
+- Visible counters are BM, BC, VM, VC, OVR, and Total.
+- VM bucket includes VM, VMH, and VNH.
+- VC bucket includes VC and VCH.
+- OVR is excluded from runway totals.
+- OVR split rule: military OVR = BM, VM, VMH, VNH; civilian OVR = BC, VC, VCH.
+- BM unit mapping: A → AEF, L → LUAS, M → MASUAS.
+- Per-category breakdown includes DEP, ARR, LOC base, T&G, and O/S counts where applicable.
+- Formation contributions are counted per element via formation EGOW breakdown logic.
+- Computed `title` tooltips are set dynamically on each `.stat-item` element on every update.
+- Static misleading HTML `title` attributes were removed from `index.html`.
+- `updateDailyStats()` in `app.js` uses the structured summary function.
+
+Known caveat:
+
+- BM formation edge cases with mixed element-level unit attribution may need future refinement, but this is not a current V1 blocker.
 
 #### B. Monthly Return ghost-count contamination
 
 Status:
 
 ```text
-Implemented on branch; smoke testing pending before merge
+COMPLETE — merged
 ```
 
 Delivered:
 
-- `isMovementInMonthlyReturnScope()` predicate in `reporting.js`: only COMPLETED
-  movements enter the Official Monthly Return; PLANNED, ACTIVE, CANCELLED, and
-  any residual soft-delete-marker records are excluded.
-- `computeMonthlyReturn()` applies the predicate before midnight-splitting and
-  adds Set-based deduplication by source movement ID.
-- `getMovementsForCurrentPeriod()` in `ui_reports.js` now filters COMPLETED
-  only, so Dashboard, Insights, and CSV exports also exclude ghost/non-completed
-  records.
-- `renderOfficialMonthlyReturn()` passes `getMovements()` (all) to
-  `computeMonthlyReturn()` so midnight-crossing LOCs from adjacent month
-  boundaries are captured correctly; scope filtering is done inside.
-- `handleExportXLSX()` similarly passes `getMovements()` for the grid and uses
-  `getMovementsForCurrentPeriod()` for the Movement Details sheet.
-- Nominal counting formulas (LOC=2, DEP/ARR=1, OVR=0, T&G×2, O/S×1) unchanged.
-- Cancellation Report unchanged — it sources from CANCELLED movements
-  independently of the Monthly Return pipeline.
+- `isMovementInMonthlyReturnScope()` predicate in `reporting.js`: only COMPLETED movements enter the Official Monthly Return.
+- PLANNED, ACTIVE, CANCELLED, stale, duplicate ghost records, and residual soft-delete-marker records are excluded.
+- `computeMonthlyReturn()` applies the predicate before midnight-splitting and adds Set-based deduplication by source movement ID.
+- `getMovementsForCurrentPeriod()` in `ui_reports.js` filters COMPLETED only, so Dashboard, Insights, and CSV exports exclude ghost/non-completed records.
+- `renderOfficialMonthlyReturn()` passes `getMovements()` to `computeMonthlyReturn()` so midnight-crossing LOCs from adjacent month boundaries are captured correctly; scope filtering is done inside the reporting calculation.
+- `handleExportXLSX()` passes `getMovements()` for the official grid and uses `getMovementsForCurrentPeriod()` for the Movement Details sheet.
+- Nominal counting formulas are unchanged: LOC=2, DEP/ARR=1, OVR=0, T&G×2, O/S×1.
+- Cancellation Report is unchanged and remains a separate CANCELLED-movement reporting path.
 
 #### C. Desktop Productization audit
 
 Status:
 
 ```text
-V1 required — early audit
+COMPLETE — planning baseline
+```
+
+Audit record:
+
+```text
+docs/DESKTOP_PRODUCTIZATION_AUDIT.md
+```
+
+Key conclusions:
+
+- Tauri v2 scaffold exists.
+- Product name in Tauri is Vectair Flite.
+- Identifier is `com.vectair.flite`.
+- `frontendDist: "../src"` means the release build bundles `src/` directly.
+- `devUrl: "http://localhost:8000"` means Tauri dev currently needs the Python dev server.
+- Native Save As commands exist for relevant CSV/XLSX exports.
+- Capabilities are minimal.
+- Most assets and CSV reference data are local/offline-safe.
+- SQLite is not required for V1 unless a concrete release-blocking storage problem appears.
+
+Original release blocker:
+
+- SheetJS was loaded from CDN in `src/index.html`.
+
+Resolution:
+
+- Resolved by DP-03.
+
+#### D. DP-03 — Vendor SheetJS for offline operation
+
+Status:
+
+```text
+COMPLETE — merged
+```
+
+Delivered:
+
+- Added local vendored SheetJS file at `src/lib/xlsx.full.min.js`.
+- Replaced CDN script tag in `src/index.html` with `./lib/xlsx.full.min.js`.
+- Used SheetJS 0.18.5 browser build.
+- Preserved `window.XLSX` global.
+- No export logic changed.
+- No Rust/Tauri code changed.
+- No Tauri capabilities changed.
+
+#### E. DP-04 — package.json identity and Tauri scripts
+
+Status:
+
+```text
+COMPLETE — merged
+```
+
+Delivered:
+
+- `package.json` name set to `vectair-flite`.
+- `package.json` description updated to Vectair Flite desktop development tooling.
+- Added `npm run tauri:dev`.
+- Added `npm run tauri:build`.
+- Preserved existing test scripts.
+- No runtime code changed.
+
+#### F. DP-05 — README / Getting Started desktop rewrite
+
+Status:
+
+```text
+COMPLETE — pushed
+```
+
+Delivered:
+
+- README rewritten around Vectair Flite as a Tauri desktop-local app.
+- Development run instructions updated for browser harness and Tauri dev.
+- Release build instructions added.
+- Offline operation documented.
+- SheetJS vendoring documented.
+- localStorage persistence and dev/release origin caveat documented.
+- Native export behaviour documented.
+- Manager–Worker documentation note added.
+
+#### G. DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+
+Status:
+
+```text
+NEXT ENGINEERING ITEM
 ```
 
 Purpose:
 
-- confirm whether current Tauri configuration can load assets/data without the Python server;
-- identify blockers to offline installed operation;
-- determine whether current localStorage persistence is sufficient for V1 or whether storage changes are required;
-- identify packaging/documentation tasks before final productization.
+- Enable a restrictive Tauri Content Security Policy now that ordinary operation no longer needs a remote SheetJS CDN dependency.
+- Inspect current frontend/Tauri requirements before changing CSP.
+- Smoke-test all core runtime, export, reporting, and data-loading paths.
 
-#### D. Create From workflow
+Candidate from audit:
+
+```text
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+```
+
+Do not apply this blindly. Inspect current code first.
+
+#### H. DP-07 — Confirm and document Admin backup/restore coverage
+
+Status:
+
+```text
+V1 required
+```
+
+Known localStorage keys requiring coverage:
+
+```text
+vectair_fdms_movements_v3
+vectair_fdms_config
+cancelled_sorties_v1
+deleted_strips_v1
+booking_profiles_v1
+calendar_events_v1
+hours_log_v1
+```
+
+Purpose:
+
+- Confirm Admin backup/export captures all relevant localStorage keys.
+- Confirm restore/import restores all relevant keys.
+- Document any limitations plainly.
+
+#### I. DP-08 — First full release build smoke test on Windows
 
 Status:
 
@@ -1568,13 +1766,14 @@ V1 required
 
 Purpose:
 
-- convert the older “Duplicate → Create from…” concept into a clear Create From workflow;
-- allow efficient creation of related movements;
-- preserve timing/lifecycle semantics;
-- distinguish duplicate, create-from, reciprocal, booking-derived, and formation-derived flows;
-- avoid copying lifecycle-specific fields incorrectly.
+- Build the first full release package.
+- Confirm packaged runtime does not require Python server.
+- Confirm bundled assets/data load correctly.
+- Confirm offline operation.
+- Confirm native Save As export behaviour.
+- Confirm persistence behaviour and dev/release origin caveats.
 
-#### E. METAR Builder
+#### J. Create From workflow
 
 Status:
 
@@ -1584,12 +1783,28 @@ V1 required
 
 Purpose:
 
-- selectable/editable METAR components;
-- generated plain-text METAR-style output;
-- copy/paste into email or operational communication;
-- validation/formatting assistance sufficient for local operational use.
+- Convert the older “Duplicate → Create from…” concept into a clear Create From workflow.
+- Allow efficient creation of related movements.
+- Preserve timing/lifecycle semantics.
+- Distinguish duplicate, create-from, reciprocal, booking-derived, and formation-derived flows.
+- Avoid copying lifecycle-specific fields incorrectly.
 
-#### F. H6 History polish / integration
+#### K. METAR Builder
+
+Status:
+
+```text
+V1 required
+```
+
+Purpose:
+
+- Selectable/editable METAR components.
+- Generated plain-text METAR-style output.
+- Copy/paste into email or operational communication.
+- Validation/formatting assistance sufficient for local operational use.
+
+#### L. H6 History polish / integration
 
 Status:
 
@@ -1599,24 +1814,9 @@ V1 required closeout
 
 Purpose:
 
-- close remaining visual, documentation, wording, export-toast, edge-case, and smoke-test issues after H1–H5b.
+- Close remaining visual, documentation, wording, export-toast, edge-case, and smoke-test issues after H1–H5b.
 
-#### G. Desktop Productization implementation / offline installable build
-
-Status:
-
-```text
-V1 required
-```
-
-Purpose:
-
-- produce a fully independent, offline-capable, installable desktop application;
-- remove any normal-use dependency on Python server/browser harness;
-- document backup/update/troubleshooting procedures;
-- verify native exports and local data behaviour in the packaged app.
-
-#### H. Documentation refresh
+#### M. Installation / Update / Backup / Troubleshooting documentation
 
 Status:
 
@@ -1624,22 +1824,9 @@ Status:
 Required before V1 freeze
 ```
 
-Documentation must reflect:
+Documentation must reflect actual packaged-app behaviour after DP-08.
 
-- product name: Vectair Flite;
-- current Tauri desktop runtime/productization state;
-- installable/offline V1 behaviour;
-- local development run process;
-- backup/restore behaviour;
-- native Save As export behaviour;
-- History Retrieval H1–H5b completion;
-- H6 status if still open;
-- formation launch baseline;
-- Create From and METAR Builder behaviour;
-- known limitations;
-- V1 release scope and exclusions.
-
-#### I. Final V1 acceptance sweep
+#### N. Final V1 acceptance sweep
 
 Status:
 
@@ -1911,7 +2098,7 @@ Before V1 release, documentation must be updated to reflect:
 Status:
 
 ```text
-REQUIRED BEFORE V1 FREEZE
+README desktop rewrite complete. Remaining documentation pack still required before V1 freeze, especially Installation / Update / Backup / Troubleshooting after DP-08.
 ```
 
 ---
@@ -2119,26 +2306,37 @@ No Claude prompt should be issued until ChatGPT has already stated:
 
 ## 23. Desktop Productization audit record
 
-**Branch:** `claude/desktop-productization-audit-BsDcx`  
-**Status:** Implemented; review pending. Do not mark complete until Stuart passes review and branch is merged.  
-**Audit document:** `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`
+**Audit document:** `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`  
+**Status:** Complete as the current Desktop Productization planning baseline.
 
-**Release blocker identified:**
-- BLOCKER-1: SheetJS XLSX library loaded from CDN (`src/index.html` line 8). Breaks XLSX export offline. Must vendor before V1.
+Original release blocker identified:
 
-**V1 required fixes (not build-blocking, required before handover):**
-- V1-REQ-1: Add `tauri:dev` / `tauri:build` scripts to `package.json`.
-- V1-REQ-2: Rename `package.json` from `fdms-lite-dev-tooling` to `vectair-flite`.
-- V1-REQ-3: Rewrite README Getting Started / Architecture for desktop launch procedure.
+- BLOCKER-1: SheetJS XLSX library loaded from CDN in `src/index.html`. This would break XLSX export offline.
 
-**V1 recommended (not blocking):**
-- Enable CSP in `tauri.conf.json` after SheetJS is vendored.
-- Confirm Admin backup/restore covers all seven localStorage keys.
-- Document dev→release localStorage origin change.
+Resolution:
 
-**SQLite decision:** Not required for V1. localStorage with identifier `com.vectair.flite` is stable for single-operator use. V2 workstream.
+- Resolved by DP-03. SheetJS is now vendored locally at `src/lib/xlsx.full.min.js` and loaded from `./lib/xlsx.full.min.js`.
 
-**Next implementation ticket:** DP-03 — Vendor SheetJS. Single file download + one `<script>` tag change in `src/index.html`. See audit document section 12 for exact steps.
+Completed audit follow-ons:
+
+- DP-03 — Vendor SheetJS for offline operation.
+- DP-04 — Add `tauri:dev` / `tauri:build` scripts and update `package.json` identity.
+- DP-05 — Rewrite README Getting Started / Architecture for desktop launch procedure.
+
+Remaining audit-derived V1 work:
+
+- DP-06 — Enable and smoke-test CSP after SheetJS is vendored.
+- DP-07 — Confirm Admin backup/restore covers all seven localStorage keys.
+- DP-08 — First full release build smoke test on Windows.
+- Document dev→release localStorage origin change in the final Installation / Update / Backup / Troubleshooting documentation.
+
+SQLite decision:
+
+```text
+SQLite is not required for V1.
+```
+
+localStorage remains acceptable for V1 single-operator desktop use if backup/export/restore is confirmed and documented. SQLite/local database remains V2 unless a concrete V1 release-blocking persistence failure appears.
 
 ---
 
@@ -2147,13 +2345,29 @@ No Claude prompt should be issued until ChatGPT has already stated:
 The next work item is:
 
 ```text
-DP-05: README / Getting Started rewrite for desktop launch and release build
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
 ```
 
-DP-04 (package.json identity and Tauri scripts) is implemented on branch `claude/package-json-tauri-scripts-RMAsu`; smoke testing pending before merge.
+Before issuing the Claude implementation ticket, ChatGPT should inspect the current codebase for CSP-sensitive requirements:
 
-DP-03 (Vendor SheetJS for offline operation) is implemented on branch and pending Stuart's smoke test pass.
+```text
+inline <script>
+inline event handlers
+inline style requirements
+eval() / new Function()
+remote scripts, styles, images, fonts, or fetch/connect targets
+data: / blob: URL usage
+Tauri scheme / asset loading requirements
+```
 
-Monthly Return ghost-count contamination is implemented on branch and pending Stuart's smoke test pass.
+Suggested diagnostic commands from repo root:
 
-Live Board counter aggregation and computed tooltips is implemented on branch and pending Stuart's smoke test pass.
+```powershell
+cd C:\Users\dmshs\FDMS
+Select-String -Path .\src\**\*.html,.\src\**\*.js -Pattern "<script","onclick=","onchange=","oninput=","onmouseover=","eval\(","new Function","data:","blob:","http://","https://" -CaseSensitive:$false
+Get-Content .\src-tauri\tauri.conf.json
+Get-Content .\src-tauri\capabilities\default.json
+```
+
+Do not change runtime files until the CSP inspection is complete and the implementation ticket is precise.
+
