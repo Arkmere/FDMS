@@ -21,9 +21,11 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - The current next engineering item is:
 
 ```text
-Desktop Productization audit
+Vendor SheetJS for offline operation (DP-03)
 ```
 
+- **Desktop Productization audit** is implemented on branch `claude/desktop-productization-audit-BsDcx`; review pending. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
+- **One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.
 - **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
 - **Live Board summary counter aggregation and computed tooltips** is complete and merged.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
@@ -404,22 +406,41 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-Desktop Productization audit
-```
+DP-03 — Vendor SheetJS for offline operation
 
-Monthly Return ghost-count contamination is implemented on branch; smoke testing pending before merge.
+Desktop Productization audit is implemented on branch claude/desktop-productization-audit-BsDcx; review pending before merge.
 
-Live Board counter aggregation and computed tooltips is implemented on branch; smoke testing pending before merge.
+The audit identified one V1 offline release blocker:
 
-### 6.2 Next major integrity item
+SheetJS is loaded from CDN in src/index.html and must be vendored locally.
 
-```text
-Monthly Return ghost-count contamination
-```
+DP-03 should be a narrow implementation ticket:
 
-This should follow the Live Board counter work while the counting/reporting model is mentally loaded.
+add a pinned local SheetJS file at src/lib/xlsx.full.min.js;
+update src/index.html to load ./lib/xlsx.full.min.js;
+do not change export logic;
+do not change Rust/Tauri commands;
+verify XLSX export works offline in Tauri.
+6.2 Next productization sequence
 
-Monthly Return, Dashboard, and Insights use nominal strip-type reporting unless explicitly redesigned.
+After DP-03, continue the desktop productization closeout sequence:
+
+DP-04 — Update package.json identity and add Tauri dev/build scripts
+DP-05 — Rewrite README / Getting Started for desktop launch and release build
+DP-06 — Enable and smoke-test CSP after SheetJS is vendored
+DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
+DP-08 — First full release build smoke test on Windows
+
+Monthly Return, Dashboard, and Insights retain the nominal strip-type reporting model unless explicitly redesigned:
+
+LOC = 2
+DEP = 1
+ARR = 1
+OVR = 0
+T&G = +2
+O/S = +1
+
+Live Board daily counters remain separate and event-based / EGOW-realized.
 
 ---
 
@@ -2106,13 +2127,40 @@ No Claude prompt should be issued until ChatGPT has already stated:
 
 ---
 
-## 23. Immediate next action
+## 23. Desktop Productization audit record
+
+**Branch:** `claude/desktop-productization-audit-BsDcx`  
+**Status:** Implemented; review pending. Do not mark complete until Stuart passes review and branch is merged.  
+**Audit document:** `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`
+
+**Release blocker identified:**
+- BLOCKER-1: SheetJS XLSX library loaded from CDN (`src/index.html` line 8). Breaks XLSX export offline. Must vendor before V1.
+
+**V1 required fixes (not build-blocking, required before handover):**
+- V1-REQ-1: Add `tauri:dev` / `tauri:build` scripts to `package.json`.
+- V1-REQ-2: Rename `package.json` from `fdms-lite-dev-tooling` to `vectair-flite`.
+- V1-REQ-3: Rewrite README Getting Started / Architecture for desktop launch procedure.
+
+**V1 recommended (not blocking):**
+- Enable CSP in `tauri.conf.json` after SheetJS is vendored.
+- Confirm Admin backup/restore covers all seven localStorage keys.
+- Document dev→release localStorage origin change.
+
+**SQLite decision:** Not required for V1. localStorage with identifier `com.vectair.flite` is stable for single-operator use. V2 workstream.
+
+**Next implementation ticket:** DP-03 — Vendor SheetJS. Single file download + one `<script>` tag change in `src/index.html`. See audit document section 12 for exact steps.
+
+---
+
+## 24. Immediate next action
 
 The next work item is:
 
 ```text
-Desktop Productization audit
+DP-03: Vendor SheetJS for offline operation
 ```
+
+See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md` section 12 for the exact implementation steps.
 
 Monthly Return ghost-count contamination is implemented on branch and pending Stuart's smoke test pass.
 
