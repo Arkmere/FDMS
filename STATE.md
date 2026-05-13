@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-13 (Europe/London, rev 6 — DP-03 SheetJS vendored offline)
+Last updated: 2026-05-13 (Europe/London, rev 7 — DP-04 package.json identity and Tauri scripts)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -18,8 +18,9 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **Vectair Flite** (“Flite”) is the current product name.
 - Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
 - **V1 is not release-ready.**
-- The current next engineering item is: **review and merge pending branches, then determine next V1 blocker.**
+- The current next engineering item is: **DP-05 — README / Getting Started rewrite for desktop launch and release build.**
 
+- **DP-04 (Update package.json identity and add Tauri dev/build scripts)** is implemented on branch `claude/package-json-tauri-scripts-RMAsu`; smoke testing pending before merge. `package.json` name is now `vectair-flite`; description updated; `tauri:dev` and `tauri:build` scripts added.
 - **DP-03 (Vendor SheetJS for offline operation)** is implemented on branch `claude/vendor-sheetjs-offline-HRqTc`; smoke testing pending before merge. SheetJS (xlsx 0.18.5) is now vendored at `src/lib/xlsx.full.min.js`; CDN reference removed. Offline XLSX export blocker is addressed pending smoke test.
 - **Desktop Productization audit** is implemented on branch `claude/desktop-productization-audit-BsDcx`; review pending. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
 - ~~**One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.~~ **Resolved by DP-03.**
@@ -403,26 +404,18 @@ The following workstreams should be treated as merged and complete for current p
 ### 6.1 Immediate next item
 
 ```text
-DP-03 — Vendor SheetJS for offline operation
+DP-05 — README / Getting Started rewrite for desktop launch and release build
 
-Desktop Productization audit is implemented on branch claude/desktop-productization-audit-BsDcx; review pending before merge.
+DP-03 (Vendor SheetJS) is implemented on branch claude/vendor-sheetjs-offline-HRqTc; smoke testing pending before merge.
+DP-04 (package.json identity and Tauri scripts) is implemented on branch claude/package-json-tauri-scripts-RMAsu; smoke testing pending before merge.
+```
 
-The audit identified one V1 offline release blocker:
+### 6.2 Next productization sequence
 
-SheetJS is loaded from CDN in src/index.html and must be vendored locally.
+After DP-04, continue the desktop productization closeout sequence:
 
-DP-03 should be a narrow implementation ticket:
-
-add a pinned local SheetJS file at src/lib/xlsx.full.min.js;
-update src/index.html to load ./lib/xlsx.full.min.js;
-do not change export logic;
-do not change Rust/Tauri commands;
-verify XLSX export works offline in Tauri.
-6.2 Next productization sequence
-
-After DP-03, continue the desktop productization closeout sequence:
-
-DP-04 — Update package.json identity and add Tauri dev/build scripts
+~~DP-03 — Vendor SheetJS for offline operation~~ **Implemented; smoke testing pending.**
+~~DP-04 — Update package.json identity and add Tauri dev/build scripts~~ **Implemented; smoke testing pending.**
 DP-05 — Rewrite README / Getting Started for desktop launch and release build
 DP-06 — Enable and smoke-test CSP after SheetJS is vendored
 DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys
@@ -2154,10 +2147,12 @@ No Claude prompt should be issued until ChatGPT has already stated:
 The next work item is:
 
 ```text
-DP-03: Vendor SheetJS for offline operation
+DP-05: README / Getting Started rewrite for desktop launch and release build
 ```
 
-See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md` section 12 for the exact implementation steps.
+DP-04 (package.json identity and Tauri scripts) is implemented on branch `claude/package-json-tauri-scripts-RMAsu`; smoke testing pending before merge.
+
+DP-03 (Vendor SheetJS for offline operation) is implemented on branch and pending Stuart's smoke test pass.
 
 Monthly Return ghost-count contamination is implemented on branch and pending Stuart's smoke test pass.
 
