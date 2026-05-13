@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-11 (Europe/London, rev 5 — Monthly Return ghost-count contamination)
+Last updated: 2026-05-13 (Europe/London, rev 6 — DP-03 SheetJS vendored offline)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -18,14 +18,11 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - **Vectair Flite** (“Flite”) is the current product name.
 - Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
 - **V1 is not release-ready.**
-- The current next engineering item is:
+- The current next engineering item is: **review and merge pending branches, then determine next V1 blocker.**
 
-```text
-Vendor SheetJS for offline operation (DP-03)
-```
-
+- **DP-03 (Vendor SheetJS for offline operation)** is implemented on branch `claude/vendor-sheetjs-offline-HRqTc`; smoke testing pending before merge. SheetJS (xlsx 0.18.5) is now vendored at `src/lib/xlsx.full.min.js`; CDN reference removed. Offline XLSX export blocker is addressed pending smoke test.
 - **Desktop Productization audit** is implemented on branch `claude/desktop-productization-audit-BsDcx`; review pending. See `docs/DESKTOP_PRODUCTIZATION_AUDIT.md`.
-- **One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.
+- ~~**One release blocker identified:** SheetJS loaded from CDN (`src/index.html` line 8). Must be vendored locally before V1 ships offline.~~ **Resolved by DP-03.**
 - **Monthly Return ghost-count contamination** is implemented on branch; smoke testing pending before merge.
 - **Live Board summary counter aggregation and computed tooltips** is complete and merged.
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.

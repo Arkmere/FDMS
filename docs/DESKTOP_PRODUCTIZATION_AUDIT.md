@@ -107,6 +107,8 @@ All five formats referenced in `tauri.conf.json` are present on disk. Icon bundl
 
 **Resolution (next implementation ticket):** Download `xlsx.full.min.js` from the SheetJS CDN at a pinned version, place it at `src/lib/xlsx.full.min.js`, and update the `<script>` tag to the local path. No other code changes required. The library is already consumed via the global `XLSX` window object.
 
+**STATUS — RESOLVED (DP-03, branch `claude/vendor-sheetjs-offline-HRqTc`):** SheetJS 0.18.5 has been vendored at `src/lib/xlsx.full.min.js`. The CDN `<script>` tag in `src/index.html` has been replaced with `<script src="./lib/xlsx.full.min.js"></script>`. The `window.XLSX` global is preserved. Offline XLSX export blocker is addressed; smoke testing pending before merge.
+
 ---
 
 ## 4. V1 required fixes (not blocking build, but required before handing to users)
@@ -364,10 +366,10 @@ After DP-03, the next candidates in priority order are:
 | Capabilities / permissions | Ready | Minimal and correct |
 | CSS / local assets | Ready | Fully self-contained |
 | CSV reference data | Ready | Bundled in `src/data/` |
-| JS module architecture | Ready | Clean ES module graph, no CDN JS besides SheetJS |
+| JS module architecture | Ready | Clean ES module graph, fully self-contained |
 | Export / Save As | Ready (Tauri paths) | Both CSV and XLSX native dialogs work |
-| SheetJS / XLSX | **BLOCKED** | CDN load — BLOCKER-1, must vendor |
-| Offline capability | **BLOCKED** | Depends on BLOCKER-1 |
+| SheetJS / XLSX | **Pending smoke test** | Vendored locally at `src/lib/xlsx.full.min.js` (DP-03) |
+| Offline capability | **Pending smoke test** | CDN dependency removed (DP-03); smoke test before merge |
 | package.json identity | Stale | Must update before V1 |
 | README | Stale | Must rewrite before V1 |
 | localStorage stability | Acceptable for V1 | Origin change dev→release documented; backup REC noted |
@@ -375,4 +377,4 @@ After DP-03, the next candidates in priority order are:
 | CSP | Recommended | `null` currently; enable after SheetJS vendored |
 | Code signing | Not required for V1 internal use | V2 for broader distribution |
 
-**Overall V1 release readiness: blocked on BLOCKER-1 (SheetJS CDN). All other components are structurally sound.**
+**Overall V1 release readiness: BLOCKER-1 (SheetJS CDN) resolved by DP-03 — pending smoke test before merge. All other components are structurally sound.**
