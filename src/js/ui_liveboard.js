@@ -946,7 +946,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // the actual-mode cell directly, or via the estimate-mode cell redirected
     // above).  Promote to ACTIVE immediately.
     // Only depActual triggers this; arrActual does not fabricate a dep stamp.
-    const freshMovement = getMovements().find(m => m.id === movementId);
+    const freshMovement = getMovements().find(m => String(m.id) === String(movementId));
     if (effectiveFieldName === 'depActual' && freshMovement && freshMovement.status === 'PLANNED') {
       updateMovement(movementId, { status: 'ACTIVE' });
     }
@@ -7065,11 +7065,17 @@ function openEditMovementModal(m) {
         'durationMinutes'
       ];
 
-      const changedTimingField = timingChangePriority.find(field => {
-        const before = m[field] ?? null;
-        const after = updates[field] ?? null;
-        return String(before ?? '') !== String(after ?? '');
-      });
+      // Normalise timing values: null / undefined / "" are all treated as absent.
+      // This prevents a blank form field from being read as a meaningful change
+      // relative to a stored null/undefined value (e.g. arrActual).
+      const _normTiming = v => {
+        if (v === null || v === undefined) return '';
+        const s = String(v).trim();
+        return s;
+      };
+      const changedTimingField = timingChangePriority.find(field =>
+        _normTiming(m[field]) !== _normTiming(updates[field])
+      );
 
       if (changedTimingField) {
         const timingPatch = recalculateTimingModel(savedMovement, changedTimingField);
@@ -7587,7 +7593,24 @@ function openDuplicateMovementModal(m) {
     // Enrich with auto-populated fields
     movement = enrichMovementData(movement);
 
-    createMovement(movement);
+    // Always create duplicates as PLANNED with no actual-time fields.
+    // determineInitialStatus may have returned ACTIVE for a past ETD; override it.
+    // Actual fields from the form are also cleared so no inherited ATD/ATA can survive.
+    movement.status               = "PLANNED";
+    movement.depActual            = "";
+    movement.arrActual            = "";
+    movement.depActualExact       = "";
+    movement.outcomeTime          = "";
+    movement.actualDestinationAd  = "";
+    movement.actualDestinationText = "";
+    movement.outcomeStatus        = "NORMAL";
+    movement.outcomeReason        = "";
+
+    const _created = createMovement(movement);
+    // createMovement contains its own auto-activation guard; undo that for duplicates.
+    if (_created && _created.status !== "PLANNED") {
+      updateMovement(_created.id, { status: "PLANNED" });
+    }
     renderLiveBoard();
     renderHistoryBoard();
     if (window.updateDailyStats) window.updateDailyStats();
