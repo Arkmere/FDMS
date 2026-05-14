@@ -54,6 +54,8 @@ import {
   getVKBStatus
 } from "./vkb.js";
 
+import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
+
 /* -----------------------------
    Toast Notification System
 ------------------------------ */
@@ -903,26 +905,31 @@ function initAdminPanelHandlers() {
   // ── Session export ─────────────────────────────────────────────
   const btnExport = document.getElementById("btnExportSession");
   if (btnExport) {
-    btnExport.addEventListener("click", () => {
+    btnExport.addEventListener("click", async () => {
       try {
         const backup = exportSessionJSON();
+        const backupJson = JSON.stringify(backup, null, 2);
 
-        // Timestamped filename: fdms_backup_YYYYMMDD_HHMMZ.json
+        // Timestamped filename: vectair-flite-backup-YYYYMMDD-HHMMSS.json
         const now = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
-        const ts = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}_${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}Z`;
-        const filename = `fdms_backup_${ts}.json`;
+        const ts = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}-${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}`;
+        const filename = `vectair-flite-backup-${ts}.json`;
 
-        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast("Backup created successfully", 'success');
+        const result = await saveTextFileWithDialogOrDownload(backupJson, filename);
+
+        if (result === 'saved') {
+          showToast("Backup saved.", 'success');
+        } else if (result === 'cancelled') {
+          showToast("Backup export cancelled.", 'info');
+        } else if (result === 'downloaded') {
+          showToast("Backup downloaded by browser fallback. Check your Downloads folder.", 'info');
+        } else {
+          showToast("Native Save As failed; browser download fallback was used. Check your Downloads folder.", 'warning');
+        }
       } catch (e) {
-        showToast(`Backup failed: ${e.message}`, 'error');
+        showToast("Backup export failed.", 'error');
+        console.error("FDMS: backup export error", e);
       }
     });
   }

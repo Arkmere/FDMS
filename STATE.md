@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-14 (Europe/London, rev 10 — DP-07 Admin backup/restore full coverage confirmed)
+Last updated: 2026-05-14 (Europe/London, rev 11 — DP-07A Admin backup export wired to native Save As helper)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -1747,6 +1747,8 @@ Delivered:
 - Import preflight summary updated to show counts for all seven key categories.
 - `README.md` updated with correct key names and backup/restore instructions.
 - `STATE.md` records confirmed key list.
+- Admin backup export now uses `saveTextFileWithDialogOrDownload` from `export_utils.js`; native Save As dialog in Tauri, browser fallback otherwise.
+- Backup filename format: `vectair-flite-backup-YYYYMMDD-HHMMSS.json`.
 
 #### I. DP-08 — First full release build smoke test on Windows
 
