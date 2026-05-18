@@ -898,12 +898,14 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // depPlanned is intentionally left unchanged — the ETD is preserved.
     // ARR strips are excluded: their dep-side cell is always depActual already.
     let effectiveFieldName = fieldName;
+    let _depActualRedirect = false; // true when depPlanned was redirected to depActual
     if (fieldName === 'depPlanned' && inputType === 'time' && storedValue) {
       const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
       const preFt = (preSaveMvt?.flightType || '').toUpperCase();
       if ((preFt === 'DEP' || preFt === 'LOC') && preSaveMvt?.status === 'PLANNED') {
         if (checkPastTime(storedValue, preSaveMvt.dof).isPast) {
           effectiveFieldName = 'depActual';
+          _depActualRedirect = true;
         }
       }
     }
@@ -937,8 +939,10 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
     // Part E: For time field edits on ACTIVE strips, re-evaluate whether status
     // should revert to PLANNED (if the new time is now outside the activate window).
+    // Skip for the dep-actual redirect path: Part F is about to promote to ACTIVE,
+    // and reEvaluateStatusAfterTimeChange must not interfere with that transition.
     const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(effectiveFieldName);
-    if (isTimeField) {
+    if (isTimeField && !_depActualRedirect) {
       reEvaluateStatusAfterTimeChange(movementId);
     }
 
@@ -3863,11 +3867,9 @@ export function renderLiveBoard() {
  * @returns {string} Date string
  */
 function getTodayDateString() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // Use UTC date so DOF defaults are consistent with UTC-authoritative checkPastTime
+  // and createMovement's own UTC-based auto-activation guard.
+  return new Date().toISOString().split('T')[0];
 }
 
 /**
@@ -7605,6 +7607,38 @@ function openDuplicateMovementModal(m) {
     movement.actualDestinationText = "";
     movement.outcomeStatus        = "NORMAL";
     movement.outcomeReason        = "";
+
+    // Reset planned times to fresh UTC-future defaults (Option A).
+    // This prevents autoActivatePlannedMovements() from immediately re-activating
+    // the duplicate during the next renderLiveBoard() call if the copied ETD/ETA
+    // is in the past (e.g. duplicate of a strip that already departed/arrived).
+    {
+      const _dupCfg = getConfig();
+      const _dupNow = new Date();
+      const _utcHHMM = `${String(_dupNow.getUTCHours()).padStart(2,'0')}:${String(_dupNow.getUTCMinutes()).padStart(2,'0')}`;
+      const _dupFt   = (movement.flightType || '').toUpperCase();
+      const _dupDur  = (movement.durationMinutes > 0) ? movement.durationMinutes : 0;
+      // For OVR/ARR whose auto-activation is enabled by default, ensure the planned
+      // time lands beyond the configured auto-activation window (default 30 min).
+      const _ovrWin  = Math.max(_dupCfg.autoActivateOvrMinutes || 30, 30) + 5;
+      const _arrWin  = Math.max(_dupCfg.autoActivateArrMinutes || 30, 30) + 5;
+
+      if (_dupFt === 'DEP') {
+        const dep = addMinutesToTime(_utcHHMM, _dupCfg.depOffsetMinutes ?? 10);
+        movement.depPlanned = dep;
+        if (_dupDur > 0) movement.arrPlanned = addMinutesToTime(dep, _dupDur);
+      } else if (_dupFt === 'LOC') {
+        const dep = addMinutesToTime(_utcHHMM, _dupCfg.locOffsetMinutes ?? 10);
+        movement.depPlanned = dep;
+        if (_dupDur > 0) movement.arrPlanned = addMinutesToTime(dep, _dupDur);
+      } else if (_dupFt === 'ARR') {
+        movement.arrPlanned = addMinutesToTime(_utcHHMM, Math.max(_dupCfg.arrOffsetMinutes ?? 90, _arrWin));
+      } else if (_dupFt === 'OVR') {
+        const dep = addMinutesToTime(_utcHHMM, Math.max(_dupCfg.ovrOffsetMinutes ?? 0, _ovrWin));
+        movement.depPlanned = dep;
+        if (_dupDur > 0) movement.arrPlanned = addMinutesToTime(dep, _dupDur);
+      }
+    }
 
     const _created = createMovement(movement);
     // createMovement contains its own auto-activation guard; undo that for duplicates.
