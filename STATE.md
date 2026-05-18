@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-14 (Europe/London, rev 11 — DP-07A Admin backup export wired to native Save As helper)
+Last updated: 2026-05-18 (Europe/London, rev 12 — DP-08 version alignment, release build validated, Windows smoke test pending)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -21,7 +21,8 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 - The current phase is **Desktop Productization / V1 closeout**.
 - **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
 - **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
-- The current next engineering item is: **DP-08 — First full release build smoke test on Windows.**
+- **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed. Windows manual smoke test is pending on Windows hardware.
+- The current next engineering item is: **DP-08 Windows manual smoke test** (install and exercise the packaged app on Windows), then **Create From workflow**.
 
 Recently closed / consolidated:
 
@@ -36,7 +37,7 @@ Current open V1 closeout sequence:
 
 1. ~~**DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**~~ **Complete — smoke-tested.**
 2. ~~**DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**~~ **Complete — pushed.**
-3. **DP-08 — First full release build smoke test on Windows.**
+3. **DP-08 — First full release build smoke test on Windows.** Version alignment complete. Build validated (Linux DEB/RPM produced). **Windows manual smoke test pending.**
 4. **Create From workflow.**
 5. **METAR Builder.**
 6. **H6 History polish / integration closeout.**
@@ -421,6 +422,7 @@ The following workstreams should be treated as merged and complete for current p
 | DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
 | DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
 | DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
+| DP-08 — Version alignment and release build validation | Complete — pushed. Windows smoke test pending. |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -1537,7 +1539,7 @@ The current confirmed V1 required list is:
 6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
 7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
 8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
-9. DP-08 — First full release build smoke test on Windows.
+9. DP-08 — First full release build smoke test on Windows. **Version alignment + build validation complete — pushed. Windows manual smoke test pending.**
 10. Create From workflow.
 11. METAR Builder.
 12. H6 History polish / integration closeout.
@@ -1755,17 +1757,39 @@ Delivered:
 Status:
 
 ```text
-V1 required
+Version alignment complete. Build validated. Windows manual smoke test pending.
 ```
 
-Purpose:
+**Version alignment decision:** All package identifiers aligned to **1.0.0** as the V1 release candidate version.
 
-- Build the first full release package.
-- Confirm packaged runtime does not require Python server.
-- Confirm bundled assets/data load correctly.
-- Confirm offline operation.
-- Confirm native Save As export behaviour.
-- Confirm persistence behaviour and dev/release origin caveats.
+| File | Before | After |
+|---|---|---|
+| `package.json` | 1.0.0 | 1.0.0 (unchanged — was already correct) |
+| `src-tauri/tauri.conf.json` | 0.1.0 | **1.0.0** |
+| `src-tauri/Cargo.toml` | 0.1.0 | **1.0.0** |
+
+**Build blockers found and resolved:**
+
+- `src-tauri/icons/*.png` were RGB (no alpha channel). Tauri requires RGBA. All PNGs converted to RGBA.
+- `src-tauri/icons/icon.icns` was referenced in bundle config but did not exist. Generated from `icon.png` using `png2icns`.
+
+**Build output (Linux CI environment — validates build system; Windows installer requires Windows hardware):**
+
+```text
+src-tauri/target/release/vectair-flite        (11 MB Linux binary)
+src-tauri/target/release/bundle/deb/Vectair Flite_1.0.0_amd64.deb  (3.7 MB)
+src-tauri/target/release/bundle/rpm/Vectair Flite-1.0.0-1.x86_64.rpm  (3.7 MB)
+```
+
+AppImage bundle failed in container due to FUSE/sandbox limitation — not a code defect.
+
+**Windows installer build:** Must be run on Windows to produce `vectair-flite.exe`, `.msi`, and NSIS `.exe` installer. Run `npm run tauri:build` from the project root on Windows.
+
+**Windows manual smoke test matrix:** Pending execution on Windows hardware. See smoke test checklist in section 21.7.
+
+**Known release blockers from DP-08:** None from the codebase. Icon files corrected and committed. Version identifiers aligned. Build system validates correctly.
+
+**Next step:** Run `npm run tauri:build` on Windows, install the generated NSIS or MSI package, and execute the manual smoke test matrix (items 1–15 from the DP-08 ticket).
 
 #### J. Create From workflow
 
