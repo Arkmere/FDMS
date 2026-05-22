@@ -7300,16 +7300,29 @@ function openEditMovementModal(m) {
 function openDuplicateMovementModal(m) {
   const flightType = m.flightType || "DEP";
 
-  // Calculate new ETD and ETA based on original strip's ETA/ATA
-  // ETD = ETA/ATA + 10 minutes
-  // ETA = ETD + 20 minutes
+  // Calculate suggested duplicate times from config offsets and durations.
   let newETD = "";
   let newETA = "";
 
-  const originalETA = m.arrActual || m.arrPlanned || "";
-  if (originalETA) {
-    newETD = addMinutesToTime(originalETA, 10);
-    newETA = addMinutesToTime(newETD, 20);
+  {
+    const _cfg = getConfig();
+    const _ft  = flightType.toUpperCase();
+    // Base reference: last known time for the source strip.
+    const _ref = m.arrActual || m.arrPlanned || m.depActual || m.depPlanned || "";
+    if (_ref) {
+      if (_ft === 'DEP') {
+        newETD = addMinutesToTime(_ref, _cfg.depOffsetMinutes ?? 10);
+        newETA = addMinutesToTime(newETD, getDefaultFlightDuration('DEP'));
+      } else if (_ft === 'LOC') {
+        newETD = addMinutesToTime(_ref, _cfg.locOffsetMinutes ?? 10);
+        newETA = addMinutesToTime(newETD, getDefaultFlightDuration('LOC'));
+      } else if (_ft === 'ARR') {
+        newETA = addMinutesToTime(_ref, _cfg.arrOffsetMinutes ?? 90);
+      } else if (_ft === 'OVR') {
+        newETD = addMinutesToTime(_ref, _cfg.ovrOffsetMinutes ?? 0);
+        newETA = addMinutesToTime(newETD, getDefaultFlightDuration('OVR'));
+      }
+    }
   }
 
   openModal(`
