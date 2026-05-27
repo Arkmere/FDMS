@@ -1,6 +1,6 @@
-; DP-09c: NSIS installer hooks for Vectair Flite
+; NSIS installer hooks for Vectair Flite
 ;
-; === Root cause (identified in DP-09c) ===
+; === Background ===
 ;
 ; NSIS_HOOK_POSTINSTALL runs inside Section Install, BEFORE the MUI Finish
 ; page is shown.  In interactive (non-passive, non-silent) mode, the Tauri
@@ -17,10 +17,9 @@
 ;
 ;   !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateOrUpdateDesktopShortcut
 ;
-; This callback fires AFTER Section Install completes, so:
-;   - DP-09b created the shortcut with explicit icon inside the hook, but
-;   - the Finish page then called CreateOrUpdateDesktopShortcut which ran
-;     CreateShortcut without the icon arg, overwriting our fix.
+; This callback fires AFTER Section Install completes, so without this hook
+; the Finish page would call CreateShortcut without the icon arg, leaving
+; IconLocation as ",0".
 ;
 ; === Fix ===
 ;
@@ -36,15 +35,8 @@
 ;    cannot overwrite our explicit-icon shortcut.
 ; 3. Recreate the Start Menu shortcut (created just before this hook runs)
 ;    with the same explicit icon.
-; 4. Write a diagnostic marker file so the Windows tester can confirm the
-;    hook executed (harmless small text file in $INSTDIR).
 
 !macro NSIS_HOOK_POSTINSTALL
-  ; Diagnostic marker — confirms this hook ran; safe to leave in place.
-  FileOpen $0 "$INSTDIR\dp09c-hook-ran.txt" w
-  FileWrite $0 "NSIS_HOOK_POSTINSTALL executed (DP-09c)$\r$\n"
-  FileClose $0
-
   ; --- Start Menu shortcut ---
   ; CreateOrUpdateStartMenuShortcut was called just above this hook in
   ; Section Install; $AppStartMenuFolder is set by MUI_STARTMENU_WRITE_BEGIN.
