@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-05-21 (Europe/London, rev 15 — DP-09c Windows shortcut icon hook execution repair: $NoShortcutMode fix for Finish page callback, version 1.0.3)
+Last updated: 2026-05-28 (Europe/London, rev 16 — V1 snag list cleared; History/Cancelled IA relocation complete; REL-POLISH-001 complete; roadmap resumes)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -15,17 +15,16 @@ ChatGPT diagnoses, architects, writes tickets, reviews implementation, and maint
 ## 0. Current headline status
 
 - **Main branch is the authoritative baseline.**
+- **Current confirmed `main`:** `ffe4206 REL-POLISH-001: remove DP-09c diagnostic marker from NSIS installer hook`.
+- **Working tree status at handover:** `main` clean and up to date with `origin/main`.
 - **Vectair Flite** (“Flite”) is the current product name.
 - Legacy references to **FDMS**, **FDMS Lite**, **Vectair FDMS**, or **Vectair FDMS Lite** refer to the same product unless explicitly stated otherwise.
-- **V1 is not release-ready.**
-- The current phase is **Desktop Productization / V1 closeout**.
-- **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
-- **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
-- **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed. Windows manual smoke test is pending on Windows hardware.
-- **DP-09 — Windows desktop icon packaging repair** is partially complete. Runtime/taskbar icon now shows Flite logo. Desktop shortcut remained blank (DP-09b).
-- **DP-09b — Windows shortcut icon metadata repair** did not fix the desktop shortcut. Diagnosis in DP-09c found the root cause: in interactive mode the Finish page callback runs `CreateOrUpdateDesktopShortcut` AFTER `NSIS_HOOK_POSTINSTALL`, overwriting the hook's explicit-icon shortcut.
-- **DP-09c — NSIS hook execution repair** is complete and pushed. Fix: hook creates desktop shortcut with explicit icon then sets `$NoShortcutMode = 1`; `CreateOrUpdateDesktopShortcut` checks this flag and returns early, preserving the explicit-icon shortcut. Version 1.0.3. Diagnostic marker file written to `$INSTDIR\dp09c-hook-ran.txt`. Pending Windows manual confirmation.
-- The current next engineering item is: **DP-09c Windows manual smoke test** (install 1.0.3 NSIS setup; confirm `dp09c-hook-ran.txt` exists in install dir; run shortcut metadata check; confirm Flite icon), then **Create From workflow**.
+- The current phase is **V1 closeout / main roadmap resumption**.
+- The recent V1 snag list is **cleared**.
+- **Known V1 snags remaining:** `0`.
+- **DP-09c — NSIS hook execution repair** was completed, confirmed, and superseded by **REL-POLISH-001**.
+- **REL-POLISH-001** removed the temporary `dp09c-hook-ran.txt` installer diagnostic marker from `src-tauri/nsis-hooks.nsh` while preserving the desktop and Start Menu shortcut icon repair logic.
+- The project should now resume the main planned roadmap/task list rather than reopening the cleared snag list.
 
 Recently closed / consolidated:
 
@@ -35,25 +34,30 @@ Recently closed / consolidated:
 - **DP-03 — Vendor SheetJS for offline operation** is complete and merged. SheetJS `xlsx` 0.18.5 is vendored at `src/lib/xlsx.full.min.js`; the CDN reference has been removed.
 - **DP-04 — package.json identity and Tauri dev/build scripts** is complete and merged. `package.json` uses `vectair-flite` and includes `tauri:dev` / `tauri:build` scripts.
 - **DP-05 — README / Getting Started rewrite for desktop launch and release build** is complete and pushed.
+- **DP-06 — Enable and smoke-test CSP after SheetJS is vendored** is complete and pushed.
+- **DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys** is complete and pushed.
+- **DP-08 — Release build smoke test** version alignment and build validation are complete and pushed; release-build behaviour is part of final acceptance sweep rather than a current standalone blocker.
+- **DP-09 / DP-09b / DP-09c — Windows shortcut icon repair sequence** is complete/superseded. The final accepted logic is preserved; the temporary diagnostic marker has been removed by REL-POLISH-001.
+- **EGOW-COUNT-001** — manual `movement.egowCode` now takes precedence over VKB registration-derived EGOW flight type in reporting classification.
+- **DUP-REG-001** — duplicate modal no longer overwrites submitted planned times with fresh UTC defaults.
+- **DUP-REG-001b** — duplicate modal suggestions now respect configured movement offsets/durations.
+- **INPUT-NORM-001** — operational text fields are normalized to uppercase at save boundary across New, LOC, Edit, Duplicate, and Formation paths; human-name fields remain unforced.
+- **HIST-FILTER-UX-001 / 001a / 001b** — Historic Strip Board filter toolbar/collapse/configurable visibility completed.
+- **HIST-LAYOUT-002 / 002a** — History toolbar/layout refactor completed and Admin filter config re-linked.
+- **History/Cancelled IA relocation** — Cancelled Sorties and Deleted Strips moved out of History into a top-level `Cancelled` tab.
+- **REL-POLISH-001** — DP-09c installer diagnostic marker removed from `src-tauri/nsis-hooks.nsh`; actual shortcut icon fix logic retained.
 
-Current open V1 closeout sequence:
+Current remaining planned V1 sequence:
 
-1. ~~**DP-06 — Enable and smoke-test CSP after SheetJS is vendored.**~~ **Complete — smoke-tested.**
-2. ~~**DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.**~~ **Complete — pushed.**
-3. **DP-08 — First full release build smoke test on Windows.** Version alignment complete. Build validated (Linux DEB/RPM produced). **Windows manual smoke test pending.**
-4. **DP-09 — Windows desktop icon packaging repair.** ICO regenerated; runtime/taskbar icon fixed. Desktop shortcut icon still blank — see DP-09b.
-5. **DP-09b — Windows shortcut icon metadata repair.** Hook ran but Finish page callback overwrote shortcut — see DP-09c.
-6. ~~**DP-09c — NSIS hook execution repair.**~~ **Complete — pushed.** `$NoShortcutMode = 1` prevents Finish page overwrite. Version 1.0.3. Pending Windows manual confirmation.
-6. **Create From workflow.**
-7. **METAR Builder.**
-8. **H6 History polish / integration closeout.**
-9. **Installation / Update / Backup / Troubleshooting documentation.**
-10. **Final V1 regression and acceptance sweep.**
+1. **Create From workflow.**
+2. **METAR Builder.**
+3. **Installation / Update / Backup / Troubleshooting documentation.**
+4. **Final V1 regression and acceptance sweep.**
 
 Other current anchors:
 
 - The EGOW / LOC / timing regression cluster is **resolved and merged**. It is now a regression baseline, not active work.
-- History Retrieval is complete through **H5b**. **H6 polish / integration closeout** remains open.
+- History Retrieval and the recent History/Cancelled layout/filter relocation are **complete and smoke-tested**. Remaining Search/Table and wider IA polish is post-V1 backlog unless a specific launch-blocking defect appears.
 - Formation implementation through **FR-15** is complete for launch purposes. Further formation refinement is post-launch unless a specific launch-blocking defect appears.
 - Native **Save As** export behaviour is implemented for the relevant CSV/XLSX export paths in the Tauri desktop environment.
 - Browser/download fallback remains available for non-Tauri/local-browser harness use.
@@ -63,8 +67,6 @@ Other current anchors:
   - METAR Builder;
   - full offline standalone Desktop Productization.
 - MAB package filtering is confirmed as **post-V1**.
-
----
 
 ## 1. Product identity and naming
 
@@ -428,10 +430,14 @@ The following workstreams should be treated as merged and complete for current p
 | DP-05 — README / Getting Started desktop rewrite | Complete — pushed |
 | DP-06 — Enable and smoke-test CSP after SheetJS is vendored | Complete — smoke-tested |
 | DP-07 — Confirm and document Admin backup/restore coverage | Complete — pushed |
-| DP-08 — Version alignment and release build validation | Complete — pushed. Windows smoke test pending. |
-| DP-09 — Windows desktop icon packaging repair | Partial — runtime/taskbar icon fixed. Desktop shortcut remained blank. |
-| DP-09b — Windows shortcut icon metadata repair | Partial — hook ran; Finish page callback overwrote shortcut. |
-| DP-09c — NSIS hook execution repair | Complete — pushed. Version 1.0.3. Windows manual confirmation pending. |
+| DP-08 — Version alignment and release build validation | Complete — pushed; final package validation remains part of final acceptance sweep |
+| DP-09 / DP-09b / DP-09c Windows shortcut icon repair | Complete / superseded by REL-POLISH-001 — shortcut icon logic retained; temporary diagnostic marker removed |
+| REL-POLISH-001 — Remove DP-09c installer diagnostic marker | Complete — merged and pushed at `ffe4206` |
+| EGOW-COUNT-001 — Manual EGOW code classification precedence | Complete — merged |
+| DUP-REG-001 / DUP-REG-001b — Duplicate modal timing fixes | Complete — merged |
+| INPUT-NORM-001 — Operational text uppercase normalization | Complete — merged |
+| HIST-FILTER-UX-001 / HIST-LAYOUT-002 tranche | Complete — History toolbar/filter/layout refactor merged |
+| Cancelled tab relocation | Complete — Cancelled Sorties and Deleted Strips moved to top-level Cancelled tab |
 | UTC-first timing hardening | Complete baseline |
 | Day Timeline presentation tranche | Complete baseline |
 | Cancellation / deleted-strip lifecycle tranche | Complete |
@@ -445,57 +451,56 @@ The following workstreams should be treated as merged and complete for current p
 | Aircraft pilot suggestions | Implemented using `FDMS_AIRCRAFT_PILOTS.csv` |
 | Registration CSV restoration | `FDMS_REGISTRATIONS.csv` verified at 25,713 lines |
 
----
-
 ## 6. Current active engineering priority
 
 ### 6.1 Immediate next item
 
 ```text
-DP-09c — Windows manual smoke test (install 1.0.3 NSIS setup; confirm dp09c-hook-ran.txt in install dir; run shortcut metadata check; confirm Flite icon)
+Resume main roadmap/task list after cleared V1 snag list.
 ```
 
-DP-09b did not fix the desktop shortcut. DP-09c investigation (reading the Tauri NSIS template source) identified the root cause:
-
-`NSIS_HOOK_POSTINSTALL` runs inside Section Install, BEFORE the MUI Finish page. In interactive mode, Tauri does NOT create the desktop shortcut in Section Install — it creates it via the Finish page "Create desktop shortcut" checkbox callback (`MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateOrUpdateDesktopShortcut`). This callback fires AFTER Section Install completes, so the Finish page was overwriting the DP-09b hook's explicit-icon shortcut.
-
-DP-09c fix: The `NSIS_HOOK_POSTINSTALL` macro now:
-1. Creates the desktop shortcut with explicit `IconLocation` pointing to the installed exe.
-2. Sets `$NoShortcutMode = 1`. The Tauri `CreateOrUpdateDesktopShortcut` function checks this flag and returns early — the Finish page callback can no longer overwrite our shortcut.
-3. Recreates the Start Menu shortcut (which IS created before the hook) with the same explicit icon.
-4. Writes `$INSTDIR\dp09c-hook-ran.txt` as a diagnostic marker.
-
-Version bumped to 1.0.3.
-
-Acceptance check (PowerShell after installing 1.0.3):
-```powershell
-# Confirm hook ran
-Test-Path "C:\Users\dmshs\AppData\Local\Vectair Flite\dp09c-hook-ran.txt"
-
-# Confirm shortcut metadata
-$link = (New-Object -ComObject WScript.Shell).CreateShortcut([System.Environment]::GetFolderPath('Desktop') + '\Vectair Flite.lnk')
-$link.IconLocation   # expected: C:\...\vectair-flite.exe,0
-```
-
-### 6.2 Next productization sequence
+Main is clean/current at:
 
 ```text
-DP-06 — Enable and smoke-test CSP after SheetJS is vendored        [Complete]
-DP-07 — Confirm and document Admin backup/restore coverage          [Complete]
-DP-08 — First full release build smoke test on Windows              [Build validated; Windows manual smoke test pending]
-DP-09 — Windows desktop icon packaging repair                       [Partial — runtime/taskbar fixed; shortcut blank]
-DP-09b — Windows shortcut icon metadata repair                      [Partial — Finish page callback overwrote shortcut]
-DP-09c — NSIS hook execution repair ($NoShortcutMode fix)           [Complete — pushed; Windows manual confirmation pending v1.0.3]
+ffe4206 REL-POLISH-001: remove DP-09c diagnostic marker from NSIS installer hook
 ```
 
-### 6.3 Remaining V1 sequence
+The cleared snag list should not be reopened unless new smoke testing reveals a fresh defect.
 
-After the immediate desktop productization closeout items, the remaining V1 work is:
+Recommended next sequence:
+
+```text
+1. STATE.md current-ledger update. [This revision]
+2. Optional broad final smoke pass over the recently cleared snag list.
+3. Begin Create From workflow.
+4. Then METAR Builder.
+5. Then Installation / Update / Backup / Troubleshooting documentation.
+6. Then final V1 regression and acceptance sweep.
+```
+
+### 6.2 Cleared snag-list status
+
+```text
+Known V1 snags remaining: 0
+```
+
+Completed recent snags:
+
+- EGOW-COUNT-001
+- DUP-REG-001
+- DUP-REG-001b
+- INPUT-NORM-001
+- HIST-FILTER-UX-001
+- HIST-FILTER-UX-001a/b
+- HIST-LAYOUT-002
+- HIST-LAYOUT-002a
+- REL-POLISH-001
+
+### 6.3 Remaining planned V1 sequence
 
 ```text
 Create From workflow
 METAR Builder
-H6 History polish / integration closeout
 Installation / Update / Backup / Troubleshooting documentation
 Final V1 regression and acceptance sweep
 ```
@@ -516,8 +521,6 @@ O/S = +1
 Live Board daily counters remain separate and event-based / EGOW-realized.
 
 OVR is excluded from runway movement totals and counted separately.
-
----
 
 ## 7. Non-negotiable behaviour invariants
 
@@ -625,11 +628,36 @@ Formation child cards are not independent normal movement records. They are UI r
 
 Do not route formation element edits through ordinary `updateMovement()` semantics unless a dedicated architecture ticket changes this.
 
-### 7.8 History model boundary
+### 7.8 History / Cancelled model boundary
 
-Movement History is completed-movement history unless a dedicated future ticket broadens it.
+History is completed-movement history unless a dedicated future ticket broadens it.
 
-Cancelled Sorties and Deleted Strips remain their own History subtabs and should not be silently mixed into Movement History.
+Current primary navigation:
+
+```text
+Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
+```
+
+History contains completed movement history views only:
+
+```text
+History
+├─ Strip Board
+├─ Calendar
+└─ Search / Table
+```
+
+Cancelled lifecycle views are now in the top-level `Cancelled` tab:
+
+```text
+Cancelled
+├─ Cancelled Sorties
+└─ Deleted Strips
+```
+
+Cancelled Sorties and Deleted Strips were moved, not functionally redesigned. Their internal behaviour should be treated as preserved unless a future ticket explicitly changes it.
+
+Do not silently mix Cancelled Sorties or Deleted Strips back into completed Movement History.
 
 ### 7.9 Export model boundary
 
@@ -745,30 +773,39 @@ Operational views and ordinary reports use current-state truth.
 | Current state | Appears in |
 |---|---|
 | PLANNED / ACTIVE | Live Board |
-| COMPLETED | Movement History |
-| CANCELLED | Cancelled Sorties |
-| Soft-deleted | Deleted Strips |
+| COMPLETED | History |
+| CANCELLED | Cancelled → Cancelled Sorties |
+| Soft-deleted | Cancelled → Deleted Strips |
 | Purged | Nowhere |
 
 Historical lifecycle/audit records may be retained but must not override current-state operational views.
 
-### 9.2 History IA
+### 9.2 Current IA
 
-History has three top-level subtabs:
-
-```text
-Movement History
-Cancelled Sorties
-Deleted Strips
-```
-
-Movement History has internal views:
+Primary navigation:
 
 ```text
-Historic Strip Board
-Historic Movement Calendar
-Search / Table
+Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
 ```
+
+History contains completed movement history views only:
+
+```text
+History
+├─ Strip Board
+├─ Calendar
+└─ Search / Table
+```
+
+Cancelled contains lifecycle exception/recovery views:
+
+```text
+Cancelled
+├─ Cancelled Sorties
+└─ Deleted Strips
+```
+
+Cancelled Sorties and Deleted Strips were moved out of History only. Their internal functionality should be treated as preserved unless a future ticket explicitly changes it.
 
 ### 9.3 Cancelled Sorties
 
@@ -776,7 +813,7 @@ Implemented:
 
 - cancellation modal with reason/note;
 - cancellation log/audit layer;
-- Cancelled Sorties page;
+- Cancelled Sorties page under the top-level `Cancelled` tab;
 - sort/filter/export;
 - current-state editability;
 - reason edit;
@@ -816,7 +853,7 @@ Implemented:
 - `expiresAt`;
 - booking link cleared;
 - strip removed from active movement store;
-- Deleted Strips tab;
+- Deleted Strips page under the top-level `Cancelled` tab;
 - restore logic;
 - purge of expired entries.
 
@@ -843,8 +880,6 @@ Delivered:
 - CSV export via native Save As in Tauri.
 
 Historical lifecycle-event analytics are not included and remain a future reporting mode.
-
----
 
 ## 10. EGOW attribution / aircraft pilot baseline
 
@@ -1145,41 +1180,64 @@ Deferred to post-launch unless promoted:
 
 ### 12.1 Status
 
-History Retrieval / Discovery is implemented through H5b.
+History Retrieval / Discovery is implemented through the post-H5b layout/filter relocation tranche.
 
-H6 polish / integration remains open and is V1-required closeout.
+The recent History/Cancelled restructuring is complete and smoke-tested. Remaining Search/Table and wider History/Admin IA polish is post-V1 UX/IA backlog unless a specific launch-blocking defect is found.
 
 ### 12.2 Product problem
 
 The original Movement History strip board was adequate for short-range review but did not scale well for finding older completed movements.
 
-Operators now have three historical access modes:
+Operators now have three historical access modes for completed movement history:
 
 - strip-board review;
 - calendar-based date discovery;
 - search/table-based movement discovery.
 
-These sit under Movement History and remain separate from Cancelled Sorties and Deleted Strips.
+Cancelled Sorties and Deleted Strips are not completed-history views. They now sit under the top-level `Cancelled` tab.
 
 ### 12.3 Current IA
 
-Top-level History IA:
+Primary navigation:
+
+```text
+Live Board | Calendar | Booking | History | Reports | Cancelled | VKB Lookup | Admin
+```
+
+History contains completed movement history views only:
 
 ```text
 History
-├─ Movement History
+├─ Strip Board
+├─ Calendar
+└─ Search / Table
+```
+
+Cancelled contains lifecycle exception/recovery views:
+
+```text
+Cancelled
 ├─ Cancelled Sorties
 └─ Deleted Strips
 ```
 
-Movement History internal IA:
+When History → Strip Board is active:
+
+Row 1:
 
 ```text
-Movement History
-├─ Historic Strip Board
-├─ Historic Movement Calendar
-└─ Search / Table
+[Strip Board] [Calendar] [Search / Table]                 [Show filters / Hide filters] [Export as CSV]
 ```
+
+Row 2, when expanded:
+
+```text
+[Period] [Free text] [Callsign] [EGOW code] [EGOW unit code] [optional filters...] [Clear filters]
+```
+
+Filter row is collapsed by default. Clicking Show filters expands it. Switching to Calendar or Search/Table hides the Strip Board-specific actions and collapses the filter row.
+
+Search/Table page still needs a later UX reorganisation, but that is not a V1 blocking item. It belongs in the broader post-V1 UX/IA review.
 
 ### 12.4 Completed phases
 
@@ -1191,7 +1249,10 @@ Movement History
 | H4 | Complete — Historic Strip Board structured filters |
 | H5 | Complete — Search / Table view |
 | H5b | Complete — Shared export correction / native Save As consolidation |
-| H6 | Open — polish, edge cases, documentation, integration closeout |
+| HIST-FILTER-UX-001 / 001a / 001b | Complete — toolbar layout, filter collapse, hidden CSS enforcement, configurable filter visibility |
+| HIST-LAYOUT-002 / 002a | Complete — History toolbar/layout refactor and Admin filter config re-link |
+| Cancelled relocation | Complete — Cancelled Sorties and Deleted Strips moved to top-level Cancelled tab |
+| H6 / wider History UX polish | Post-V1 backlog unless a specific launch-blocking defect appears |
 
 ### 12.5 H1 complete
 
@@ -1203,7 +1264,7 @@ Today
 
 Movement History remains completed-only.
 
-Cancelled Sorties and Deleted Strips remain separate.
+Cancelled Sorties and Deleted Strips remain separate lifecycle views under the top-level `Cancelled` tab.
 
 ### 12.6 H2 complete
 
@@ -1323,31 +1384,15 @@ XLSX export uses base64/native binary save rather than an unsafe frontend plugin
 
 Browser fallback remains available outside Tauri.
 
-### 12.11 H6 open
+### 12.11 Post-V1 UX / IA backlog
 
-H6 is the remaining History closeout phase.
+The following are not current V1 snags:
 
-Candidate H6 tasks:
-
-- improve visual grouping between Historic Strip Board, Calendar, and Search / Table;
-- reduce filter-panel clutter;
-- consider collapsible filter groups;
-- make selected-day state and cleared-filter behaviour clearer;
-- improve empty-state wording;
-- ensure all export names and success/cancel/fallback toasts are consistent;
-- check accessibility basics on new controls;
-- check narrow-window behaviour;
-- update user docs;
-- update `STATE.md` status references so History no longer appears planned/not implemented;
-- perform one final History-specific smoke pass.
-
-Status:
-
-```text
-OPEN — V1 polish / closeout
-```
-
----
+- **UX-IA-001** — Full application information architecture review.
+- **UX-ADMIN-001** — Admin section reorganisation and grouping.
+- **UX-HISTORY-001** — Search / Table layout and filter UX rework.
+- **UX-CANCELLED-001** — Review Cancelled tab layout after relocation.
+- **UX-NAV-001** — Review primary navigation as feature count grows.
 
 ## 13. Export baseline
 
@@ -1399,7 +1444,7 @@ The following are implemented and accepted after H5b:
 
 - History → Historic Strip Board → Export as CSV;
 - History → Search / Table → Export filtered CSV;
-- History → Cancelled Sorties → Export CSV;
+- Cancelled ? Cancelled Sorties ? Export CSV;
 - Reports → Export CSV;
 - Reports → Export XLSX;
 - Reports → Cancellation view → Export Cancellations CSV.
@@ -1557,7 +1602,13 @@ This is V2+ unless a minimum subset is required by V1 Desktop Productization.
 
 ### 16.1 Confirmed V1 required workstreams
 
-The current confirmed V1 required list is:
+The recent V1 snag list is cleared.
+
+```text
+Known V1 snags remaining: 0
+```
+
+Completed V1 closeout/productization items:
 
 1. ~~Live Board summary counter aggregation and computed tooltips.~~ **Complete — merged.**
 2. ~~Monthly Return ghost-count contamination.~~ **Complete — merged.**
@@ -1567,27 +1618,30 @@ The current confirmed V1 required list is:
 6. ~~DP-05 — README / Getting Started desktop rewrite.~~ **Complete — pushed.**
 7. ~~DP-06 — Enable and smoke-test CSP after SheetJS is vendored.~~ **Complete — smoke-tested.**
 8. ~~DP-07 — Confirm and document Admin backup/restore coverage for all localStorage keys.~~ **Complete — pushed.**
-9. DP-08 — First full release build smoke test on Windows. **Version alignment + build validation complete — pushed. Windows manual smoke test pending.**
-10. DP-09 — Windows desktop icon packaging repair. **Partial — runtime/taskbar icon fixed. Desktop shortcut icon blank (see DP-09b).**
-11. DP-09b — Windows shortcut icon metadata repair. **Partial — Finish page callback overwrote hook's shortcut (see DP-09c).**
-12. ~~DP-09c — NSIS hook execution repair.~~ **Complete — pushed.** `$NoShortcutMode = 1` blocks Finish page overwrite; version 1.0.3. Windows manual confirmation pending.
-13. Create From workflow.
-14. METAR Builder.
-15. H6 History polish / integration closeout.
-16. Installation / Update / Backup / Troubleshooting documentation.
-17. Final V1 regression and acceptance sweep.
+9. ~~DP-08 — First full release build smoke test / version alignment / build validation.~~ **Complete enough for roadmap resumption; final packaged-app behaviour remains part of final acceptance sweep.**
+10. ~~DP-09 / DP-09b / DP-09c — Windows shortcut icon repair sequence.~~ **Complete / superseded by REL-POLISH-001.**
+11. ~~REL-POLISH-001 — Remove DP-09c installer diagnostic marker.~~ **Complete — merged and pushed at `ffe4206`.**
+12. ~~EGOW-COUNT-001 — Manual EGOW code classification precedence.~~ **Complete — merged.**
+13. ~~DUP-REG-001 / DUP-REG-001b — Duplicate modal timing fixes.~~ **Complete — merged.**
+14. ~~INPUT-NORM-001 — Save-boundary operational uppercase normalization.~~ **Complete — merged.**
+15. ~~HIST-FILTER-UX-001 / HIST-LAYOUT-002 tranche.~~ **Complete — merged.**
+16. ~~Cancelled tab relocation.~~ **Complete — merged.**
+
+Current remaining planned V1 work:
+
+1. **Create From workflow.**
+2. **METAR Builder.**
+3. **Installation / Update / Backup / Troubleshooting documentation.**
+4. **Final V1 regression and acceptance sweep.**
 
 ### 16.2 Priority rationale
 
-The recommended order is now productization-first:
+The recommended order is now feature/documentation closeout:
 
-1. CSP should be addressed after SheetJS vendoring because ordinary operation no longer needs the CDN XLSX dependency.
-2. Backup/restore coverage should be confirmed before a release build, because the V1 persistence model remains localStorage.
-3. The first full release build smoke test should happen before additional feature continuation, because packaging defects may affect architecture and documentation.
-4. Create From and METAR Builder should be implemented before final V1 documentation and regression because they affect the user-facing feature surface.
-5. H6 History polish should close once remaining V1 functional behaviour is stable.
-6. Installation / Update / Backup / Troubleshooting documentation should be finalized after productization behaviour is known.
-7. Final acceptance sweep and freeze come last.
+1. Create From should be implemented before final documentation because it affects the user-facing movement-creation workflow.
+2. METAR Builder should be implemented before final documentation because it adds a user-facing operational utility.
+3. Installation / Update / Backup / Troubleshooting documentation should be finalized after current packaging/export/backup behaviour is stable.
+4. Final acceptance sweep and freeze come last.
 
 ### 16.3 V1 item detail
 
@@ -1788,7 +1842,7 @@ Delivered:
 Status:
 
 ```text
-Version alignment complete. Build validated. Windows manual smoke test pending.
+COMPLETE ENOUGH FOR ROADMAP RESUMPTION — final package validation remains part of final acceptance sweep
 ```
 
 **Version alignment decision:** All package identifiers aligned to **1.0.0** as the V1 release candidate version.
@@ -1814,13 +1868,9 @@ src-tauri/target/release/bundle/rpm/Vectair Flite-1.0.0-1.x86_64.rpm  (3.7 MB)
 
 AppImage bundle failed in container due to FUSE/sandbox limitation — not a code defect.
 
-**Windows installer build:** Must be run on Windows to produce `vectair-flite.exe`, `.msi`, and NSIS `.exe` installer. Run `npm run tauri:build` from the project root on Windows.
+Windows installer/package behaviour should still be included in the final V1 acceptance sweep.
 
-**Windows manual smoke test matrix:** Pending execution on Windows hardware. See smoke test checklist in section 21.7.
-
-**Known release blockers from DP-08:** None from the codebase. Icon files corrected and committed. Version identifiers aligned. Build system validates correctly.
-
-**Next step:** Run `npm run tauri:build` on Windows, install the generated NSIS or MSI package, and execute the manual smoke test matrix (items 1–15 from the DP-08 ticket).
+Known release blockers from DP-08: none from the codebase. Icon files corrected and committed. Version identifiers aligned. Build system validates correctly.
 
 #### J. Create From workflow
 
@@ -1853,17 +1903,19 @@ Purpose:
 - Copy/paste into email or operational communication.
 - Validation/formatting assistance sufficient for local operational use.
 
-#### L. H6 History polish / integration
+#### L. H6 / wider History UX polish
 
 Status:
 
 ```text
-V1 required closeout
+Post-V1 UX/IA backlog unless a specific launch-blocking defect appears
 ```
 
 Purpose:
 
-- Close remaining visual, documentation, wording, export-toast, edge-case, and smoke-test issues after H1–H5b.
+- Search/Table layout and filter UX rework.
+- Wider History/Admin IA review.
+- Empty-state wording, accessibility, and narrow-window refinements where required.
 
 #### M. Installation / Update / Backup / Troubleshooting documentation
 
@@ -1889,7 +1941,17 @@ Must include the smoke/regression areas in section 21.
 
 ## 17. V2 / post-launch workstreams
 
-### 17.1 API / VKB integration
+### 17.1 UX / IA review backlog
+
+These are not current V1 snags. They should be retained as post-V1 UX/IA work unless a specific launch-blocking defect appears.
+
+- **UX-IA-001** — Full application information architecture review.
+- **UX-ADMIN-001** — Admin section reorganisation and grouping.
+- **UX-HISTORY-001** — Search / Table layout and filter UX rework.
+- **UX-CANCELLED-001** — Review Cancelled tab layout after relocation.
+- **UX-NAV-001** — Review primary navigation as feature count grows.
+
+### 17.2 API / VKB integration
 
 Move beyond static/downloaded packs toward fuller Vectair-backed knowledge integration.
 
@@ -1901,7 +1963,7 @@ Includes:
 - cloud + saved data mode;
 - region/country/operator-scoped saved packs.
 
-### 17.2 VKB editable knowledge, local overrides, audit history, and rollback
+### 17.3 VKB editable knowledge, local overrides, audit history, and rollback
 
 V2 should provide user-side editability for selected VKB-derived datasets and local operational knowledge.
 
@@ -1945,7 +2007,7 @@ Cloud VKB source data
 
 Do not design this as a simple live lookup that retroactively changes historical movement records.
 
-### 17.3 Booking confirmation email / pilot briefing / GAR note
+### 17.4 Booking confirmation email / pilot briefing / GAR note
 
 Includes:
 
@@ -1958,11 +2020,11 @@ Includes:
 - GAR note for arrivals/departures outside contiguous UK;
 - explicit note that GAR is not managed by ATC.
 
-### 17.4 Booking re-linkage
+### 17.5 Booking re-linkage
 
 Improve linkage between booking records and created/planned strips after edits, lifecycle changes, deletion, restore, or manual correction.
 
-### 17.5 Deleted-strip retention configurability
+### 17.6 Deleted-strip retention configurability
 
 Make deleted-strip retention configurable in Admin.
 
@@ -1972,7 +2034,7 @@ Current retention remains:
 24 hours
 ```
 
-### 17.6 Historical lifecycle analysis
+### 17.7 Historical lifecycle analysis
 
 Potential future analytics:
 
@@ -1982,7 +2044,7 @@ Potential future analytics:
 - cancellation-event-only date analytics;
 - audit dashboard for transitions.
 
-### 17.7 Callsign family grouping
+### 17.8 Callsign family grouping
 
 Group related callsigns/families for display, filtering, and analysis.
 
@@ -1992,7 +2054,7 @@ Useful for:
 - formation families;
 - unit/operator callsign patterns.
 
-### 17.8 Notification / reminder system
+### 17.9 Notification / reminder system
 
 Potential scope:
 
@@ -2007,7 +2069,7 @@ Potential scope:
 
 Do not assume native taskbar flashing. Use title/tab/app attention indicators where appropriate.
 
-### 17.9 MAB package filter
+### 17.10 MAB package filter
 
 Status:
 
@@ -2021,7 +2083,7 @@ It should eventually allow Flite/VKB users to include, exclude, or inspect MoD A
 
 It is not required for the first V1 release.
 
-### 17.10 Advanced persistence / storage adapter
+### 17.11 Advanced persistence / storage adapter
 
 Possible future move away from localStorage toward:
 
@@ -2032,7 +2094,7 @@ Possible future move away from localStorage toward:
 - better auditability;
 - possible multi-device or multi-user modes only if product direction changes.
 
-### 17.11 Advanced export-location management
+### 17.12 Advanced export-location management
 
 Potential Admin section:
 
@@ -2049,7 +2111,7 @@ Possible settings:
 
 Current accepted behaviour is Save As.
 
-### 17.12 Formation post-launch enhancements
+### 17.13 Formation post-launch enhancements
 
 See section 11.13.
 
@@ -2161,8 +2223,8 @@ Primary acceptance remains Stuart’s manual verification.
 Browser harness:
 
 ```powershell
-cd C:\Users\dmshs\FDMS\src
-python -m http.server 8000
+cd C:\Users\dmshs\FDMS
+python -m http.server 8000 --directory src
 ```
 
 Browser URL:
@@ -2210,7 +2272,7 @@ Minimum export smoke:
 
 - History → Historic Strip Board → Export as CSV opens Save As.
 - History → Search / Table → Export filtered CSV opens Save As.
-- History → Cancelled Sorties → Export CSV opens Save As.
+- Cancelled → Cancelled Sorties → Export CSV opens Save As.
 - Reports → Export CSV opens Save As.
 - Reports → Export XLSX opens Save As and writes valid `.xlsx`.
 - Reports → Cancellation view → Export Cancellations CSV opens Save As.
@@ -2231,19 +2293,28 @@ Formation accepted for launch purposes after smoke confirming:
 
 Further formation polish goes to post-launch backlog unless a specific bug is found.
 
-### 21.5 History smoke baseline
+### 21.5 History / Cancelled smoke baseline
 
-Minimum History smoke:
+Minimum History / Cancelled smoke:
 
+- History tab opens.
+- History contains Strip Board, Calendar, and Search / Table views.
 - Movement History defaults to Today.
 - Historic Strip Board renders completed movements only.
+- History Strip Board filter row is collapsed by default.
+- Show filters displays Period + configured filters.
+- Admin filter settings affect History Strip Board.
 - Calendar view summarizes days using completed movements only.
 - Single-click calendar day opens Historic Strip Board for that day.
 - Structured filters use AND semantics.
+- Search / Table opens.
 - Search / Table results match filter criteria.
 - Search / Table export exports all filtered rows, not only visible capped rows.
-- Cancelled Sorties and Deleted Strips remain unaffected.
-- All History exports use native Save As in Tauri.
+- Cancelled primary tab exists.
+- Cancelled Sorties page works.
+- Deleted Strips page works.
+- Cancelled Sorties and Deleted Strips internal behaviour remains preserved after relocation.
+- All History/Cancelled exports use native Save As in Tauri where implemented.
 
 ### 21.6 EGOW / LOC / timing regression smoke baseline
 
@@ -2264,6 +2335,7 @@ Smoke must include:
 - `UAM3` → no EGOW autofill.
 - `MERSY2` → BM / L and remains displayed/stored as `MERSY2`.
 - Manual EGOW/PIC overrides are preserved.
+- Manual EGOW code affects counters/reports.
 - LOC stale-clear behaviour works.
 - Edit modal stale-clear behaviour works.
 - DEP creation with valid callsign/EGOW enrichment.
@@ -2277,7 +2349,31 @@ Smoke must include:
 - ARR Active remains status-only and does not fabricate ATD.
 - UTC/local entry still stores UTC authority.
 
-### 21.7 V1 feature smoke baseline
+### 21.7 Recent cleared snag final-pass checklist
+
+Optional broad confirmation after the cleared snag-list merge sequence:
+
+- Live Board loads.
+- New LOC/DEP/ARR/OVR still create strips.
+- Duplicate strip modal keeps submitted times.
+- Duplicate default LOC duration respects Admin LOC duration.
+- Manual EGOW code affects counters/reports.
+- Lowercase operational input persists uppercase.
+- History tab opens.
+- History Strip Board filter row collapsed by default.
+- Show filters displays Period + configured filters.
+- Admin filter settings affect History Strip Board.
+- Calendar subview works.
+- Search/Table still opens.
+- Cancelled primary tab exists.
+- Cancelled Sorties page works.
+- Deleted Strips page works.
+- Reports still open.
+- Admin still opens.
+- Developer diagnostics still present where intended.
+- No `dp09c-hook-ran.txt` installer marker remains.
+
+### 21.8 V1 feature smoke baseline
 
 Before V1 freeze, test:
 
@@ -2301,8 +2397,6 @@ Before V1 freeze, test:
 - offline use without Python server;
 - native Save As exports;
 - registration CSV integrity.
-
----
 
 ## 22. Manager–Worker operating rules
 
@@ -2374,10 +2468,8 @@ Completed audit follow-ons:
 
 Remaining audit-derived V1 work:
 
-- DP-06 — Enable and smoke-test CSP after SheetJS is vendored.
-- DP-07 — Confirm Admin backup/restore covers all seven localStorage keys.
-- DP-08 — First full release build smoke test on Windows.
 - Document dev→release localStorage origin change in the final Installation / Update / Backup / Troubleshooting documentation.
+- Include packaged-app/offline/export/backup behaviour in the final V1 acceptance sweep.
 
 SQLite decision:
 
@@ -2394,8 +2486,24 @@ localStorage remains acceptable for V1 single-operator desktop use if backup/exp
 The next work item is:
 
 ```text
-DP-08 — First full release build smoke test on Windows
+Resume main roadmap/task list after cleared V1 snag list.
 ```
 
-DP-07 is complete. Admin backup/restore now covers all seven V1 localStorage keys.
+Recommended next work:
 
+```text
+1. Create From workflow.
+2. METAR Builder.
+3. Installation / Update / Backup / Troubleshooting documentation.
+4. Final V1 regression and acceptance sweep.
+```
+
+Optional before new feature work:
+
+```text
+Run one broad final smoke pass over the recently cleared snag list.
+```
+
+Do not treat DP-09c Windows manual smoke test as the current next item.
+
+Do not expect `dp09c-hook-ran.txt` to exist. REL-POLISH-001 intentionally removed that diagnostic marker while retaining the shortcut icon repair logic.
