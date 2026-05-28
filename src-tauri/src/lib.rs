@@ -134,19 +134,19 @@ async fn flite_get_app_version(app: tauri::AppHandle) -> Value {
 async fn flite_check_for_update(
     app: tauri::AppHandle,
     updater_state: State<'_, UpdaterState>,
-) -> Value {
+) -> Result<Value, String> {
     let current_version = app.package_info().version.to_string();
     let last_checked = now_iso8601();
 
     let updater = match app.updater() {
         Ok(u) => u,
         Err(e) => {
-            return json!({
+            return Ok(json!({
                 "status": "error",
                 "currentVersion": current_version,
                 "lastChecked": last_checked,
                 "message": e.to_string()
-            });
+            }));
         }
     };
 
@@ -161,23 +161,23 @@ async fn flite_check_for_update(
             let mut pending = updater_state.pending_update.lock().unwrap();
             *pending = Some(update);
 
-            json!({
+            Ok(json!({
                 "status": "update_available",
                 "currentVersion": current_version,
                 "availableVersion": available_version,
                 "date": date,
                 "body": body,
                 "lastChecked": last_checked
-            })
+            }))
         }
         Ok(None) => {
             let mut pending = updater_state.pending_update.lock().unwrap();
             *pending = None;
-            json!({
+            Ok(json!({
                 "status": "up_to_date",
                 "currentVersion": current_version,
                 "lastChecked": last_checked
-            })
+            }))
         }
         Err(e) => {
             let msg = e.to_string();
@@ -194,12 +194,12 @@ async fn flite_check_for_update(
             } else {
                 "error"
             };
-            json!({
+            Ok(json!({
                 "status": status,
                 "currentVersion": current_version,
                 "lastChecked": last_checked,
                 "message": msg
-            })
+            }))
         }
     }
 }
@@ -207,36 +207,35 @@ async fn flite_check_for_update(
 #[tauri::command]
 async fn flite_download_and_install_update(
     updater_state: State<'_, UpdaterState>,
-) -> Value {
+) -> Result<Value, String> {
     let update = {
         let mut pending = updater_state.pending_update.lock().unwrap();
         pending.take()
     };
 
     match update {
-        None => json!({
+        None => Ok(json!({
             "status": "error",
             "message": "No pending update. Run Check for Updates first."
-        }),
+        })),
         Some(update) => {
             match update.download_and_install(|_chunk, _total| {}, || {}).await {
-                Ok(()) => json!({
+                Ok(()) => Ok(json!({
                     "status": "installed_restart_required",
                     "message": "Update installed. Restart Flite to apply."
-                }),
-                Err(e) => json!({
+                })),
+                Err(e) => Ok(json!({
                     "status": "error",
                     "message": e.to_string()
-                }),
+                })),
             }
         }
     }
 }
 
 #[tauri::command]
-async fn flite_restart_app(app: tauri::AppHandle) -> Value {
+fn flite_restart_app(app: tauri::AppHandle) {
     app.restart();
-    json!({ "status": "restarting" })
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
