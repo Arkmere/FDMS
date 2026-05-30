@@ -2629,21 +2629,61 @@ Stores structured field state (not the final string) on each Copy action.
 
 ---
 
-## 27. Immediate next action
+## 27. METAR-BUILDER-002 — Operational Refinement Pass
 
-The next work item is:
+**Status:** Implementation complete.
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+
+### 27.1 Changes implemented
+
+| # | Change | Detail |
+|---|---|---|
+| 1 | Admin > Weather section | New `admin-sec-weather` panel: observation schedule (H+20/H+50, H+00/H+30, H+53) + rate (bi-hourly/hourly). Immediate save via `updateConfig()`. |
+| 2 | Auto-correct METAR time | On init and on report-type change to METAR, time is auto-set to most recent past scheduled observation. SPECI sets current UTC. `mbTimeNow` button respects report type. |
+| 3 | Wind order / default | Radio order changed to Directional (default, checked) → Calm → Variable. Default `windType: 'dir'`. Wind fields visible on load. |
+| 4 | Gust validation | Gust ≥ mean + 10 kt enforced; clear error message shown. |
+| 5 | Present Weather structured selector | Intensity / Descriptor / Phenomenon dropdowns + Manual override radio. Mode toggle shows/hides the relevant row. |
+| 6 | Recent Weather structured selector | Same structure with `mbRecentWx*` IDs. RE prefix auto-prepended; manual mode strips leading RE before re-adding it (fixes double-prefix RERERA bug). |
+| 7 | Cloud TCU/CB qualifier | Each cloud row has a TCU/CB select (blank/TCU/CB). Disabled for NSC/SKC/NCD. Output: `BKN020CB` etc. |
+| 8 | Temperature M-prefix | Temp/dew inputs changed to `type="text"`. `parseTempInput()` accepts `-5`, `M5`, `M05`, `5`. |
+| 9 | Colour state auto-population | `deriveColourState()` computes UK colour state from vis + lowest BKN/OVC + CAVOK. Auto-updates the `mbColour` select when Colour is enabled. Manual user change sets `data-manual-override="true"`; Recalculate button clears it. |
+| 10 | Editability preserved | All auto-populated fields remain standard editable inputs/selects. No field is locked. |
+| 11 | STATE.md | This section. |
+
+### 27.2 Files changed
+
+| File | Change |
+|---|---|
+| `src/js/metar_builder.js` | Complete rewrite — all 11 changes; added `initAdminWeather` export |
+| `src/index.html` | Structured WX/recent-WX selectors, cloud qualifier selects, temp text inputs, wind radio reorder, colour state indicator+button, Admin Weather section |
+| `src/js/app.js` | Import `initAdminWeather`; call in `admin:init` stage |
+| `src/css/vectair.css` | Added `.mb-colour-indicator`, `.mb-colour-indicator--auto/--manual`, `.mb-cloud-qual-label` |
+| `STATE.md` | This section |
+
+### 27.3 Config key added
 
 ```text
-Resume main roadmap/task list — METAR Builder complete.
+metarObservationSchedule: { pattern: 'H20_H50', rate: 'bi-hourly' }
 ```
 
-Recommended next work:
+Stored in `vectair_fdms_config` via `updateConfig()`. Default values used if absent.
 
-```text
-1. Installation / Update / Backup / Troubleshooting documentation.
-2. Final V1 regression and acceptance sweep.
-```
+### 27.4 localStorage migration
 
-Do not treat DP-09c Windows manual smoke test as the current next item.
+`loadSaved()` detects legacy state (has `wx` / `recentWx` fields, no `wxMode`) and migrates to `wxMode:'manual'` + `wxManualText` automatically. No data loss on recall.
 
-Do not expect `dp09c-hook-ran.txt` to exist. REL-POLISH-001 intentionally removed that diagnostic marker while retaining the shortcut icon repair logic.
+### 27.5 Explicit exclusions (unchanged from METAR-BUILDER-001)
+
+- External weather fetch
+- Dew point calculator / QNH calculator / convective cloud-base calculator
+- Email transmission
+- Pressure-reduction method
+- Full Admin > Meteorology UI
+- General unit conversion framework
+
+---
+
+## 28. Immediate next action
+
+METAR-BUILDER-002 implementation complete. Resume main roadmap/task list.

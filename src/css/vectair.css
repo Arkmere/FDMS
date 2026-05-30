@@ -4732,3 +4732,32 @@ tr.strip.ft-ovr > td {
   margin-bottom: 8px;
 }
 
+.mb-colour-indicator {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.mb-colour-indicator--auto {
+  background: #d4edda;
+  color: #155724;
+}
+
+.mb-colour-indicator--manual {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.mb-cloud-qual-label {
+  font-size: 10px;
+  color: var(--va-text-soft);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+

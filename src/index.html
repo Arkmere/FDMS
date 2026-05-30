@@ -1066,12 +1066,12 @@
             <div class="mb-section">
               <div class="mb-section-title">Wind</div>
               <div class="mb-field-row mb-wind-type-row">
-                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="calm" checked /> Calm (00000KT)</label>
+                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="dir" checked /> Directional</label>
+                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="calm" /> Calm (00000KT)</label>
                 <label class="mb-radio-label"><input type="radio" name="mbWindType" value="vrb" /> Variable (VRB)</label>
-                <label class="mb-radio-label"><input type="radio" name="mbWindType" value="dir" /> Directional</label>
               </div>
 
-              <div id="mbWindDirRow" class="mb-field-row" style="display:none;">
+              <div id="mbWindDirRow" class="mb-field-row">
                 <div class="mb-field">
                   <label class="mb-label">Direction (°)</label>
                   <input type="text" id="mbWindDir" class="field" maxlength="3" style="width:60px;font-family:monospace;" placeholder="270" />
@@ -1157,12 +1157,78 @@
                   <span>Present Weather</span>
                 </label>
               </div>
-              <div class="mb-field-row">
-                <div class="mb-field">
-                  <label class="mb-label">WX group</label>
-                  <input type="text" id="mbWx" class="field" style="width:160px;font-family:monospace;" placeholder="-RA" />
+              <div class="mb-field-row" style="margin-bottom:4px;">
+                <label class="mb-radio-label"><input type="radio" name="mbWxMode" value="structured" checked /> Structured</label>
+                <label class="mb-radio-label"><input type="radio" name="mbWxMode" value="manual" /> Manual override</label>
+              </div>
+              <div id="mbWxStructured">
+                <div class="mb-field-row">
+                  <div class="mb-field">
+                    <label class="mb-label">Intensity</label>
+                    <select id="mbWxIntensity" class="field" style="width:140px;">
+                      <option value="">Moderate</option>
+                      <option value="-">– Light</option>
+                      <option value="+">+ Heavy</option>
+                      <option value="VC">VC In vicinity</option>
+                    </select>
+                  </div>
+                  <div class="mb-field">
+                    <label class="mb-label">Descriptor</label>
+                    <select id="mbWxDescriptor" class="field" style="width:160px;">
+                      <option value="">None</option>
+                      <option value="TS">TS Thunderstorm</option>
+                      <option value="SH">SH Shower</option>
+                      <option value="FZ">FZ Freezing</option>
+                      <option value="MI">MI Shallow</option>
+                      <option value="BC">BC Patches</option>
+                      <option value="DR">DR Low drifting</option>
+                      <option value="BL">BL Blowing</option>
+                      <option value="PR">PR Partial</option>
+                    </select>
+                  </div>
+                  <div class="mb-field">
+                    <label class="mb-label">Phenomenon</label>
+                    <select id="mbWxPhenomenon" class="field" style="width:170px;">
+                      <option value="">— none —</option>
+                      <optgroup label="Precipitation">
+                        <option value="RA">RA Rain</option>
+                        <option value="DZ">DZ Drizzle</option>
+                        <option value="SN">SN Snow</option>
+                        <option value="SG">SG Snow grains</option>
+                        <option value="IC">IC Ice crystals</option>
+                        <option value="PL">PL Ice pellets</option>
+                        <option value="GR">GR Hail</option>
+                        <option value="GS">GS Small hail</option>
+                        <option value="UP">UP Unknown precip</option>
+                      </optgroup>
+                      <optgroup label="Obscuration">
+                        <option value="FG">FG Fog</option>
+                        <option value="BR">BR Mist</option>
+                        <option value="HZ">HZ Haze</option>
+                        <option value="FU">FU Smoke</option>
+                        <option value="VA">VA Volcanic ash</option>
+                        <option value="DU">DU Dust</option>
+                        <option value="SA">SA Sand</option>
+                      </optgroup>
+                      <optgroup label="Other">
+                        <option value="SQ">SQ Squall</option>
+                        <option value="PO">PO Dust whirl</option>
+                        <option value="DS">DS Dust storm</option>
+                        <option value="SS">SS Sandstorm</option>
+                        <option value="FC">FC Funnel cloud</option>
+                      </optgroup>
+                    </select>
+                  </div>
                 </div>
-                <span class="mb-hint">e.g. -RA, TSRA, FG, BR, -SN</span>
+              </div>
+              <div id="mbWxManual" style="display:none;">
+                <div class="mb-field-row">
+                  <div class="mb-field">
+                    <label class="mb-label">WX group (manual)</label>
+                    <input type="text" id="mbWxManualText" class="field" style="width:160px;font-family:monospace;" placeholder="-RA" />
+                  </div>
+                  <span class="mb-hint">Full WX group, e.g. -RA, TSRA, FG, RASN</span>
+                </div>
               </div>
             </div>
 
@@ -1185,13 +1251,13 @@
               <div class="mb-field-row">
                 <div class="mb-field">
                   <label class="mb-label">Temp (°C)</label>
-                  <input type="number" id="mbTemp" class="field" style="width:70px;" value="10" />
+                  <input type="text" id="mbTemp" class="field" style="width:70px;font-family:monospace;" value="10" placeholder="10" />
                 </div>
                 <div class="mb-field">
                   <label class="mb-label">Dew Point (°C)</label>
-                  <input type="number" id="mbDew" class="field" style="width:70px;" value="08" />
+                  <input type="text" id="mbDew" class="field" style="width:70px;font-family:monospace;" value="08" placeholder="08" />
                 </div>
-                <span class="mb-hint">Negative values output with M prefix (M05)</span>
+                <span class="mb-hint">Integer, negative, or M-prefix accepted (e.g. 10, -5, M05)</span>
               </div>
             </div>
 
@@ -1215,12 +1281,79 @@
                   <span>Recent Weather</span>
                 </label>
               </div>
-              <div class="mb-field-row">
-                <div class="mb-field">
-                  <label class="mb-label">RE group</label>
-                  <input type="text" id="mbRecentWx" class="field" style="width:100px;font-family:monospace;" placeholder="RERA" />
+              <div class="mb-field-row" style="margin-bottom:4px;">
+                <label class="mb-radio-label"><input type="radio" name="mbRecentWxMode" value="structured" checked /> Structured</label>
+                <label class="mb-radio-label"><input type="radio" name="mbRecentWxMode" value="manual" /> Manual override</label>
+              </div>
+              <div id="mbRecentWxStructured">
+                <div class="mb-field-row">
+                  <div class="mb-field">
+                    <label class="mb-label">Intensity</label>
+                    <select id="mbRecentWxIntensity" class="field" style="width:140px;">
+                      <option value="">Moderate</option>
+                      <option value="-">– Light</option>
+                      <option value="+">+ Heavy</option>
+                      <option value="VC">VC In vicinity</option>
+                    </select>
+                  </div>
+                  <div class="mb-field">
+                    <label class="mb-label">Descriptor</label>
+                    <select id="mbRecentWxDescriptor" class="field" style="width:160px;">
+                      <option value="">None</option>
+                      <option value="TS">TS Thunderstorm</option>
+                      <option value="SH">SH Shower</option>
+                      <option value="FZ">FZ Freezing</option>
+                      <option value="MI">MI Shallow</option>
+                      <option value="BC">BC Patches</option>
+                      <option value="DR">DR Low drifting</option>
+                      <option value="BL">BL Blowing</option>
+                      <option value="PR">PR Partial</option>
+                    </select>
+                  </div>
+                  <div class="mb-field">
+                    <label class="mb-label">Phenomenon</label>
+                    <select id="mbRecentWxPhenomenon" class="field" style="width:170px;">
+                      <option value="">— none —</option>
+                      <optgroup label="Precipitation">
+                        <option value="RA">RA Rain</option>
+                        <option value="DZ">DZ Drizzle</option>
+                        <option value="SN">SN Snow</option>
+                        <option value="SG">SG Snow grains</option>
+                        <option value="IC">IC Ice crystals</option>
+                        <option value="PL">PL Ice pellets</option>
+                        <option value="GR">GR Hail</option>
+                        <option value="GS">GS Small hail</option>
+                        <option value="UP">UP Unknown precip</option>
+                      </optgroup>
+                      <optgroup label="Obscuration">
+                        <option value="FG">FG Fog</option>
+                        <option value="BR">BR Mist</option>
+                        <option value="HZ">HZ Haze</option>
+                        <option value="FU">FU Smoke</option>
+                        <option value="VA">VA Volcanic ash</option>
+                        <option value="DU">DU Dust</option>
+                        <option value="SA">SA Sand</option>
+                      </optgroup>
+                      <optgroup label="Other">
+                        <option value="SQ">SQ Squall</option>
+                        <option value="PO">PO Dust whirl</option>
+                        <option value="DS">DS Dust storm</option>
+                        <option value="SS">SS Sandstorm</option>
+                        <option value="FC">FC Funnel cloud</option>
+                      </optgroup>
+                    </select>
+                  </div>
                 </div>
-                <span class="mb-hint">RE prefix added automatically, e.g. type RERA → RERERA</span>
+                <span class="mb-hint">RE prefix added automatically. Leave all blank to omit.</span>
+              </div>
+              <div id="mbRecentWxManual" style="display:none;">
+                <div class="mb-field-row">
+                  <div class="mb-field">
+                    <label class="mb-label">RE group (manual)</label>
+                    <input type="text" id="mbRecentWxManualText" class="field" style="width:120px;font-family:monospace;" placeholder="RERA" />
+                  </div>
+                  <span class="mb-hint">RE prefix added automatically; entering RERA outputs RERERA correctly.</span>
+                </div>
               </div>
             </div>
 
@@ -1249,7 +1382,7 @@
                   <span>Colour State</span>
                 </label>
               </div>
-              <div class="mb-field-row">
+              <div class="mb-field-row" style="align-items:center;flex-wrap:wrap;gap:8px;">
                 <div class="mb-field">
                   <label class="mb-label">State</label>
                   <select id="mbColour" class="field">
@@ -1264,6 +1397,9 @@
                     <option value="BLACKOUT">BLACKOUT</option>
                   </select>
                 </div>
+                <span id="mbColourAutoIndicator" class="mb-colour-indicator mb-colour-indicator--auto">Auto</span>
+                <button type="button" class="btn btn-ghost btn-small" id="mbColourAutoBtn" title="Recalculate colour from visibility and cloud">Recalculate</button>
+                <span class="mb-hint">Auto-derived from visibility and cloud (UK thresholds). Manually selecting a value disables auto; click Recalculate to restore.</span>
               </div>
             </div>
 
@@ -1300,6 +1436,7 @@
               <button class="admin-nav-btn" data-section="admin-sec-wtc">Wake Turbulence</button>
               <button class="admin-nav-btn" data-section="admin-sec-history">History &amp; Timeline</button>
               <button class="admin-nav-btn" data-section="admin-sec-profiles">Booking Profiles</button>
+              <button class="admin-nav-btn" data-section="admin-sec-weather">Weather</button>
               <button class="admin-nav-btn admin-nav-btn--dev" data-section="admin-sec-developer">Developer</button>
               <button class="admin-nav-btn admin-nav-btn--danger" data-section="admin-sec-danger">Danger Zone</button>
             </nav>
@@ -2106,6 +2243,37 @@
                         <button class="btn btn-danger" id="btnResetToDemo" type="button">Reset to Demo Data</button>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── SECTION: Weather ── -->
+              <div class="admin-section hidden" id="admin-sec-weather">
+                <div class="panel">
+                  <h3>Weather / METAR Settings</h3>
+                  <p style="font-size:12px;color:#555;margin:0 0 14px;">Configure the scheduled observation times for METAR reports at your station. The METAR time field is auto-set to the most recent scheduled observation when the builder loads or when report type is changed to METAR.</p>
+                  <div style="display:flex;flex-direction:column;gap:14px;max-width:420px;">
+                    <div>
+                      <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Observation schedule</label>
+                      <select id="adminWeatherPattern" class="field" style="width:230px;">
+                        <option value="H20_H50">H+20 / H+50 (default)</option>
+                        <option value="H00_H30">H+00 / H+30</option>
+                        <option value="H53">H+53</option>
+                      </select>
+                      <div style="font-size:11px;color:#888;margin-top:3px;">Minutes past the hour when routine METARs are issued.</div>
+                    </div>
+                    <div>
+                      <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Observation rate</label>
+                      <select id="adminWeatherRate" class="field" style="width:230px;">
+                        <option value="bi-hourly">Bi-hourly (2 per hour)</option>
+                        <option value="hourly">Hourly (1 per hour)</option>
+                      </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <button type="button" class="btn btn-primary" id="adminWeatherSave">Save</button>
+                      <span id="adminWeatherStatus" style="font-size:12px;color:#2e7d32;visibility:hidden;"></span>
+                    </div>
+                    <p style="font-size:11px;color:#2e7d32;font-weight:500;margin:0;">Changes here save immediately.</p>
                   </div>
                 </div>
               </div>
