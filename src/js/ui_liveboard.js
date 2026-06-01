@@ -3848,7 +3848,7 @@ export function renderLiveBoard() {
     const empty = document.createElement("tr");
     empty.innerHTML = `
       <td colspan="12" style="padding:8px; font-size:12px; color:#777;">
-        No demo movements match the current filters.
+        No planned or active flights in the selected timeframe. Congratulations! Do your best to keep it that way.
       </td>
     `;
     tbody.appendChild(empty);
