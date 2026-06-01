@@ -2906,3 +2906,54 @@ Applies to TS, TSRA, TSRASN, TSRAGR, or any group where `descriptor === 'TS'`. T
 | TSRAGR + BKN023CB | Allowed |
 | SHRA + BKN023TCU | Allowed |
 | RASN + BKN023TCU | Allowed |
+
+---
+
+## 33. METAR-BUILDER-004 — Compact Form Body, Reporting Mode, and Section Visibility
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+**Commit:** Compact METAR Builder form and add reporting visibility options
+**Status:** Complete — Stuart acceptance required
+
+### 33.1 Changes
+
+**Navigation:** Weather tab moved to second position: Live Board | **Weather** | Calendar | ...
+
+**Form layout:** Flat single-column sections replaced with a 2-column CSS grid of cards:
+- Top row: Report | Wind
+- Middle row: Visibility/CAVOK | Present Weather
+- Lower row: Cloud | Final Values (Temp/Dew/QNH + Colour State when Military)
+
+CAVOK suppresses WX and Cloud cards from the grid (CSS `grid-auto-flow: dense` reflows remaining cards). Sticky output/copy/validation panel intentionally unchanged.
+
+**Reporting mode (Admin > Weather):** Military (default) / Civilian.
+- Military: Colour State available, auto-populated, outputs `RMK BLU/WHT/GRN` etc.
+- Civilian: Colour State section hidden, no auto-populate, no `RMK` colour output.
+- Persisted in `vectair_fdms_config.reportingMode`.
+
+**Section visibility (Admin > Weather):** Per-section admin controls for RVR, Recent Weather, Wind Shear, Runway State, Colour State. Each: Hidden / Available collapsed / Available expanded.
+
+Woodvale Military defaults:
+```json
+{ "rvr": "hidden", "recentWeather": "collapsed", "windShear": "collapsed", "runwayState": "hidden", "colourState": "expanded" }
+```
+
+Hidden = not shown, not validated, not output. Persisted in `vectair_fdms_config.sectionVisibility`.
+
+**Accordion sections:** RVR, Recent Weather, Wind Shear, Runway State replaced with `▸/▾` collapsible accordions. Header shows section name + live status ("— not reported", "— R28/0800"). Enabled state = accordion is open and not admin-hidden.
+
+**Mandatory group suppression removed:**
+- `mbCloudsEnabled` checkbox removed. Cloud is always mandatory when CAVOK is not set.
+- `mbRvrEnabled`, `mbRecentWxEnabled`, `mbWindShearEnabled`, `mbRwyEnabled` checkboxes removed. Section open/closed replaces them.
+
+### 33.2 Config keys added
+- `reportingMode`: `'military'` | `'civilian'`
+- `sectionVisibility`: `{ rvr, recentWeather, windShear, runwayState, colourState }` each `'hidden' | 'collapsed' | 'expanded'`
+
+### 33.3 Preserved
+- Sticky output/copy/validation panel unchanged
+- METAR issue-time logic unchanged
+- All CAP 746 validation (mixed precip, TS+CB, GR/GS, FG/BR vis checks) unchanged
+- CAVOK advisory warning unchanged
+- Admin schedule settings unchanged
+- `loadSaved()` migration chain unchanged (saved states load cleanly; old `cloudsEnabled` key silently ignored)

@@ -246,7 +246,6 @@ function getDefaultState() {
     wxGroups:             [],
     wxManualText:         '',
     clouds:               [],
-    cloudsEnabled:        true,
     tempC:                '',
     dewC:                 '',
     qnh:                  '',
@@ -333,7 +332,7 @@ function validateState(s) {
       }
     }
 
-    if (!s.cloudsEnabled || !s.clouds.length) {
+    if (!s.clouds.length) {
       errors.push('Cloud: at least one layer required when CAVOK is not set. Use NSC if no significant cloud.');
     } else {
       s.clouds.forEach((c, i) => {
@@ -480,7 +479,7 @@ function buildReport(s) {
       }
     }
 
-    if (s.cloudsEnabled && s.clouds.length) {
+    if (s.clouds.length) {
       s.clouds.forEach(c => {
         if (c.amount === 'NSC') {
           groups.push(c.amount);
@@ -583,6 +582,72 @@ function setVal(id, v)     { const e = el(id); if (e) e.value = v; }
 function setChecked(id, v) { const e = el(id); if (e) e.checked = !!v; }
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Accordion helpers ─────────────────────────────────────────────────────────
+
+function setAccordionOpen(accId, open) {
+  const acc = el(accId);
+  if (!acc) return;
+  acc.classList.toggle('mb-accordion--open', !!open);
+}
+
+function isAccordionEnabled(accId) {
+  const acc = el(accId);
+  return !!(acc && acc.style.display !== 'none' && acc.classList.contains('mb-accordion--open'));
+}
+
+// ── Section visibility (per Admin config) ─────────────────────────────────────
+
+const VIS_DEFAULTS = { rvr: 'hidden', recentWeather: 'collapsed', windShear: 'collapsed', runwayState: 'hidden', colourState: 'expanded' };
+
+function applySectionVisibility() {
+  const cfg  = getConfig();
+  const mode = cfg.reportingMode || 'military';
+  const svis = cfg.sectionVisibility || {};
+
+  function vis(key) { return svis[key] || VIS_DEFAULTS[key]; }
+
+  function applyAcc(accId, v) {
+    const acc = el(accId);
+    if (!acc) return;
+    if (v === 'hidden') {
+      acc.style.display = 'none';
+      setAccordionOpen(accId, false);
+    } else {
+      acc.style.display = '';
+      if (v === 'expanded') setAccordionOpen(accId, true);
+    }
+  }
+
+  applyAcc('mbRvrAccordion',       vis('rvr'));
+  applyAcc('mbRecentWxAccordion',  vis('recentWeather'));
+  applyAcc('mbWindShearAccordion', vis('windShear'));
+  applyAcc('mbRwyAccordion',       vis('runwayState'));
+
+  const colourVis = (mode === 'military') ? vis('colourState') : 'hidden';
+  const colourSection = el('mbColourSection');
+  if (colourSection) colourSection.style.display = colourVis === 'hidden' ? 'none' : '';
+  if (colourVis !== 'hidden') {
+    const cb = el('mbColourEnabled');
+    if (cb && !cb.checked) cb.checked = true;
+  }
+}
+
+function enforceHiddenSections() {
+  const cfg  = getConfig();
+  const mode = cfg.reportingMode || 'military';
+  const svis = cfg.sectionVisibility || {};
+  function isHidden(key) { return (svis[key] || VIS_DEFAULTS[key]) === 'hidden'; }
+
+  if (isHidden('rvr'))          { const a = el('mbRvrAccordion');       if (a) a.style.display = 'none'; }
+  if (isHidden('recentWeather')){ const a = el('mbRecentWxAccordion');  if (a) a.style.display = 'none'; }
+  if (isHidden('windShear'))    { const a = el('mbWindShearAccordion'); if (a) a.style.display = 'none'; }
+  if (isHidden('runwayState'))  { const a = el('mbRwyAccordion');       if (a) a.style.display = 'none'; }
+
+  const colourHidden = mode !== 'military' || isHidden('colourState');
+  const cs = el('mbColourSection');
+  if (cs) cs.style.display = colourHidden ? 'none' : '';
 }
 
 // ── Cloud row builder (NCD removed — human-observed stations only) ─────────────
@@ -707,10 +772,27 @@ function syncWindUi(windType) {
 }
 
 function syncCavokUi(cavok) {
-  ['mbVisSection','mbWxSection','mbCloudSection','mbRvrSection'].forEach(id => {
+  // WX and Cloud are grid cards — hide/show body content (grid reflows via dense)
+  ['mbWxSection','mbCloudSection'].forEach(id => {
     const e = el(id);
     if (e) e.style.display = cavok ? 'none' : '';
   });
+  // Vis input row
+  const visRow = el('mbVisSection');
+  if (visRow) visRow.style.display = cavok ? 'none' : '';
+
+  // RVR accordion: hide when CAVOK; when re-shown, restore to admin visibility
+  const rvrAcc = el('mbRvrAccordion');
+  if (rvrAcc) {
+    if (cavok) {
+      rvrAcc.style.display = 'none';
+    } else {
+      const cfg = getConfig();
+      const rvrVis = (cfg.sectionVisibility || {}).rvr || VIS_DEFAULTS.rvr;
+      rvrAcc.style.display = rvrVis === 'hidden' ? 'none' : '';
+    }
+  }
+
   // Conditional mandatory asterisks
   const visReq   = el('mbVisRequired');
   const cloudReq = el('mbCloudRequired');
@@ -797,6 +879,16 @@ function readFormState() {
     });
   });
 
+  // Optional sections: enabled iff accordion is open AND visible (not hidden by admin)
+  const rvrEnabled      = isAccordionEnabled('mbRvrAccordion');
+  const recentWxEnabled = isAccordionEnabled('mbRecentWxAccordion');
+  const windShearEnabled= isAccordionEnabled('mbWindShearAccordion');
+  const rwyEnabled      = isAccordionEnabled('mbRwyAccordion');
+
+  // Colour: checkbox state, but force false if section is hidden
+  const colourSectionHidden = el('mbColourSection')?.style.display === 'none';
+  const colourEnabled = colourSectionHidden ? false : (el('mbColourEnabled')?.checked || false);
+
   return {
     reportType:           el('mbReportType')?.value || 'METAR',
     station:              (el('mbStation')?.value   || DEFAULT_STATION).toUpperCase().trim(),
@@ -813,29 +905,28 @@ function readFormState() {
     cavok:                el('mbCavok')?.checked      || false,
     vis:                  el('mbVis')?.value          || '',
     rvr:                  el('mbRvr')?.value          || '',
-    rvrEnabled:           el('mbRvrEnabled')?.checked || false,
+    rvrEnabled,
     wxEnabled:            el('mbWxEnabled')?.checked  || false,
     wxMode,
     wxGroups,
     wxManualText:         el('mbWxManualText')?.value || '',
     clouds,
-    cloudsEnabled:        el('mbCloudsEnabled')?.checked !== false,
     tempC:                el('mbTemp')?.value         || '',
     dewC:                 el('mbDew')?.value          || '',
     qnh:                  el('mbQnh')?.value          || '',
-    recentWxEnabled:      el('mbRecentWxEnabled')?.checked    || false,
+    recentWxEnabled,
     recentWxMode:         rwxMode,
     recentWxIntensity:    el('mbRecentWxIntensity')?.value    || '',
     recentWxDescriptor:   el('mbRecentWxDescriptor')?.value   || '',
     recentWxPhenomenon:   el('mbRecentWxPhenomenon')?.value   || '',
     recentWxManualText:   el('mbRecentWxManualText')?.value   || '',
     windShear:            el('mbWindShear')?.value    || '',
-    windShearEnabled:     el('mbWindShearEnabled')?.checked || false,
+    windShearEnabled,
     colourState:          el('mbColour')?.value       || '',
-    colourEnabled:        el('mbColourEnabled')?.checked || false,
+    colourEnabled,
     colourManualOverride,
     rwyState:             el('mbRwyState')?.value     || '',
-    rwyEnabled:           el('mbRwyEnabled')?.checked || false,
+    rwyEnabled,
   };
 }
 
@@ -858,7 +949,11 @@ function applyStateToForm(s) {
   setChecked('mbCavok',    s.cavok);
   setVal('mbVis',          s.vis);
   setVal('mbRvr',          s.rvr);
-  setChecked('mbRvrEnabled', s.rvrEnabled);
+  // Accordion open states from saved enabled flags
+  setAccordionOpen('mbRvrAccordion',       !!s.rvrEnabled);
+  setAccordionOpen('mbRecentWxAccordion',  !!s.recentWxEnabled);
+  setAccordionOpen('mbWindShearAccordion', !!s.windShearEnabled);
+  setAccordionOpen('mbRwyAccordion',       !!s.rwyEnabled);
 
   setChecked('mbWxEnabled', s.wxEnabled);
   const wxModeRadio = document.querySelector(`input[name="mbWxMode"][value="${s.wxMode || 'structured'}"]`);
@@ -867,12 +962,10 @@ function applyStateToForm(s) {
   setVal('mbWxManualText', s.wxManualText || '');
   syncWxMode(s.wxMode || 'structured', '');
 
-  setChecked('mbCloudsEnabled', s.cloudsEnabled);
   setVal('mbTemp', s.tempC);
   setVal('mbDew',  s.dewC);
   setVal('mbQnh',  s.qnh);
 
-  setChecked('mbRecentWxEnabled', s.recentWxEnabled);
   const rwxModeRadio = document.querySelector(`input[name="mbRecentWxMode"][value="${s.recentWxMode || 'structured'}"]`);
   if (rwxModeRadio) rwxModeRadio.checked = true;
   setVal('mbRecentWxIntensity',  s.recentWxIntensity  || '');
@@ -881,8 +974,7 @@ function applyStateToForm(s) {
   setVal('mbRecentWxManualText', s.recentWxManualText || '');
   syncWxMode(s.recentWxMode || 'structured', 'Recent');
 
-  setVal('mbWindShear',   s.windShear);
-  setChecked('mbWindShearEnabled', s.windShearEnabled);
+  setVal('mbWindShear', s.windShear);
 
   setChecked('mbColourEnabled', s.colourEnabled);
   setVal('mbColour', s.colourState || '');
@@ -890,11 +982,11 @@ function applyStateToForm(s) {
   updateColourAutoIndicator(!!s.colourManualOverride);
 
   setVal('mbRwyState', s.rwyState);
-  setChecked('mbRwyEnabled', s.rwyEnabled);
 
   renderCloudList(s.clouds);
   syncWindUi(s.windType);
   syncCavokUi(s.cavok);
+  enforceHiddenSections();
 }
 
 // ── Cloud list render ──────────────────────────────────────────────────────────
@@ -935,6 +1027,37 @@ function bindCloudRows() {
   });
 }
 
+// ── Accordion status labels ────────────────────────────────────────────────────
+
+function updateAccordionStatuses(s) {
+  const rvrSt = el('mbRvrStatus');
+  if (rvrSt) rvrSt.textContent = (s.rvrEnabled && s.rvr.trim())
+    ? `— ${s.rvr.trim().toUpperCase()}`
+    : '— not reported';
+
+  const rwxSt = el('mbRecentWxStatus');
+  if (rwxSt) {
+    if (s.recentWxEnabled) {
+      const code = s.recentWxMode === 'manual'
+        ? s.recentWxManualText.trim()
+        : ((s.recentWxIntensity || '') + (s.recentWxDescriptor || '') + (s.recentWxPhenomenon || ''));
+      rwxSt.textContent = code ? `— RE${code.toUpperCase().replace(/^RE/i, '')}` : '— no data';
+    } else {
+      rwxSt.textContent = '— not reported';
+    }
+  }
+
+  const wsSt = el('mbWindShearStatus');
+  if (wsSt) wsSt.textContent = (s.windShearEnabled && s.windShear.trim())
+    ? `— WS ${s.windShear.trim().toUpperCase()}`
+    : '— not reported';
+
+  const rwySt = el('mbRwyStatus');
+  if (rwySt) rwySt.textContent = (s.rwyEnabled && s.rwyState.trim())
+    ? `— ${s.rwyState.trim().toUpperCase()}`
+    : '— not reported';
+}
+
 // ── Output update ─────────────────────────────────────────────────────────────
 
 function handleChange() {
@@ -947,11 +1070,11 @@ function handleChange() {
     s.colourState = auto;
   }
 
-  // Auto-expand RVR when vis drops below 1500 m (advisory — user can uncheck)
+  // Auto-expand RVR when vis drops below 1500 m (advisory — user may collapse again)
   if (!s.cavok && /^\d{4}$/.test(s.vis) && parseInt(s.vis, 10) < 1500) {
-    const rvrEl = el('mbRvrEnabled');
-    if (rvrEl && !rvrEl.checked) {
-      rvrEl.checked = true;
+    const rvrAcc = el('mbRvrAccordion');
+    if (rvrAcc && rvrAcc.style.display !== 'none' && !rvrAcc.classList.contains('mb-accordion--open')) {
+      setAccordionOpen('mbRvrAccordion', true);
       s.rvrEnabled = true;
     }
   }
@@ -963,6 +1086,7 @@ function handleChange() {
   const incMsg   = el('mbIncompleteMsg');
 
   if (outputEl) outputEl.textContent = buildReport(s);
+  updateAccordionStatuses(s);
 
   if (validEl) {
     const parts = [];
@@ -1000,6 +1124,7 @@ export function initMetarBuilder() {
   if (!el('tab-metar')) return;
 
   applyStateToForm(getDefaultState());
+  applySectionVisibility();
   handleChange();
 
   el('mbReportType')?.addEventListener('change', () => {
@@ -1033,7 +1158,17 @@ export function initMetarBuilder() {
 
   el('mbVis')?.addEventListener('input', handleChange);
   el('mbRvr')?.addEventListener('input', handleChange);
-  el('mbRvrEnabled')?.addEventListener('change', handleChange);
+
+  // Accordion toggles
+  ['mbRvrAccordion','mbRecentWxAccordion','mbWindShearAccordion','mbRwyAccordion'].forEach(accId => {
+    const header = el(accId)?.querySelector('.mb-accordion-header');
+    if (!header) return;
+    header.addEventListener('click', () => {
+      const acc = el(accId);
+      setAccordionOpen(accId, !acc.classList.contains('mb-accordion--open'));
+      handleChange();
+    });
+  });
 
   // Present weather
   document.querySelectorAll('input[name="mbWxMode"]').forEach(r =>
@@ -1055,7 +1190,6 @@ export function initMetarBuilder() {
   el('mbWxManualText')?.addEventListener('input', handleChange);
 
   // Cloud
-  el('mbCloudsEnabled')?.addEventListener('change', handleChange);
   el('mbAddCloud')?.addEventListener('click', () => {
     const list = el('mbCloudList');
     if (!list) return;
@@ -1073,13 +1207,12 @@ export function initMetarBuilder() {
   document.querySelectorAll('input[name="mbRecentWxMode"]').forEach(r =>
     r.addEventListener('change', () => { syncWxMode(r.value, 'Recent'); handleChange(); })
   );
-  ['mbRecentWxEnabled','mbRecentWxIntensity','mbRecentWxDescriptor','mbRecentWxPhenomenon'].forEach(id =>
+  ['mbRecentWxIntensity','mbRecentWxDescriptor','mbRecentWxPhenomenon'].forEach(id =>
     el(id)?.addEventListener('change', handleChange)
   );
   el('mbRecentWxManualText')?.addEventListener('input', handleChange);
 
   el('mbWindShear')?.addEventListener('input', handleChange);
-  el('mbWindShearEnabled')?.addEventListener('change', handleChange);
 
   // Colour state
   el('mbColourEnabled')?.addEventListener('change', handleChange);
@@ -1099,7 +1232,6 @@ export function initMetarBuilder() {
   });
 
   el('mbRwyState')?.addEventListener('input', handleChange);
-  el('mbRwyEnabled')?.addEventListener('change', handleChange);
 
   // Copy
   el('mbCopyBtn')?.addEventListener('click', () => {
@@ -1122,6 +1254,7 @@ export function initMetarBuilder() {
   // Reset
   el('mbResetBtn')?.addEventListener('click', () => {
     applyStateToForm(getDefaultState());
+    applySectionVisibility();
     handleChange();
   });
 
@@ -1130,6 +1263,7 @@ export function initMetarBuilder() {
     const saved = loadSaved();
     if (saved) {
       applyStateToForm({ ...getDefaultState(), ...saved });
+      // enforceHiddenSections() already called inside applyStateToForm
       handleChange();
       showCopyFeedback('Previous observation recalled.');
     } else {
@@ -1177,6 +1311,23 @@ export function initAdminWeather() {
   rebuildMinuteOptions(schedule.pattern || 'H20_H50', schedule.hourlyMinute || '50');
   syncAdminWeatherUi(schedule.pattern || 'H20_H50', schedule.rate || 'bi-hourly');
 
+  // Reporting mode
+  const mode = cfg.reportingMode || 'military';
+  const modeRadio = document.querySelector(`input[name="adminReportingMode"][value="${mode}"]`);
+  if (modeRadio) modeRadio.checked = true;
+
+  // Section visibility
+  const svis = cfg.sectionVisibility || {};
+  function loadVis(elId, key) {
+    const e = el(elId);
+    if (e) e.value = svis[key] || VIS_DEFAULTS[key];
+  }
+  loadVis('adminVisRvr',           'rvr');
+  loadVis('adminVisRecentWeather', 'recentWeather');
+  loadVis('adminVisWindShear',     'windShear');
+  loadVis('adminVisRunwayState',   'runwayState');
+  loadVis('adminVisColourState',   'colourState');
+
   patternEl.addEventListener('change', () => {
     rebuildMinuteOptions(patternEl.value, el('adminWeatherHourlyMinute')?.value || '50');
     syncAdminWeatherUi(patternEl.value, rateEl.value);
@@ -1186,12 +1337,21 @@ export function initAdminWeather() {
   });
 
   saveBtn.addEventListener('click', () => {
-    const minuteEl = el('adminWeatherHourlyMinute');
+    const minuteEl     = el('adminWeatherHourlyMinute');
+    const selectedMode = document.querySelector('input[name="adminReportingMode"]:checked')?.value || 'military';
     updateConfig({
       metarObservationSchedule: {
-        pattern:       patternEl.value,
-        rate:          rateEl.value,
-        hourlyMinute:  minuteEl ? minuteEl.value : '50',
+        pattern:      patternEl.value,
+        rate:         rateEl.value,
+        hourlyMinute: minuteEl ? minuteEl.value : '50',
+      },
+      reportingMode: selectedMode,
+      sectionVisibility: {
+        rvr:           el('adminVisRvr')?.value           || VIS_DEFAULTS.rvr,
+        recentWeather: el('adminVisRecentWeather')?.value || VIS_DEFAULTS.recentWeather,
+        windShear:     el('adminVisWindShear')?.value     || VIS_DEFAULTS.windShear,
+        runwayState:   el('adminVisRunwayState')?.value   || VIS_DEFAULTS.runwayState,
+        colourState:   el('adminVisColourState')?.value   || VIS_DEFAULTS.colourState,
       },
     });
     const st = el('adminWeatherStatus');
