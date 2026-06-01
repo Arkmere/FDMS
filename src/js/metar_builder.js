@@ -112,65 +112,100 @@ function deriveColourState(vis, clouds, cavok) {
   return 'RED';
 }
 
-// ── CAP 746 WX compatibility warnings ────────────────────────────────────────
+// ── CAP 746 WX compatibility validator — blocking errors ─────────────────────
 
 const PRECIP_PHENOM = new Set(['RA','DZ','SN','SG','IC','PL','GR','GS','UP']);
 
-function validateWxCompatibility(intensity, descriptor, phenomenon, vis) {
-  const w = [];
+function validateWxCompatibility(intensity, descriptor, phenomenon, vis, tempC) {
+  const errors   = [];
+  const warnings = [];
 
-  if ((intensity === '+' || intensity === '-') && phenomenon) {
+  // TS alone (with or without VC) is a valid terminal group — no further checks
+  if (descriptor === 'TS' && !phenomenon) return { errors, warnings };
+
+  // ── Intensity +/− only applies to precipitation ──────────────────────────
+  if (intensity === '+' || intensity === '-') {
     if (!PRECIP_PHENOM.has(phenomenon)) {
-      w.push(`Intensity '${intensity}' applies only to precipitation phenomena (CAP 746).`);
+      errors.push(`Intensity '${intensity}' is only valid for precipitation. '${phenomenon || '(none)'}' does not permit +/− intensity (CAP 746).`);
     }
   }
 
-  if (intensity === 'VC') {
-    const VC_PHENOM = new Set(['TS','FG','DS','SS','PO','FC']);
-    const VC_DESC   = new Set(['SH']);
-    if (phenomenon && !VC_PHENOM.has(phenomenon) && !VC_DESC.has(descriptor)) {
-      w.push('VC (in vicinity) is applicable only with TS, FG, SH, PO, FC, DS, SS (CAP 746).');
+  // ── VC (in vicinity) permitted combinations ──────────────────────────────
+  if (intensity === 'VC' && (descriptor || phenomenon)) {
+    const VC_PHENOM_ALONE = new Set(['FG','PO','FC','DS','SS']);
+    const vcOk =
+      (descriptor === 'TS') ||
+      (VC_PHENOM_ALONE.has(phenomenon) && !descriptor) ||
+      (descriptor === 'SH') ||
+      (descriptor === 'BL' && ['DU','SA','SN'].includes(phenomenon));
+    if (!vcOk) {
+      errors.push(`VC with '${descriptor||''}${phenomenon||''}' is not a valid CAP 746 combination. Permitted: VCTS, VCFG, VCSH, VCPO, VCFC, VCDS, VCSS, VCBLSN/DU/SA.`);
     }
   }
 
-  if (descriptor === 'MI' || descriptor === 'BC' || descriptor === 'PR') {
-    if (phenomenon !== 'FG') {
-      w.push(`Descriptor '${descriptor}' requires FG as phenomenon (CAP 746).`);
-    }
+  // ── Descriptor / phenomenon compatibility ────────────────────────────────
+
+  if ((descriptor === 'MI' || descriptor === 'BC' || descriptor === 'PR') && phenomenon !== 'FG') {
+    errors.push(`Descriptor '${descriptor}' requires FG as phenomenon (CAP 746).`);
   }
-  if (descriptor === 'DR' || descriptor === 'BL') {
-    if (!['DU','SA','SN'].includes(phenomenon)) {
-      w.push(`Descriptor '${descriptor}' requires DU, SA, or SN as phenomenon (CAP 746).`);
-    }
+  if ((descriptor === 'DR' || descriptor === 'BL') && !['DU','SA','SN'].includes(phenomenon)) {
+    errors.push(`Descriptor '${descriptor}' requires DU, SA, or SN as phenomenon (CAP 746).`);
   }
-  if (descriptor === 'SH') {
-    if (!PRECIP_PHENOM.has(phenomenon)) {
-      w.push('Descriptor SH (shower) requires a precipitation phenomenon (CAP 746).');
-    }
+  if (descriptor === 'SH' && !PRECIP_PHENOM.has(phenomenon)) {
+    errors.push('SH (shower) requires a precipitation phenomenon (CAP 746).');
   }
-  if (descriptor === 'FZ') {
-    if (!['DZ','RA','FG','UP'].includes(phenomenon)) {
-      w.push('Descriptor FZ (freezing) requires DZ, RA, FG, or UP as phenomenon (CAP 746).');
+  // FZ valid only with DZ, RA, FG, UP — FZSN is not a valid CAP 746 code
+  if (descriptor === 'FZ' && !['DZ','RA','FG','UP'].includes(phenomenon)) {
+    errors.push(`FZ (freezing) requires DZ, RA, FG, or UP. '${phenomenon}' is not valid with FZ — FZSN is not a CAP 746 code.`);
+  }
+  if (descriptor === 'TS' && phenomenon && !PRECIP_PHENOM.has(phenomenon)) {
+    errors.push(`TS (thunderstorm) requires a precipitation phenomenon or must stand alone. '${phenomenon}' is not valid with TS (CAP 746).`);
+  }
+
+  // ── FG / BR / HZ visibility checks (blocking) ────────────────────────────
+  const visM   = parseInt(vis, 10);
+  const hasVis = /^\d{4}$/.test(vis);
+
+  if (phenomenon === 'FG') {
+    const isVicinity  = intensity === 'VC';              // VCFG — no station vis restriction
+    const isFZFG      = descriptor === 'FZ';
+    const isException = ['MI','BC','PR'].includes(descriptor);  // MIFG / BCFG / PRFG
+
+    if (isFZFG) {
+      if (!hasVis) {
+        errors.push('FZFG: visibility is required to validate this combination.');
+      } else if (visM >= 1000) {
+        errors.push(`FZFG: visibility must be < 1000 m (currently ${vis} m) (CAP 746).`);
+      }
+      const tNum = parseMetarTempInput(tempC);
+      if (!isNaN(tNum) && tNum >= 0) {
+        errors.push(`FZFG (freezing fog): temperature must be below 0°C (currently ${tempC}°C).`);
+      }
+    } else if (!isVicinity && !isException) {
+      if (!hasVis) {
+        errors.push('FG (fog): visibility must be entered to validate this combination.');
+      } else if (visM >= 1000) {
+        errors.push(`FG (fog): visibility must be < 1000 m (currently ${vis} m). Use BR (mist) for 1000–5000 m (CAP 746).`);
+      }
     }
   }
 
-  const visM = parseInt(vis, 10);
-  if (phenomenon === 'FG' && descriptor !== 'FZ') {
-    if (!isNaN(visM) && visM > 1000) {
-      w.push('FG (fog): visibility should be ≤ 1000 m. Consider BR (mist) for 1000–5000 m.');
-    }
-  }
   if (phenomenon === 'BR') {
-    if (!isNaN(visM)) {
-      if (visM < 1000) w.push('BR (mist): visibility should be ≥ 1000 m. Consider FG for < 1000 m.');
-      if (visM > 5000) w.push('BR (mist): visibility should be ≤ 5000 m. Consider HZ for > 5000 m.');
+    if (intensity !== 'VC') {
+      if (!hasVis) {
+        errors.push('BR (mist): visibility must be entered to validate this combination.');
+      } else {
+        if (visM < 1000) errors.push(`BR (mist): visibility must be ≥ 1000 m (currently ${vis} m). Use FG for vis < 1000 m (CAP 746).`);
+        if (visM > 5000) errors.push(`BR (mist): visibility must be ≤ 5000 m (currently ${vis} m). Use HZ for vis > 5000 m (CAP 746).`);
+      }
     }
   }
-  if (phenomenon === 'HZ' && !isNaN(visM) && visM < 1000) {
-    w.push('HZ (haze): visibility should be ≥ 1000 m (CAP 746).');
+
+  if (phenomenon === 'HZ' && hasVis && visM < 1000) {
+    errors.push(`HZ (haze): visibility should be ≥ 1000 m (currently ${vis} m) (CAP 746).`);
   }
 
-  return w;
+  return { errors, warnings };
 }
 
 // ── Defaults (no operational values — all blank) ──────────────────────────────
@@ -287,10 +322,10 @@ function validateState(s) {
       errors.push('Cloud: at least one layer required when CAVOK is not set. Use NSC if no significant cloud.');
     } else {
       s.clouds.forEach((c, i) => {
-        if (!['FEW','SCT','BKN','OVC','NSC','SKC'].includes(c.amount)) {
+        if (!['FEW','SCT','BKN','OVC','NSC'].includes(c.amount)) {
           errors.push(`Cloud layer ${i + 1}: invalid amount.`);
         }
-        if (!['NSC','SKC'].includes(c.amount) && !/^\d{3}$/.test(c.height)) {
+        if (c.amount !== 'NSC' && !/^\d{3}$/.test(c.height)) {
           errors.push(`Cloud layer ${i + 1}: height must be three digits (e.g. 030).`);
         }
       });
@@ -302,12 +337,15 @@ function validateState(s) {
   if (s.wxEnabled) {
     if (s.wxMode === 'structured') {
       const groups = s.wxGroups || [];
-      if (!groups.length || !groups.some(g => g.phenomenon)) {
-        errors.push('Present Weather: select at least one phenomenon or disable the section.');
+      // TS alone (descriptor='TS', phenomenon='') counts as a valid filled group
+      const anyFilled = groups.some(g => g.phenomenon || g.descriptor === 'TS');
+      if (!groups.length || !anyFilled) {
+        errors.push('Present Weather: select at least one phenomenon (TS alone is also valid) or disable the section.');
       } else {
         groups.forEach((g, i) => {
-          validateWxCompatibility(g.intensity, g.descriptor, g.phenomenon, s.vis)
-            .forEach(msg => warnings.push(`WX group ${i + 1}: ${msg}`));
+          const compat = validateWxCompatibility(g.intensity, g.descriptor, g.phenomenon, s.vis, s.tempC);
+          compat.errors.forEach(msg => errors.push(`WX group ${i + 1}: ${msg}`));
+          compat.warnings.forEach(msg => warnings.push(`WX group ${i + 1}: ${msg}`));
         });
         const hasTS = groups.some(g => g.descriptor === 'TS');
         const hasCB = (s.clouds || []).some(c => c.qualifier === 'CB');
@@ -415,7 +453,7 @@ function buildReport(s) {
 
     if (s.cloudsEnabled && s.clouds.length) {
       s.clouds.forEach(c => {
-        if (['NSC','SKC'].includes(c.amount)) {
+        if (c.amount === 'NSC') {
           groups.push(c.amount);
         } else {
           groups.push(`${c.amount}${String(c.height || '').padStart(3,'0')}${c.qualifier || ''}`);
@@ -509,11 +547,11 @@ function escHtml(s) {
 // ── Cloud row builder (NCD removed — human-observed stations only) ─────────────
 
 function buildCloudRow(idx, cloud) {
-  const amounts = ['FEW','SCT','BKN','OVC','NSC','SKC'];
+  const amounts = ['FEW','SCT','BKN','OVC','NSC'];  // NCD and SKC removed
   const amtOpts = amounts.map(a =>
     `<option value="${a}"${a === cloud.amount ? ' selected' : ''}>${a}</option>`
   ).join('');
-  const noHeight = ['NSC','SKC'].includes(cloud.amount);
+  const noHeight = cloud.amount === 'NSC';
   const heightHtml = noHeight
     ? `<input type="text" class="mb-cloud-height" style="width:56px;opacity:0.4;pointer-events:none;" value="" disabled placeholder="---" />`
     : `<input type="text" class="mb-cloud-height" maxlength="3" style="width:56px;" value="${cloud.height || ''}" placeholder="030" />`;
@@ -564,11 +602,9 @@ function buildWxGroupRow(idx, group) {
     ['DZ','Drizzle','Precipitation'],
     ['SN','Snow','Precipitation'],
     ['SG','Snow grains','Precipitation'],
-    ['IC','Ice crystals','Precipitation'],
     ['PL','Ice pellets','Precipitation'],
     ['GR','Hail','Precipitation'],
     ['GS','Small hail','Precipitation'],
-    ['UP','Unknown precip','Precipitation'],
     ['FG','Fog','Obscuration'],
     ['BR','Mist','Obscuration'],
     ['HZ','Haze','Obscuration'],
@@ -817,7 +853,7 @@ function bindCloudRows() {
     const amountSel = row.querySelector('.mb-cloud-amount');
     const qualSel   = row.querySelector('.mb-cloud-qualifier');
     amountSel?.addEventListener('change', () => {
-      const noHeight = ['NSC','SKC'].includes(amountSel.value);
+      const noHeight = amountSel.value === 'NSC';
       const hEl = row.querySelector('.mb-cloud-height');
       if (hEl) {
         hEl.disabled = noHeight;

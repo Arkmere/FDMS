@@ -2781,6 +2781,46 @@ Stored in `vectair_fdms_config` via `updateConfig()`. All three keys present fro
 
 ---
 
-## 30. Immediate next action
+## 30. METAR-BUILDER-003a — Blocking Present-Weather Validation
 
-METAR-BUILDER-003 implementation complete. Stuart acceptance required before further METAR work.
+**Status:** Implementation complete.
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+
+**Reference:** CAP 746 Issue 6
+
+### 30.1 Changes applied
+
+| # | Item | Detail |
+|---|---|---|
+| 1 | WX compatibility now blocking | `validateWxCompatibility()` returns `{errors, warnings}`. CAP 746 illegal combinations are now `errors` (block Copy), not warnings. `validateState()` spreads them into the main errors/warnings arrays. |
+| 2 | TS alone supported | `descriptor='TS'` with no phenomenon is a valid terminal group. Early-return in `validateWxCompatibility` skips all other checks. `anyFilled` check updated to accept `g.descriptor === 'TS'`. Outputs `TS` in the report. |
+| 3 | FG visibility blocking | FG (without exception descriptors MI/BC/PR or VC): vis required and must be < 1000 m. FZFG: vis must be < 1000 m and temp must be < 0°C. These are errors. MIFG / BCFG / PRFG / VCFG are exempt from station vis restriction. |
+| 4 | BR visibility blocking | BR (not VCBR): vis required; < 1000 m or > 5000 m blocks Copy. |
+| 5 | Descriptor matrix blocking | MI/BC/PR without FG, DR/BL without DU/SA/SN, SH without precipitation, FZ without DZ/RA/FG/UP, FZSN — all blocking errors. |
+| 6 | Intensity blocking | +/− with any non-precipitation phenomenon blocks Copy. |
+| 7 | VC blocking | VCRA and other invalid VC combinations block Copy. Valid: VCTS, VCFG, VCSH, VCPO, VCFC, VCDS, VCSS, VCBLxx. |
+| 8 | Remove UP from structured selector | UP removed from `phenomData` in `buildWxGroupRow()`. Manual override remains available. |
+| 9 | Remove IC from structured selector | IC removed from `phenomData` in `buildWxGroupRow()`. Manual override remains available. |
+| 10 | Remove SKC from cloud selector | SKC removed from `buildCloudRow()` amounts array and from all validation and output checks. Human-observed options: FEW / SCT / BKN / OVC / NSC. |
+| 11 | STATE.md | This section. |
+
+### 30.2 Blocking vs warning split (from 003a)
+
+**Blocking (Copy disabled):**
+- Illegal intensity (+/− with non-precipitation)
+- Invalid VC combinations
+- Descriptor/phenomenon matrix violations
+- FG with vis ≥ 1000 m (except MIFG/BCFG/PRFG/VCFG)
+- FZFG with vis ≥ 1000 m or temp ≥ 0°C
+- BR with vis < 1000 m or vis > 5000 m
+- FZSN and other invalid FZ compounds
+
+**Advisory warning only:**
+- CAVOK criteria reminder
+- TS without CB cloud qualifier
+- Manual weather group (unvalidated)
+
+### 30.3 Immediate next action
+
+METAR-BUILDER-003a implementation complete. Stuart acceptance required.
