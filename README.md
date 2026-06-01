@@ -8,6 +8,22 @@ Vectair Flite is not a hosted web application. It uses HTML, CSS, and JavaScript
 
 The V1 target is a local, offline-capable desktop application for single-operator use.
 
+## Key features
+
+- **Live Board** — strip-based flight data management for DEP, ARR, LOC, and OVR movements with full lifecycle (Planned → Active → Completed).
+- **Create From** — contextual strip creation workflow for duplicating, reciprocating, and cross-type strip creation.
+- **Weather / METAR Builder** — structured offline METAR/SPECI drafting aid.
+  - Offline/manual-input workflow; does not fetch live weather.
+  - CAP 746-guided validation; Copy is blocked until all mandatory fields are valid.
+  - Civilian and Military reporting modes.
+  - Admin-configurable optional sections: RVR, Recent Weather, Wind Shear, Runway State, Colour State.
+- **Formations** — multi-aircraft formation management with per-element lifecycle, WTC, and movement tracking.
+- **Calendar** — booking and movement calendar for scheduling.
+- **History Retrieval** — strip board, calendar, and search/table views of completed movements.
+- **Reports** — Monthly Return, Dashboard, Insights, and Cancellation Report with CSV/XLSX export.
+- **Booking** — visitor and flight booking management with strip-link integration.
+- **Admin** — configuration for movements, exports, history filters, in-app updates, and weather settings.
+
 ---
 
 ## Current architecture
