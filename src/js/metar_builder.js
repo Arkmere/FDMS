@@ -116,60 +116,75 @@ function deriveColourState(vis, clouds, cavok) {
 
 const PRECIP_PHENOM = new Set(['RA','DZ','SN','SG','IC','PL','GR','GS','UP']);
 
-function validateWxCompatibility(intensity, descriptor, phenomenon, vis, tempC) {
+// Phenomena valid in the secondary/tertiary precipitation slots
+const PRECIP_LIST = ['RA','DZ','SN','SG','PL','GR','GS'];
+
+// Accepts a full group object {intensity, descriptor, phenom1, phenom2, phenom3}
+function validateWxCompatibility(group, vis, tempC) {
+  const { intensity, descriptor } = group;
+  // Backwards-compat: old saves may use 'phenomenon' instead of 'phenom1'
+  const phenom1 = group.phenom1 !== undefined ? group.phenom1 : (group.phenomenon || '');
+  const phenom2 = group.phenom2 || '';
+  const phenom3 = group.phenom3 || '';
   const errors   = [];
   const warnings = [];
 
   // TS alone (with or without VC) is a valid terminal group — no further checks
-  if (descriptor === 'TS' && !phenomenon) return { errors, warnings };
+  if (descriptor === 'TS' && !phenom1) return { errors, warnings };
+
+  // ── GR/GS require SH or TS (CAP 746) ────────────────────────────────────
+  const hasGRorGS = [phenom1, phenom2, phenom3].some(p => p === 'GR' || p === 'GS');
+  if (hasGRorGS && descriptor !== 'SH' && descriptor !== 'TS') {
+    errors.push('GR/GS must be reported with SH (shower) or TS (thunderstorm) (CAP 746).');
+  }
 
   // ── Intensity +/− only applies to precipitation ──────────────────────────
   if (intensity === '+' || intensity === '-') {
-    if (!PRECIP_PHENOM.has(phenomenon)) {
-      errors.push(`Intensity '${intensity}' is only valid for precipitation. '${phenomenon || '(none)'}' does not permit +/− intensity (CAP 746).`);
+    if (!PRECIP_PHENOM.has(phenom1)) {
+      errors.push(`Intensity '${intensity}' is only valid for precipitation. '${phenom1 || '(none)'}' does not permit +/− intensity (CAP 746).`);
     }
   }
 
   // ── VC (in vicinity) permitted combinations ──────────────────────────────
-  if (intensity === 'VC' && (descriptor || phenomenon)) {
+  if (intensity === 'VC' && (descriptor || phenom1)) {
     const VC_PHENOM_ALONE = new Set(['FG','PO','FC','DS','SS']);
     const vcOk =
       (descriptor === 'TS') ||
-      (VC_PHENOM_ALONE.has(phenomenon) && !descriptor) ||
+      (VC_PHENOM_ALONE.has(phenom1) && !descriptor) ||
       (descriptor === 'SH') ||
-      (descriptor === 'BL' && ['DU','SA','SN'].includes(phenomenon));
+      (descriptor === 'BL' && ['DU','SA','SN'].includes(phenom1));
     if (!vcOk) {
-      errors.push(`VC with '${descriptor||''}${phenomenon||''}' is not a valid CAP 746 combination. Permitted: VCTS, VCFG, VCSH, VCPO, VCFC, VCDS, VCSS, VCBLSN/DU/SA.`);
+      errors.push(`VC with '${descriptor||''}${phenom1||''}' is not a valid CAP 746 combination. Permitted: VCTS, VCFG, VCSH, VCPO, VCFC, VCDS, VCSS, VCBLSN/DU/SA.`);
     }
   }
 
   // ── Descriptor / phenomenon compatibility ────────────────────────────────
 
-  if ((descriptor === 'MI' || descriptor === 'BC' || descriptor === 'PR') && phenomenon !== 'FG') {
+  if ((descriptor === 'MI' || descriptor === 'BC' || descriptor === 'PR') && phenom1 !== 'FG') {
     errors.push(`Descriptor '${descriptor}' requires FG as phenomenon (CAP 746).`);
   }
-  if ((descriptor === 'DR' || descriptor === 'BL') && !['DU','SA','SN'].includes(phenomenon)) {
+  if ((descriptor === 'DR' || descriptor === 'BL') && !['DU','SA','SN'].includes(phenom1)) {
     errors.push(`Descriptor '${descriptor}' requires DU, SA, or SN as phenomenon (CAP 746).`);
   }
-  if (descriptor === 'SH' && !PRECIP_PHENOM.has(phenomenon)) {
+  if (descriptor === 'SH' && !PRECIP_PHENOM.has(phenom1)) {
     errors.push('SH (shower) requires a precipitation phenomenon (CAP 746).');
   }
   // FZ valid only with DZ, RA, FG, UP — FZSN is not a valid CAP 746 code
-  if (descriptor === 'FZ' && !['DZ','RA','FG','UP'].includes(phenomenon)) {
-    errors.push(`FZ (freezing) requires DZ, RA, FG, or UP. '${phenomenon}' is not valid with FZ — FZSN is not a CAP 746 code.`);
+  if (descriptor === 'FZ' && !['DZ','RA','FG','UP'].includes(phenom1)) {
+    errors.push(`FZ (freezing) requires DZ, RA, FG, or UP. '${phenom1}' is not valid with FZ — FZSN is not a CAP 746 code.`);
   }
-  if (descriptor === 'TS' && phenomenon && !PRECIP_PHENOM.has(phenomenon)) {
-    errors.push(`TS (thunderstorm) requires a precipitation phenomenon or must stand alone. '${phenomenon}' is not valid with TS (CAP 746).`);
+  if (descriptor === 'TS' && phenom1 && !PRECIP_PHENOM.has(phenom1)) {
+    errors.push(`TS (thunderstorm) requires a precipitation phenomenon or must stand alone. '${phenom1}' is not valid with TS (CAP 746).`);
   }
 
   // ── FG / BR / HZ visibility checks (blocking) ────────────────────────────
   const visM   = parseInt(vis, 10);
   const hasVis = /^\d{4}$/.test(vis);
 
-  if (phenomenon === 'FG') {
-    const isVicinity  = intensity === 'VC';              // VCFG — no station vis restriction
+  if (phenom1 === 'FG') {
+    const isVicinity  = intensity === 'VC';
     const isFZFG      = descriptor === 'FZ';
-    const isException = ['MI','BC','PR'].includes(descriptor);  // MIFG / BCFG / PRFG
+    const isException = ['MI','BC','PR'].includes(descriptor);
 
     if (isFZFG) {
       if (!hasVis) {
@@ -190,7 +205,7 @@ function validateWxCompatibility(intensity, descriptor, phenomenon, vis, tempC) 
     }
   }
 
-  if (phenomenon === 'BR') {
+  if (phenom1 === 'BR') {
     if (intensity !== 'VC') {
       if (!hasVis) {
         errors.push('BR (mist): visibility must be entered to validate this combination.');
@@ -201,7 +216,7 @@ function validateWxCompatibility(intensity, descriptor, phenomenon, vis, tempC) 
     }
   }
 
-  if (phenomenon === 'HZ' && hasVis && visM < 1000) {
+  if (phenom1 === 'HZ' && hasVis && visM < 1000) {
     errors.push(`HZ (haze): visibility should be ≥ 1000 m (currently ${vis} m) (CAP 746).`);
   }
 
@@ -337,16 +352,29 @@ function validateState(s) {
   if (s.wxEnabled) {
     if (s.wxMode === 'structured') {
       const groups = s.wxGroups || [];
-      // TS alone (descriptor='TS', phenomenon='') counts as a valid filled group
-      const anyFilled = groups.some(g => g.phenomenon || g.descriptor === 'TS');
+      const anyFilled = groups.some(g => {
+        const p1 = g.phenom1 !== undefined ? g.phenom1 : (g.phenomenon || '');
+        return p1 || g.descriptor === 'TS';
+      });
       if (!groups.length || !anyFilled) {
         errors.push('Present Weather: select at least one phenomenon (TS alone is also valid) or disable the section.');
       } else {
         groups.forEach((g, i) => {
-          const compat = validateWxCompatibility(g.intensity, g.descriptor, g.phenomenon, s.vis, s.tempC);
+          const compat = validateWxCompatibility(g, s.vis, s.tempC);
           compat.errors.forEach(msg => errors.push(`WX group ${i + 1}: ${msg}`));
           compat.warnings.forEach(msg => warnings.push(`WX group ${i + 1}: ${msg}`));
         });
+
+        // Block multiple separate pure-precipitation groups (CAP 746: combine into one)
+        const PURE_PRECIP = new Set(['DZ','RA','SN','SG','PL','GR','GS']);
+        const purePrecipGroups = groups.filter(g => {
+          const p1 = g.phenom1 !== undefined ? g.phenom1 : (g.phenomenon || '');
+          return !g.descriptor && g.intensity !== 'VC' && PURE_PRECIP.has(p1);
+        });
+        if (purePrecipGroups.length > 1) {
+          errors.push('Present Weather: simultaneous precipitation types must be combined into one group with the dominant type first, not entered as separate groups (CAP 746).');
+        }
+
         const hasTS = groups.some(g => g.descriptor === 'TS');
         const hasCB = (s.clouds || []).some(c => c.qualifier === 'CB');
         if (hasTS && !hasCB) {
@@ -445,7 +473,8 @@ function buildReport(s) {
         if (t) groups.push(t);
       } else {
         (s.wxGroups || []).forEach(g => {
-          const code = (g.intensity || '') + (g.descriptor || '') + (g.phenomenon || '');
+          const p1 = g.phenom1 !== undefined ? g.phenom1 : (g.phenomenon || '');
+          const code = (g.intensity || '') + (g.descriptor || '') + p1 + (g.phenom2 || '') + (g.phenom3 || '');
           if (code) groups.push(code);
         });
       }
@@ -516,7 +545,9 @@ function loadSaved() {
         parsed.wxGroups = [{
           intensity:  parsed.wxIntensity  || '',
           descriptor: parsed.wxDescriptor || '',
-          phenomenon: parsed.wxPhenomenon || '',
+          phenom1:    parsed.wxPhenomenon || '',
+          phenom2:    '',
+          phenom3:    '',
         }];
       } else {
         parsed.wxGroups = [];
@@ -524,6 +555,16 @@ function loadSaved() {
       delete parsed.wxIntensity;
       delete parsed.wxDescriptor;
       delete parsed.wxPhenomenon;
+    }
+    // Migrate wxGroups items: old 'phenomenon' field → 'phenom1' (003b)
+    if (Array.isArray(parsed.wxGroups)) {
+      parsed.wxGroups = parsed.wxGroups.map(g => {
+        if (g.phenomenon !== undefined && g.phenom1 === undefined) {
+          const { phenomenon, ...rest } = g;
+          return { ...rest, phenom1: phenomenon || '', phenom2: '', phenom3: '' };
+        }
+        return { phenom2: '', phenom3: '', ...g };
+      });
     }
     return parsed;
   } catch (_) {
@@ -597,6 +638,7 @@ function buildWxGroupRow(idx, group) {
     `<option value="${v}"${v === (group.descriptor||'') ? ' selected' : ''}>${l}</option>`
   ).join('');
 
+  const selectedP1 = group.phenom1 !== undefined ? group.phenom1 : (group.phenomenon || '');
   const phenomData = [
     ['RA','Rain','Precipitation'],
     ['DZ','Drizzle','Precipitation'],
@@ -626,18 +668,30 @@ function buildWxGroupRow(idx, group) {
       phenomHtml += `<optgroup label="${grp}">`;
       curGrp = grp;
     }
-    phenomHtml += `<option value="${v}"${v === (group.phenomenon||'') ? ' selected' : ''}>${v} ${label}</option>`;
+    phenomHtml += `<option value="${v}"${v === selectedP1 ? ' selected' : ''}>${v} ${label}</option>`;
   }
   if (curGrp) phenomHtml += '</optgroup>';
+
+  const precip2Opts = ['','RA','DZ','SN','SG','PL','GR','GS'].map(v =>
+    `<option value="${v}"${v === (group.phenom2||'') ? ' selected' : ''}>${v||'—'}</option>`
+  ).join('');
+  const precip3Opts = ['','RA','DZ','SN','SG','PL','GR','GS'].map(v =>
+    `<option value="${v}"${v === (group.phenom3||'') ? ' selected' : ''}>${v||'—'}</option>`
+  ).join('');
 
   return `
     <div class="mb-wx-group-row" data-wx-idx="${idx}">
       <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:2px;">
         <select class="mb-wx-intensity field" style="width:140px;">${intOpts}</select>
         <select class="mb-wx-descriptor field" style="width:155px;">${descOpts}</select>
-        <select class="mb-wx-phenomenon field" style="width:170px;">${phenomHtml}</select>
+        <select class="mb-wx-phenom1 field" style="width:170px;">${phenomHtml}</select>
+        <span style="font-weight:600;color:#888;padding:0 1px;">+</span>
+        <select class="mb-wx-phenom2 field" style="width:62px;" title="Second precipitation type (combined group)">${precip2Opts}</select>
+        <span style="font-weight:600;color:#888;padding:0 1px;">+</span>
+        <select class="mb-wx-phenom3 field" style="width:62px;" title="Third precipitation type (combined group)">${precip3Opts}</select>
         <button type="button" class="btn btn-ghost btn-small mb-wx-remove" title="Remove WX group">×</button>
       </div>
+      <div class="mb-hint" style="font-size:10px;color:#888;margin-top:0;">Combined precipitation: dominant type first</div>
     </div>`;
 }
 
@@ -701,7 +755,9 @@ function bindWxGroupRows() {
     });
     row.querySelector('.mb-wx-intensity')?.addEventListener('change', handleChange);
     row.querySelector('.mb-wx-descriptor')?.addEventListener('change', handleChange);
-    row.querySelector('.mb-wx-phenomenon')?.addEventListener('change', handleChange);
+    row.querySelector('.mb-wx-phenom1')?.addEventListener('change', handleChange);
+    row.querySelector('.mb-wx-phenom2')?.addEventListener('change', handleChange);
+    row.querySelector('.mb-wx-phenom3')?.addEventListener('change', handleChange);
   });
 }
 
@@ -735,7 +791,9 @@ function readFormState() {
     wxGroups.push({
       intensity:  row.querySelector('.mb-wx-intensity')?.value  || '',
       descriptor: row.querySelector('.mb-wx-descriptor')?.value || '',
-      phenomenon: row.querySelector('.mb-wx-phenomenon')?.value || '',
+      phenom1:    row.querySelector('.mb-wx-phenom1')?.value    || '',
+      phenom2:    row.querySelector('.mb-wx-phenom2')?.value    || '',
+      phenom3:    row.querySelector('.mb-wx-phenom3')?.value    || '',
     });
   });
 
@@ -988,7 +1046,7 @@ export function initMetarBuilder() {
     if (list.querySelectorAll('.mb-wx-group-row').length >= 3) return;
     const count = list.querySelectorAll('.mb-wx-group-row').length;
     const div = document.createElement('div');
-    div.innerHTML = buildWxGroupRow(count, { intensity: '', descriptor: '', phenomenon: '' });
+    div.innerHTML = buildWxGroupRow(count, { intensity: '', descriptor: '', phenom1: '', phenom2: '', phenom3: '' });
     list.appendChild(div.firstElementChild);
     bindWxGroupRows();
     updateAddWxGroupButton();

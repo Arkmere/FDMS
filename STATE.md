@@ -2824,3 +2824,49 @@ Stored in `vectair_fdms_config` via `updateConfig()`. All three keys present fro
 ### 30.3 Immediate next action
 
 METAR-BUILDER-003a implementation complete. Stuart acceptance required.
+
+---
+
+## 31. METAR-BUILDER-003b — Mixed Precipitation Grouping and Combined Weather Codes
+
+**Branch:** `claude/friendly-bohr-YFGLP`
+**Commit:** Fix mixed precipitation weather grouping
+**Status:** Complete — Stuart acceptance required
+
+### 31.1 Problem
+
+Stuart generated `METAR EGOW 010920Z 20014KT 9999 RA SN GR SCT023 17/12 Q1010 RMK WHT=` — three separate weather groups for simultaneous precipitation. This is invalid under CAP 746: simultaneous precipitation types must be encoded as a single combined group (e.g. `RASNGR`), with the dominant type first.
+
+### 31.2 Changes implemented
+
+**`src/js/metar_builder.js`**
+
+1. **State model**: WX group objects changed from `{intensity, descriptor, phenomenon}` to `{intensity, descriptor, phenom1, phenom2, phenom3}`. Backwards-compat migration in `loadSaved()` and throughout all code paths.
+
+2. **`buildWxGroupRow()`**: `mb-wx-phenom1` (full phenomena selector) replaces `mb-wx-phenomenon`. Two additional precipitation-only selectors added (`mb-wx-phenom2`, `mb-wx-phenom3`) using `PRECIP_LIST = ['RA','DZ','SN','SG','PL','GR','GS']`. Row hint: "Combined precipitation: dominant type first".
+
+3. **`bindWxGroupRows()`**: Listens to `mb-wx-phenom1`, `mb-wx-phenom2`, `mb-wx-phenom3`.
+
+4. **`readFormState()`**: Reads `phenom1`, `phenom2`, `phenom3` from each row.
+
+5. **`initMetarBuilder()`**: New WX groups created with `{intensity:'', descriptor:'', phenom1:'', phenom2:'', phenom3:''}`.
+
+6. **`validateWxCompatibility()`**: New signature `(group, vis, tempC)` consuming `phenom1/phenom2/phenom3`. GR/GS check: if any slot contains GR or GS and descriptor is not SH or TS → blocking error.
+
+7. **`validateState()` cross-group check**: Groups with no descriptor, no VC, and a pure precipitation `phenom1` (`DZ/RA/SN/SG/PL/GR/GS`) are counted. If two or more exist → blocking error: "Present Weather: simultaneous precipitation types must be combined into one group with the dominant type first, not entered as separate groups (CAP 746)."
+
+8. **`buildReport()`**: Assembles each group as `intensity + descriptor + phenom1 + phenom2 + phenom3` (empty slots produce no output).
+
+### 31.3 Validation rules added
+
+| Condition | Type | Message |
+|-----------|------|---------|
+| 2+ separate pure-precipitation groups | Blocking | Combine into one group, dominant type first |
+| GR or GS without SH or TS descriptor | Blocking | GR/GS must be reported with SH or TS (CAP 746) |
+
+### 31.4 Preserved behaviour
+
+- Manual override WX mode remains unchanged
+- TS alone (no phenom1) remains valid
+- Automatic ordering is NOT enforced — observer places dominant type first manually
+- `loadSaved()` migrates old `phenomenon` key to `phenom1`; also migrates legacy plain-text and single-structured-group saves
