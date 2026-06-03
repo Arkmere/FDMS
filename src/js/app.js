@@ -899,12 +899,9 @@ function initAdminPanelHandlers() {
   const sections = document.querySelectorAll('.admin-section');
   const adminSaveBar = document.getElementById('adminSaveBar');
 
-  // Sections that show the sticky Save bar (config sections 3–7)
+  // Sections that show the sticky Save bar (staged-save configuration sections)
   const CONFIG_SECTIONS = new Set([
-    'admin-sec-offsets',
-    'admin-sec-autoactivate',
-    'admin-sec-timezone',
-    'admin-sec-wtc',
+    'admin-sec-liveboard',
     'admin-sec-history'
   ]);
 
