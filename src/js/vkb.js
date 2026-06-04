@@ -1,6 +1,13 @@
 // vkb.js
 // Vectair Knowledge Base - CSV data loading and management
 
+import {
+  auditEntityChange,
+  appendAuditEvent,
+  getAuditSummary,
+  getAuditEventsForEntity
+} from './audit.js';
+
 /**
  * VKB Data Store
  * Holds all loaded CSV data in memory for fast lookups and autocomplete
@@ -327,10 +334,11 @@ export function searchLocations(query, limit = 50) {
 export function searchRegistrations(query, limit = 50) {
   if (!vkbData.loaded) return [];
 
+  const effective = getEffectiveRegistrations();
   const q = query.toLowerCase().trim().replace(/-/g, ''); // Remove dashes from query
-  if (!q) return vkbData.registrations.slice(0, limit);
+  if (!q) return effective.slice(0, limit);
 
-  return vkbData.registrations
+  return effective
     .filter(reg => {
       const registration = (reg['REGISTRATION'] || '').toLowerCase().replace(/-/g, ''); // Remove dashes
       const operator = (reg['OPERATOR'] || '').toLowerCase();
@@ -440,7 +448,7 @@ export function lookupRegistration(registration) {
 
   const normalized = registration.toUpperCase().trim().replace(/-/g, '');
 
-  return vkbData.registrations.find(reg => {
+  return getEffectiveRegistrations().find(reg => {
     const regNormalized = (reg['REGISTRATION'] || '').toUpperCase().replace(/-/g, '');
     return regNormalized === normalized;
   }) || null;
@@ -456,7 +464,7 @@ export function lookupRegistrationByFixedCallsign(callsign) {
 
   const normalized = callsign.toUpperCase().trim();
 
-  return vkbData.registrations.find(reg => {
+  return getEffectiveRegistrations().find(reg => {
     const fixedCs = (reg['FIXED C/S'] || '').toUpperCase().trim();
     return fixedCs && fixedCs !== '-' && fixedCs === normalized;
   }) || null;
@@ -494,6 +502,9 @@ function normalizeFlightNumber(value) {
 export function lookupEgowAttributionFromCallsign(callsignCode) {
   if (!vkbData.loaded || !callsignCode) return null;
 
+  // Use effective dataset (bundled CSV + local overrides applied)
+  const egowCodes = getEffectiveEgowCodes();
+
   // Normalise input for matching: uppercase, trim, remove internal whitespace
   const norm = normalizeCallsignToken(callsignCode);
 
@@ -520,7 +531,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
     const rawSuffix = splitMatch[2] || '';
     const inputIsSingleDigitNoLeadingZero = /^\d$/.test(rawSuffix); // exactly one digit
 
-    row = vkbData.egowCodes.find(ec => {
+    row = egowCodes.find(ec => {
       const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
       const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csBase === base && fNum === flightNum;
@@ -531,7 +542,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
     // the family uses leading-zero protocol for 1-9 and the input is malformed.
     // Set malformedInput to prevent fallthrough to base-strip (Priority 3/4) rows.
     if (row && inputIsSingleDigitNoLeadingZero) {
-      const familyHasMultiDigit = vkbData.egowCodes.some(ec => {
+      const familyHasMultiDigit = egowCodes.some(ec => {
         const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
         return csBase === base && parseInt(ec['FLIGHT_NUMBER'] || '0', 10) >= 10;
       });
@@ -544,7 +555,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
 
   // Priority 2: APPROVED_CONTRACTION + FLIGHT_NUMBER exact normalised match
   if (!row && flightNum) {
-    row = vkbData.egowCodes.find(ec => {
+    row = egowCodes.find(ec => {
       // Support corrected spelling; fall back to old typo for any legacy files
       const csContr = normalizeCallsignToken(ec['APPROVED_CONTRACTION'] || ec['APPROVED_CONTRATION']);
       const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
@@ -558,7 +569,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
 
   // Priority 3: CALLSIGN_BASE + blank FLIGHT_NUMBER fallback
   if (!row) {
-    row = vkbData.egowCodes.find(ec => {
+    row = egowCodes.find(ec => {
       const csBase = normalizeCallsignToken(ec['CALLSIGN_BASE']);
       const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csBase === base && fNum === '';
@@ -567,7 +578,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
 
   // Priority 4: APPROVED_CONTRACTION + blank FLIGHT_NUMBER fallback
   if (!row) {
-    row = vkbData.egowCodes.find(ec => {
+    row = egowCodes.find(ec => {
       const csContr = normalizeCallsignToken(ec['APPROVED_CONTRACTION'] || ec['APPROVED_CONTRATION']);
       const fNum = normalizeFlightNumber(ec['FLIGHT_NUMBER']);
       return csContr && csContr === base && fNum === '';
@@ -576,7 +587,7 @@ export function lookupEgowAttributionFromCallsign(callsignCode) {
 
   // Legacy fallback: old-schema 'Callsign' column
   if (!row) {
-    row = vkbData.egowCodes.find(ec =>
+    row = egowCodes.find(ec =>
       normalizeCallsignToken(ec['Callsign']) === norm
     );
   }
@@ -1022,4 +1033,650 @@ export function validateSquawkCode(squawk) {
     valid: errors.length === 0,
     errors: errors
   };
+}
+
+// ─── VKB Override Storage ──────────────────────────────────────────────────
+//
+// The override layer answers "what is the current local VKB value?"
+// It sits on top of the bundled CSV baseline and is separate from the audit layer.
+// Storage key is included in SESSION_BACKUP_KEYS for backup/restore.
+
+export const VKB_OVERRIDES_KEY = 'vectair_fdms_vkb_overrides_v1';
+
+function getVKBOverrides() {
+  try {
+    const raw = localStorage.getItem(VKB_OVERRIDES_KEY);
+    if (!raw) return { version: 1, egowCodes: {}, registrations: {} };
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return { version: 1, egowCodes: {}, registrations: {} };
+    }
+    return {
+      version: parsed.version || 1,
+      egowCodes: parsed.egowCodes || {},
+      registrations: parsed.registrations || {}
+    };
+  } catch (_) {
+    return { version: 1, egowCodes: {}, registrations: {} };
+  }
+}
+
+function saveVKBOverrides(data) {
+  localStorage.setItem(VKB_OVERRIDES_KEY, JSON.stringify(data));
+}
+
+function buildVKBKey(datasetName, row) {
+  if (datasetName === 'egowCodes') {
+    return (row['CALLSIGN_BASE'] || '') + '||' + (row['FLIGHT_NUMBER'] || '');
+  }
+  if (datasetName === 'registrations') {
+    return row['REGISTRATION'] || '';
+  }
+  return '';
+}
+
+function getBundledRow(datasetName, key) {
+  if (datasetName === 'egowCodes') {
+    const sep = key.indexOf('||');
+    const base = sep >= 0 ? key.slice(0, sep) : key;
+    const flightNum = sep >= 0 ? key.slice(sep + 2) : '';
+    return vkbData.egowCodes.find(row =>
+      (row['CALLSIGN_BASE'] || '') === base &&
+      (row['FLIGHT_NUMBER'] || '') === flightNum
+    ) || null;
+  }
+  if (datasetName === 'registrations') {
+    return vkbData.registrations.find(row =>
+      (row['REGISTRATION'] || '') === key
+    ) || null;
+  }
+  return null;
+}
+
+function resolveCurrentEffective(datasetName, key) {
+  const overrides = getVKBOverrides();
+  const existing = overrides[datasetName]?.[key];
+  const bundled = getBundledRow(datasetName, key);
+  if (!existing) return bundled ? { ...bundled } : {};
+  if (existing.action === 'add') return { ...(existing.fields || {}) };
+  if (existing.action === 'edit') return bundled ? { ...bundled, ...(existing.fields || {}) } : { ...(existing.fields || {}) };
+  return bundled ? { ...bundled } : {};
+}
+
+function getEffectiveEgowCodes() {
+  if (!vkbData.loaded) return [];
+  const egowOverrides = getVKBOverrides().egowCodes || {};
+
+  const effective = [];
+  for (const row of vkbData.egowCodes) {
+    const key = buildVKBKey('egowCodes', row);
+    const override = egowOverrides[key];
+    if (override?.action === 'hide') continue;
+    effective.push(override?.action === 'edit' ? { ...row, ...(override.fields || {}) } : row);
+  }
+  for (const [, override] of Object.entries(egowOverrides)) {
+    if (override.action === 'add') effective.push(override.fields);
+  }
+  return effective;
+}
+
+function getEffectiveRegistrations() {
+  if (!vkbData.loaded) return [];
+  const regOverrides = getVKBOverrides().registrations || {};
+
+  const effective = [];
+  for (const row of vkbData.registrations) {
+    const key = buildVKBKey('registrations', row);
+    const override = regOverrides[key];
+    if (override?.action === 'hide') continue;
+    effective.push(override?.action === 'edit' ? { ...row, ...(override.fields || {}) } : row);
+  }
+  for (const [, override] of Object.entries(regOverrides)) {
+    if (override.action === 'add') effective.push(override.fields);
+  }
+  return effective;
+}
+
+// ─── VKB Override Mutations ────────────────────────────────────────────────
+
+/**
+ * Insert or update a local VKB override for a specific record.
+ * fields = full proposed row values from the edit form.
+ * Returns the stored override entry, or null if no change was detected.
+ */
+export function upsertVKBOverride(datasetName, key, fields, note = '', effectiveFrom = new Date().toISOString().slice(0, 10)) {
+  const overrides = getVKBOverrides();
+  if (!overrides[datasetName]) overrides[datasetName] = {};
+
+  const existing = overrides[datasetName][key];
+  const bundled = getBundledRow(datasetName, key);
+  const action = (!bundled && (!existing || existing.action === 'add')) ? 'add' : 'edit';
+
+  const currentEffective = resolveCurrentEffective(datasetName, key);
+  const proposedRow = { ...fields };
+
+  const auditEvent = auditEntityChange({
+    domain: 'vkb',
+    dataset: datasetName,
+    entityId: key,
+    label: key,
+    action: `vkb.${action}`,
+    before: action === 'add' ? {} : currentEffective,
+    after: proposedRow,
+    source: { module: 'admin-vkb-editor', uiAction: 'save-local-override' },
+    reason: { code: 'operational-reference-update', note: note || '' },
+    effectiveFrom
+  });
+
+  // For an edit, skip save if nothing changed
+  if (!auditEvent && action === 'edit') return null;
+
+  let storedFields;
+  if (action === 'add') {
+    storedFields = { ...proposedRow };
+  } else {
+    // Store only the delta vs the bundled baseline
+    storedFields = {};
+    for (const [k, v] of Object.entries(proposedRow)) {
+      const bundledVal = bundled ? (bundled[k] ?? '') : '';
+      if (String(v ?? '') !== String(bundledVal)) {
+        storedFields[k] = v;
+      }
+    }
+    if (Object.keys(storedFields).length === 0) {
+      delete overrides[datasetName][key];
+      saveVKBOverrides(overrides);
+      return null;
+    }
+  }
+
+  overrides[datasetName][key] = { action, key, fields: storedFields, note, updatedAt: new Date().toISOString() };
+  saveVKBOverrides(overrides);
+  return overrides[datasetName][key];
+}
+
+/**
+ * Hide a bundled record or delete a locally-added record.
+ * Bundled row → vkb.hide override stored; locally added row → override removed.
+ */
+export function hideVKBRecord(datasetName, key, note = '', effectiveFrom = new Date().toISOString().slice(0, 10)) {
+  const overrides = getVKBOverrides();
+  if (!overrides[datasetName]) overrides[datasetName] = {};
+
+  const existing = overrides[datasetName][key];
+  const currentEffective = resolveCurrentEffective(datasetName, key);
+
+  if (existing?.action === 'add') {
+    appendAuditEvent({
+      effectiveFrom,
+      effectiveTo: null,
+      source: { module: 'admin-vkb-editor', uiAction: 'delete-local' },
+      entity: { domain: 'vkb', dataset: datasetName, type: 'reference-record', id: key, label: key },
+      action: 'vkb.delete-local',
+      before: currentEffective,
+      after: {},
+      changedFields: Object.keys(currentEffective).filter(k => String(currentEffective[k] ?? '') !== ''),
+      reason: { code: 'operational-reference-update', note: note || '' },
+      reversible: true
+    });
+    delete overrides[datasetName][key];
+    saveVKBOverrides(overrides);
+    return { action: 'delete-local' };
+  }
+
+  appendAuditEvent({
+    effectiveFrom,
+    effectiveTo: null,
+    source: { module: 'admin-vkb-editor', uiAction: 'hide' },
+    entity: { domain: 'vkb', dataset: datasetName, type: 'reference-record', id: key, label: key },
+    action: 'vkb.hide',
+    before: currentEffective,
+    after: { _hidden: true },
+    changedFields: ['_hidden'],
+    reason: { code: 'operational-reference-update', note: note || '' },
+    reversible: true
+  });
+
+  overrides[datasetName][key] = { action: 'hide', key, fields: {}, note, updatedAt: new Date().toISOString() };
+  saveVKBOverrides(overrides);
+  return overrides[datasetName][key];
+}
+
+/**
+ * Remove a local override and revert to the bundled baseline.
+ * Audits the change before removing.
+ */
+export function resetVKBOverride(datasetName, key, effectiveFrom = new Date().toISOString().slice(0, 10)) {
+  const overrides = getVKBOverrides();
+  if (!overrides[datasetName]?.[key]) return null;
+
+  const currentEffective = resolveCurrentEffective(datasetName, key);
+  const bundled = getBundledRow(datasetName, key);
+  const afterState = bundled ? { ...bundled } : {};
+
+  // Audit the reset using the full diff (before = current effective, after = bundled baseline)
+  auditEntityChange({
+    domain: 'vkb',
+    dataset: datasetName,
+    entityId: key,
+    label: key,
+    action: 'vkb.reset',
+    before: currentEffective,
+    after: afterState,
+    source: { module: 'admin-vkb-editor', uiAction: 'reset-to-baseline' },
+    reason: { code: 'operational-reference-update', note: '' },
+    effectiveFrom
+  });
+
+  delete overrides[datasetName][key];
+  saveVKBOverrides(overrides);
+  return { action: 'reset' };
+}
+
+// ─── VKB Admin Editor UI ───────────────────────────────────────────────────
+
+function _esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function _renderVkbAdminSummary() {
+  const el = document.getElementById('vkbAdminSummary');
+  if (!el) return;
+  const summary = getAuditSummary();
+  const ov = getVKBOverrides();
+  const egowCount = Object.keys(ov.egowCodes || {}).length;
+  const regCount = Object.keys(ov.registrations || {}).length;
+  el.textContent = `Local overrides: ${egowCount} EGOW, ${regCount} registrations  ·  Audit events: ${summary.totalEvents}`;
+}
+
+function _currentAdminDataset() {
+  return document.getElementById('vkbAdminDataset')?.value || 'egowCodes';
+}
+
+function _refreshVkbAdminTable() {
+  const dataset = _currentAdminDataset();
+  const search = (document.getElementById('vkbAdminSearch')?.value || '').toLowerCase().trim();
+  const egowTable = document.getElementById('vkbAdminTableEgow');
+  const regTable = document.getElementById('vkbAdminTableReg');
+  egowTable?.classList.toggle('hidden', dataset !== 'egowCodes');
+  regTable?.classList.toggle('hidden', dataset !== 'registrations');
+  if (dataset === 'egowCodes') _renderEgowAdminTable(search);
+  else _renderRegAdminTable(search);
+}
+
+function _renderEgowAdminTable(search) {
+  const tbody = document.getElementById('vkbAdminBodyEgow');
+  if (!tbody) return;
+
+  const egowOverrides = getVKBOverrides().egowCodes || {};
+  const allRows = [];
+
+  for (const row of vkbData.egowCodes) {
+    const key = buildVKBKey('egowCodes', row);
+    const override = egowOverrides[key];
+    let status = 'bundled';
+    let effectiveRow = { ...row };
+    if (override?.action === 'hide') { status = 'hidden'; }
+    else if (override?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(override.fields || {}) }; }
+    allRows.push({ key, status, effectiveRow, override });
+  }
+  for (const [key, override] of Object.entries(egowOverrides)) {
+    if (override.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: override.fields || {}, override });
+  }
+
+  const filtered = search
+    ? allRows.filter(r => Object.values(r.effectiveRow).join(' ').toLowerCase().includes(search) || r.key.toLowerCase().includes(search))
+    : allRows;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(({ key, status, effectiveRow }) => {
+    const badge = status === 'hidden'
+      ? '<span class="vkb-badge vkb-badge-hidden">Hidden</span>'
+      : status === 'local-add'
+        ? '<span class="vkb-badge vkb-badge-local">Local</span>'
+        : status === 'edited'
+          ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
+          : '';
+    const editBtn = status !== 'hidden'
+      ? `<button class="small-btn" data-va="edit" data-key="${_esc(key)}" data-ds="egowCodes" type="button">Edit</button>`
+      : '';
+    const histBtn = `<button class="small-btn" data-va="history" data-key="${_esc(key)}" data-ds="egowCodes" type="button">History</button>`;
+    const hideBtn = (status === 'bundled' || status === 'edited')
+      ? `<button class="small-btn" data-va="hide" data-key="${_esc(key)}" data-ds="egowCodes" type="button">Hide</button>`
+      : '';
+    const delBtn = status === 'local-add'
+      ? `<button class="small-btn" data-va="hide" data-key="${_esc(key)}" data-ds="egowCodes" type="button">Delete</button>`
+      : '';
+    const resetBtn = (status === 'edited' || status === 'hidden')
+      ? `<button class="small-btn" data-va="reset" data-key="${_esc(key)}" data-ds="egowCodes" type="button">Reset</button>`
+      : '';
+    return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
+      <td>${badge}</td>
+      <td>${_esc(effectiveRow['CALLSIGN_BASE'] || '')}</td>
+      <td>${_esc(effectiveRow['FLIGHT_NUMBER'] || '')}</td>
+      <td>${_esc(effectiveRow['EGOW_CODE'] || effectiveRow['EGOW Code'] || '')}</td>
+      <td>${_esc(effectiveRow['UNIT_CODE'] || effectiveRow['UC'] || '')}</td>
+      <td>${_esc(effectiveRow['NAME'] || effectiveRow['Name'] || '')}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}${resetBtn}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-va]').forEach(btn => {
+    btn.addEventListener('click', () => _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key));
+  });
+}
+
+function _renderRegAdminTable(search) {
+  const tbody = document.getElementById('vkbAdminBodyReg');
+  if (!tbody) return;
+
+  const regOverrides = getVKBOverrides().registrations || {};
+  const allRows = [];
+
+  for (const row of vkbData.registrations) {
+    const key = buildVKBKey('registrations', row);
+    const override = regOverrides[key];
+    let status = 'bundled';
+    let effectiveRow = { ...row };
+    if (override?.action === 'hide') { status = 'hidden'; }
+    else if (override?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(override.fields || {}) }; }
+    allRows.push({ key, status, effectiveRow, override });
+  }
+  for (const [key, override] of Object.entries(regOverrides)) {
+    if (override.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: override.fields || {}, override });
+  }
+
+  const filtered = search
+    ? allRows.filter(r => Object.values(r.effectiveRow).join(' ').toLowerCase().includes(search) || r.key.toLowerCase().includes(search))
+    : allRows;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(({ key, status, effectiveRow }) => {
+    const badge = status === 'hidden'
+      ? '<span class="vkb-badge vkb-badge-hidden">Hidden</span>'
+      : status === 'local-add'
+        ? '<span class="vkb-badge vkb-badge-local">Local</span>'
+        : status === 'edited'
+          ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
+          : '';
+    const editBtn = status !== 'hidden'
+      ? `<button class="small-btn" data-va="edit" data-key="${_esc(key)}" data-ds="registrations" type="button">Edit</button>`
+      : '';
+    const histBtn = `<button class="small-btn" data-va="history" data-key="${_esc(key)}" data-ds="registrations" type="button">History</button>`;
+    const hideBtn = (status === 'bundled' || status === 'edited')
+      ? `<button class="small-btn" data-va="hide" data-key="${_esc(key)}" data-ds="registrations" type="button">Hide</button>`
+      : '';
+    const delBtn = status === 'local-add'
+      ? `<button class="small-btn" data-va="hide" data-key="${_esc(key)}" data-ds="registrations" type="button">Delete</button>`
+      : '';
+    const resetBtn = (status === 'edited' || status === 'hidden')
+      ? `<button class="small-btn" data-va="reset" data-key="${_esc(key)}" data-ds="registrations" type="button">Reset</button>`
+      : '';
+    return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
+      <td>${badge}</td>
+      <td>${_esc(effectiveRow['REGISTRATION'] || '')}</td>
+      <td>${_esc(effectiveRow['OPERATOR'] || '')}</td>
+      <td>${_esc(effectiveRow['TYPE'] || '')}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}${resetBtn}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-va]').forEach(btn => {
+    btn.addEventListener('click', () => _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key));
+  });
+}
+
+function _handleVkbAction(action, dataset, key) {
+  if (action === 'edit') _openVkbEditModal(dataset, key);
+  else if (action === 'history') _openVkbHistoryModal(dataset, key);
+  else if (action === 'hide') _confirmVkbHide(dataset, key);
+  else if (action === 'reset') _confirmVkbReset(dataset, key);
+}
+
+// Inline confirm dialog (same pattern as adminConfirm in app.js)
+function _simpleConfirm(message, onConfirm) {
+  const bd = document.createElement('div');
+  bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;display:flex;align-items:center;justify-content:center;';
+
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'background:#fff;border-radius:6px;padding:20px 24px 16px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.25);';
+
+  const msgEl = document.createElement('div');
+  msgEl.style.cssText = 'font-size:13px;line-height:1.5;margin-bottom:16px;white-space:pre-wrap;';
+  msgEl.textContent = message;
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+  btns.innerHTML = '<button class="btn btn-secondary" type="button">Cancel</button><button class="btn btn-danger" type="button">Confirm</button>';
+
+  dlg.appendChild(msgEl);
+  dlg.appendChild(btns);
+  bd.appendChild(dlg);
+  document.body.appendChild(bd);
+
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  btns.children[0].addEventListener('click', cleanup);
+  btns.children[1].addEventListener('click', () => { cleanup(); onConfirm(); });
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+}
+
+function _confirmVkbHide(dataset, key) {
+  const ov = getVKBOverrides();
+  const isLocalAdd = ov[dataset]?.[key]?.action === 'add';
+  const label = isLocalAdd ? 'Delete this locally-added record' : `Hide this record from lookups`;
+  _simpleConfirm(`${label}?\n\n"${key}"`, () => {
+    hideVKBRecord(dataset, key, '', _todayISO());
+    _renderVkbAdminSummary();
+    _refreshVkbAdminTable();
+  });
+}
+
+function _confirmVkbReset(dataset, key) {
+  _simpleConfirm(`Reset "${key}" back to the bundled baseline? Your local override will be removed.`, () => {
+    resetVKBOverride(dataset, key, _todayISO());
+    _renderVkbAdminSummary();
+    _refreshVkbAdminTable();
+  });
+}
+
+function _openVkbHistoryModal(dataset, key) {
+  const events = getAuditEventsForEntity('vkb', key);
+
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.style.zIndex = '3000';
+
+  let rows = '';
+  if (!events.length) {
+    rows = '<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No audit events recorded for this record.</td></tr>';
+  } else {
+    rows = [...events].reverse().map(ev => {
+      const changedAt = ev.changedAt ? new Date(ev.changedAt).toLocaleString() : '—';
+      const effFrom = ev.effectiveFrom || '—';
+      const act = _esc(ev.action || '—');
+      const fields = Array.isArray(ev.changedFields) ? _esc(ev.changedFields.join(', ')) : '—';
+      const note = _esc(ev.reason?.note || '');
+      return `<tr>
+        <td>${_esc(changedAt)}</td>
+        <td>${_esc(effFrom)}</td>
+        <td><strong>${act}</strong></td>
+        <td style="font-size:11px;">${fields}</td>
+        <td style="font-size:11px;color:#555;">${note}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  bd.innerHTML = `<div class="modal" style="max-width:720px;">
+    <div class="modal-header">
+      <span class="modal-title">Audit History</span>
+      <span class="modal-subtitle">${_esc(dataset)} / ${_esc(key)}</span>
+    </div>
+    <div style="max-height:360px;overflow-y:auto;">
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f0f0;">
+          <th style="padding:6px;text-align:left;">Changed At</th>
+          <th style="padding:6px;text-align:left;">Effective From</th>
+          <th style="padding:6px;text-align:left;">Action</th>
+          <th style="padding:6px;text-align:left;">Changed Fields</th>
+          <th style="padding:6px;text-align:left;">Note</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-secondary" id="_vhClose" type="button">Close</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_vhClose').addEventListener('click', cleanup);
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+}
+
+function _openVkbEditModal(dataset, key) {
+  const overrides = getVKBOverrides();
+  const existing = overrides[dataset]?.[key];
+  const bundled = key ? getBundledRow(dataset, key) : null;
+  const isNew = !key;
+  const current = isNew ? {} : resolveCurrentEffective(dataset, key);
+
+  const egowFields = [
+    { id: 'CALLSIGN_BASE',        label: 'Callsign Base',        readonly: !isNew && !!bundled },
+    { id: 'APPROVED_CONTRACTION', label: 'Approved Contraction', readonly: false },
+    { id: 'FLIGHT_NUMBER',        label: 'Flight Number',        readonly: !isNew && !!bundled },
+    { id: 'EGOW_CODE',            label: 'EGOW Code',            readonly: false },
+    { id: 'UNIT',                 label: 'Unit',                 readonly: false },
+    { id: 'UNIT_CODE',            label: 'Unit Code',            readonly: false },
+    { id: 'NAME',                 label: 'Name',                 readonly: false },
+    { id: 'POSITION',             label: 'Position',             readonly: false },
+    { id: 'NOTES',                label: 'Notes',                readonly: false },
+  ];
+  const regFields = [
+    { id: 'REGISTRATION',     label: 'Registration',    readonly: !isNew && !!bundled },
+    { id: 'OPERATOR',         label: 'Operator',        readonly: false },
+    { id: 'TYPE',             label: 'Type',            readonly: false },
+    { id: 'POPULAR NAME',     label: 'Popular Name',    readonly: false },
+    { id: 'OPERATION TYPE',   label: 'Operation Type',  readonly: false },
+    { id: 'EGOW FLIGHT TYPE', label: 'EGOW Flight Type',readonly: false },
+    { id: 'FIXED C/S',        label: 'Fixed C/S',       readonly: false },
+    { id: 'NOTES',            label: 'Notes',           readonly: false },
+  ];
+
+  const fieldDefs = dataset === 'egowCodes' ? egowFields : regFields;
+
+  function safeInputId(fieldId) {
+    return 'vkbEd_' + fieldId.replace(/[^a-zA-Z0-9_]/g, '_');
+  }
+
+  const fieldsHtml = fieldDefs.map(f => `
+    <div class="modal-field">
+      <label class="modal-label" for="${safeInputId(f.id)}">${_esc(f.label)}</label>
+      <input type="text" id="${safeInputId(f.id)}" class="modal-input"
+        value="${_esc(current[f.id] || '')}"
+        ${f.readonly ? 'readonly style="background:#f5f5f5;"' : ''} />
+    </div>`).join('');
+
+  const title = isNew
+    ? `Add ${dataset === 'egowCodes' ? 'EGOW Code Row' : 'Registration'}`
+    : `Edit ${key}`;
+
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.style.zIndex = '3000';
+  bd.innerHTML = `<div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <span class="modal-title">${_esc(title)}</span>
+      <span class="modal-subtitle">${_esc(dataset === 'egowCodes' ? 'EGOW Codes' : 'Registrations')}</span>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;">
+      ${fieldsHtml}
+      <div class="modal-field">
+        <label class="modal-label" for="vkbEditEffectiveFrom">Effective From</label>
+        <input type="date" id="vkbEditEffectiveFrom" class="modal-input" value="${_todayISO()}" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="vkbEditNote">Reason Note</label>
+        <input type="text" id="vkbEditNote" class="modal-input" placeholder="Optional reason…" />
+      </div>
+    </div>
+    <div id="vkbEditError" style="color:#c62828;font-size:11px;min-height:16px;margin-top:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-secondary" id="_veCancel" type="button">Cancel</button>
+      <button class="btn btn-primary" id="_veSave" type="button">Save</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_veCancel').addEventListener('click', cleanup);
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+
+  bd.querySelector('#_veSave').addEventListener('click', () => {
+    const formFields = {};
+    for (const f of fieldDefs) {
+      const input = bd.querySelector(`#${safeInputId(f.id)}`);
+      if (input) formFields[f.id] = input.value.trim();
+    }
+
+    const effectiveFrom = bd.querySelector('#vkbEditEffectiveFrom')?.value || _todayISO();
+    const note = bd.querySelector('#vkbEditNote')?.value?.trim() || '';
+
+    const editKey = key || (dataset === 'egowCodes'
+      ? (formFields['CALLSIGN_BASE'] || '') + '||' + (formFields['FLIGHT_NUMBER'] || '')
+      : (formFields['REGISTRATION'] || ''));
+
+    if (!editKey || editKey === '||') {
+      bd.querySelector('#vkbEditError').textContent = 'Key field(s) required.';
+      return;
+    }
+
+    const result = upsertVKBOverride(dataset, editKey, formFields, note, effectiveFrom);
+    cleanup();
+    _renderVkbAdminSummary();
+    _refreshVkbAdminTable();
+
+    if (!result) {
+      // Dispatch a toast-equivalent custom event (app.js listens if it wishes)
+      document.dispatchEvent(new CustomEvent('vkb-admin-info', { detail: { message: 'No changes detected.' } }));
+    }
+  });
+}
+
+/**
+ * Initialise the Admin → VKB / Reference Data section.
+ * Call once from app.js bootstrap after VKB data is loaded.
+ */
+export function initVkbAdmin() {
+  const datasetSel = document.getElementById('vkbAdminDataset');
+  const searchInput = document.getElementById('vkbAdminSearch');
+  const addBtn = document.getElementById('vkbAdminAddRow');
+  if (!datasetSel) return; // section not present
+
+  datasetSel.addEventListener('change', _refreshVkbAdminTable);
+  searchInput?.addEventListener('input', _refreshVkbAdminTable);
+  addBtn?.addEventListener('click', () => _openVkbEditModal(_currentAdminDataset(), null));
+
+  _renderVkbAdminSummary();
+  _refreshVkbAdminTable();
+}
+
+/**
+ * Refresh the VKB admin summary line (e.g. after an external restore).
+ */
+export function refreshVkbAdminDisplay() {
+  _renderVkbAdminSummary();
+  _refreshVkbAdminTable();
 }

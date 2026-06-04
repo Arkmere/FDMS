@@ -54,8 +54,11 @@ import {
 
 import {
   loadVKBData,
-  getVKBStatus
+  getVKBStatus,
+  initVkbAdmin,
+  refreshVkbAdminDisplay
 } from "./vkb.js";
+
 
 import { saveTextFileWithDialogOrDownload } from "./export_utils.js";
 
@@ -1006,6 +1009,32 @@ function initAdminPanelHandlers() {
             const hoursCount      = parseStorageCount(s['vectair_fdms_hours_v1'], false);
             const hasConfig       = (s['vectair_fdms_config'] != null) ? 'Yes' : 'No';
 
+            // VKB overrides: count entries across all datasets
+            let vkbOverrideCount = '—';
+            try {
+              const vkbRaw = s['vectair_fdms_vkb_overrides_v1'];
+              if (vkbRaw) {
+                const vkbParsed = JSON.parse(vkbRaw);
+                const eg = Object.keys(vkbParsed?.egowCodes || {}).length;
+                const reg = Object.keys(vkbParsed?.registrations || {}).length;
+                vkbOverrideCount = eg + reg;
+              } else {
+                vkbOverrideCount = '0';
+              }
+            } catch (_) { vkbOverrideCount = '—'; }
+
+            // Audit events count
+            let auditEventsCount = '—';
+            try {
+              const auditRaw = s['vectair_flite_audit_log_v1'];
+              if (auditRaw) {
+                const auditParsed = JSON.parse(auditRaw);
+                auditEventsCount = Array.isArray(auditParsed?.events) ? auditParsed.events.length : '—';
+              } else {
+                auditEventsCount = '0';
+              }
+            } catch (_) { auditEventsCount = '—'; }
+
             let createdAtStr = '—';
             if (parsed.exportedAt) {
               try { createdAtStr = new Date(parsed.exportedAt).toUTCString(); } catch (_) { createdAtStr = parsed.exportedAt; }
@@ -1038,6 +1067,8 @@ function initAdminPanelHandlers() {
                 <div><span style="color:#555;display:inline-block;width:160px;">Calendar events:</span><strong>${calendarCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Hours log entries:</span><strong>${hoursCount}</strong></div>
                 <div><span style="color:#555;display:inline-block;width:160px;">Config present:</span><strong>${hasConfig}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">VKB overrides:</span><strong>${vkbOverrideCount}</strong></div>
+                <div><span style="color:#555;display:inline-block;width:160px;">Audit events:</span><strong>${auditEventsCount}</strong></div>
               </div>`;
 
           } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -1133,6 +1164,7 @@ function initAdminPanelHandlers() {
                 renderLiveBoard();
                 renderHistoryBoard();
                 renderReports();
+                refreshVkbAdminDisplay();
                 diagnostics.lastRenderTime = new Date().toISOString();
                 updateDiagnostics();
                 const detail = result.format === 'full'
@@ -2136,7 +2168,7 @@ async function bootstrap() {
       initHistorySubtabs();
     });
     runStage('vkb-lookup:init', () => initVkbLookup());
-    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); initAdminWeather(); });
+    runStage('admin:init',      () => { initAdminPanel(); initAdminPanelHandlers(); initUpdaterPanel(); initAdminWeather(); initVkbAdmin(); });
     runStage('reports:init',    () => initReports());
     runStage('booking:init',    () => { initBookingPage(); initCalendarPage(); initBookingProfilesAdmin(); });
     runStage('metar-builder:init', () => initMetarBuilder());

@@ -2304,23 +2304,62 @@
 
   <!-- ── VKB / Reference Data ── -->
   <div class="admin-section hidden" id="admin-sec-vkb-data">
+
     <div class="panel">
       <h3>VKB / Reference Data</h3>
-      <p style="font-size: 12px; color: #555; margin-bottom: 12px;">Local reference-data editing will be added here.</p>
-      <p style="font-size: 12px; font-weight: bold; margin-bottom: 6px;">V1 planned scope:</p>
-      <ul style="font-size: 12px; color: #666; margin: 0 0 12px; padding-left: 20px; line-height: 1.8;">
-        <li>EGOW code overrides</li>
-        <li>registration overrides</li>
-      </ul>
-      <p style="font-size: 12px; font-weight: bold; margin-bottom: 6px;">Design rule:</p>
-      <ul style="font-size: 12px; color: #666; margin: 0 0 16px; padding-left: 20px; line-height: 1.8;">
-        <li>bundled CSV data must remain read-only</li>
-        <li>local edits must be stored as overrides</li>
-        <li>effective VKB data must be baseline CSV + local overrides</li>
-        <li>overrides must be included in backup/restore</li>
-      </ul>
-      <p style="font-size: 12px; color: #999; font-style: italic;">No local VKB overrides yet.</p>
+      <div id="vkbAdminSummary" style="font-size:12px;color:#555;margin-bottom:4px;">Loading…</div>
     </div>
+
+    <div class="panel">
+      <div class="vkb-admin-toolbar">
+        <label style="font-size:12px;font-weight:500;margin-right:6px;" for="vkbAdminDataset">Dataset:</label>
+        <select id="vkbAdminDataset" class="modal-select" style="width:180px;">
+          <option value="egowCodes">EGOW Codes</option>
+          <option value="registrations">Registrations</option>
+        </select>
+        <input type="search" id="vkbAdminSearch" class="modal-input" placeholder="Filter rows…" style="flex:1;min-width:140px;max-width:240px;" />
+        <button class="btn btn-primary" id="vkbAdminAddRow" type="button">Add Row</button>
+      </div>
+
+      <!-- EGOW Codes table -->
+      <div id="vkbAdminTableEgow" class="table-container" style="margin-top:10px;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:68px;">Status</th>
+              <th>Callsign Base</th>
+              <th>Flt #</th>
+              <th>EGOW Code</th>
+              <th>Unit Code</th>
+              <th>Name</th>
+              <th style="width:190px;text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vkbAdminBodyEgow">
+            <tr><td colspan="7" style="text-align:center;color:#999;padding:12px;">Loading VKB data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Registrations table -->
+      <div id="vkbAdminTableReg" class="table-container hidden" style="margin-top:10px;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:68px;">Status</th>
+              <th>Registration</th>
+              <th>Operator</th>
+              <th>Type</th>
+              <th style="width:190px;text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vkbAdminBodyReg">
+            <tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">Loading VKB data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <!-- ── Data Management ── -->
@@ -2328,18 +2367,14 @@
     <div class="panel">
       <h3>Backup &amp; Export</h3>
       <p style="font-size: 11px; color: #666; margin-bottom: 4px;">
-        Exports a local Vectair Flite backup containing movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, and hours log data.
+        Exports a local Vectair Flite backup containing movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, hours log data, VKB override records, and audit log records.
       </p>
       <button class="btn btn-primary" id="btnExportSession" type="button" aria-label="Backup session data to JSON file">Backup to JSON</button>
     </div>
 
     <div class="panel">
       <h3>Backup Contents</h3>
-      <p style="font-size: 12px; color: #555; margin-bottom: 8px;">Backups include recognised local Flite data such as movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, and hours log data.</p>
-      <p style="font-size: 12px; font-weight: bold; margin-bottom: 6px;">Future backup coverage:</p>
-      <ul style="font-size: 12px; color: #666; margin: 0; padding-left: 20px; line-height: 1.8;">
-        <li>VKB override records</li>
-      </ul>
+      <p style="font-size: 12px; color: #555; margin-bottom: 8px;">Backups include recognised local Flite data: movements, configuration, cancelled sorties, deleted strips, booking profiles, calendar events, hours log data, VKB override records, and audit log records.</p>
     </div>
 
     <div class="panel">
