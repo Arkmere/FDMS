@@ -464,10 +464,10 @@ export function getAutocompleteSuggestions(fieldType, query, limit = 10) {
 export function lookupRegistration(registration) {
   if (!vkbData.loaded || !registration) return null;
 
-  const normalized = registration.toUpperCase().trim().replace(/-/g, '');
+  const normalized = registration.toUpperCase().trim().replace(/[-\s]/g, '');
 
   return getEffectiveRegistrations().find(reg => {
-    const regNormalized = (reg['REGISTRATION'] || '').toUpperCase().replace(/-/g, '');
+    const regNormalized = (reg['REGISTRATION'] || '').toUpperCase().replace(/[-\s]/g, '');
     return regNormalized === normalized;
   }) || null;
 }
@@ -1225,7 +1225,6 @@ function getEffectiveEgowCodes() {
  * Called by lookupRegistration, searchRegistrations, and loadVKBData.
  */
 function getEffectiveRegistrations() {
-  if (vkbBaselineData.registrations.length === 0) return [];
   const regOverrides = getVKBOverrides().datasets.registrations || {};
   const effective = [];
   for (const row of vkbBaselineData.registrations) {
@@ -1234,6 +1233,7 @@ function getEffectiveRegistrations() {
     if (ov?.action === 'hide') continue;
     effective.push(ov?.action === 'edit' ? { ...row, ...(ov.fields || {}) } : row);
   }
+  // Always include locally-added rows even when baseline CSV is empty
   for (const [, ov] of Object.entries(regOverrides)) {
     if (ov.action === 'add') effective.push(ov.fields);
   }
@@ -1389,6 +1389,15 @@ function _todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function _flashAdminNotice(msg) {
+  const el = document.getElementById('vkbAdminSummary');
+  if (!el) return;
+  const prev = el.textContent;
+  el.textContent = msg;
+  el.style.color = '#1a6e2e';
+  setTimeout(() => { el.style.color = ''; _renderVkbAdminSummary(); }, 2500);
+}
+
 function _renderVkbAdminSummary() {
   const el = document.getElementById('vkbAdminSummary');
   if (!el) return;
@@ -1484,10 +1493,16 @@ function _renderRegAdminTable(search) {
   if (!tbody) return;
 
   if (thead) thead.innerHTML = `<tr>
-    <th style="width:68px;">Status</th>
+    <th style="width:60px;">Status</th>
     <th>Registration</th>
-    <th>Operator</th>
     <th>Type</th>
+    <th>Operator</th>
+    <th>Popular Name</th>
+    <th>Fixed C/S</th>
+    <th>EGOW Flt Type</th>
+    <th>Op Type</th>
+    <th>Warnings</th>
+    <th>Notes</th>
     <th style="width:190px;text-align:right;">Actions</th>
   </tr>`;
 
@@ -1511,7 +1526,7 @@ function _renderRegAdminTable(search) {
     : allRows;
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#999;padding:12px;">No records match the filter.</td></tr>`;
     return;
   }
 
@@ -1521,16 +1536,22 @@ function _renderRegAdminTable(search) {
                 : status === 'edited'    ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
                 : '';
     const ek = _esc(key);
-    const editBtn  = status !== 'hidden'                       ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="registrations" type="button">Edit</button>`    : '';
-    const histBtn  =                                             `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
+    const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="registrations" type="button">Edit</button>`    : '';
+    const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
     const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Hide</button>`    : '';
-    const delBtn   = status === 'local-add'                    ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
-    const resetBtn = (status === 'edited' || status === 'hidden') ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="registrations" type="button">Reset</button>`   : '';
+    const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
+    const resetBtn = (status === 'edited' || status === 'hidden')  ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="registrations" type="button">Reset</button>`   : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
       <td>${badge}</td>
-      <td>${_esc(effectiveRow['REGISTRATION'] || '')}</td>
-      <td>${_esc(effectiveRow['OPERATOR']     || '')}</td>
-      <td>${_esc(effectiveRow['TYPE']         || '')}</td>
+      <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
+      <td>${_esc(effectiveRow['TYPE']             || '')}</td>
+      <td>${_esc(effectiveRow['OPERATOR']         || '')}</td>
+      <td>${_esc(effectiveRow['POPULAR NAME']     || '')}</td>
+      <td>${_esc(effectiveRow['FIXED C/S']        || '')}</td>
+      <td>${_esc(effectiveRow['EGOW FLIGHT TYPE'] || '')}</td>
+      <td>${_esc(effectiveRow['OPERATION TYPE']   || '')}</td>
+      <td>${_esc(effectiveRow['WARNINGS']         || '')}</td>
+      <td>${_esc(effectiveRow['NOTES']            || '')}</td>
       <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}${resetBtn}</td>
     </tr>`;
   }).join('');
@@ -1585,6 +1606,38 @@ function detectAircraftRegistry(registration) {
   }
 
   return null;
+}
+
+/**
+ * Normalise registration record fields before saving to overrides.
+ * Applies canonical casing and formatting so stored/displayed values
+ * are consistent with the bundled VKB dataset style.
+ */
+function normalizeRegistrationFields(fields) {
+  const out = { ...fields };
+
+  // REGISTRATION: use detectAircraftRegistry for canonical form (G-TEST, N73ST);
+  // otherwise uppercase + trim + collapse spaces (no hyphen added for unknown formats).
+  if (out['REGISTRATION'] !== undefined) {
+    const info = detectAircraftRegistry(out['REGISTRATION']);
+    if (info) {
+      out['REGISTRATION'] = info.normalizedRegistration;
+    } else {
+      out['REGISTRATION'] = String(out['REGISTRATION'] || '').toUpperCase().trim().replace(/\s+/g, '');
+    }
+  }
+
+  // Uppercase operational fields that must match VKB dataset conventions
+  for (const f of ['TYPE', 'EGOW FLIGHT TYPE', 'FIXED C/S', 'OPERATION TYPE', 'OPERATOR', 'WARNINGS']) {
+    if (out[f] !== undefined) out[f] = String(out[f] || '').toUpperCase().trim();
+  }
+
+  // Preserve-case fields — trim only
+  for (const f of ['POPULAR NAME', 'NOTES']) {
+    if (out[f] !== undefined) out[f] = String(out[f] || '').trim();
+  }
+
+  return out;
 }
 
 function _clipboardFallback(text) {
@@ -1739,12 +1792,13 @@ function _openVkbEditModal(dataset, key) {
   ];
   const regFields = [
     { id: 'REGISTRATION',     label: 'Registration',     readonly: !isNew && !!bundled },
-    { id: 'OPERATOR',         label: 'Operator',         readonly: false },
     { id: 'TYPE',             label: 'Type',             readonly: false },
+    { id: 'OPERATOR',         label: 'Operator',         readonly: false },
     { id: 'POPULAR NAME',     label: 'Popular Name',     readonly: false },
-    { id: 'OPERATION TYPE',   label: 'Operation Type',   readonly: false },
     { id: 'EGOW FLIGHT TYPE', label: 'EGOW Flight Type', readonly: false },
+    { id: 'OPERATION TYPE',   label: 'Operation Type',   readonly: false },
     { id: 'FIXED C/S',        label: 'Fixed C/S',        readonly: false },
+    { id: 'WARNINGS',         label: 'Warnings',         readonly: false },
     { id: 'NOTES',            label: 'Notes',            readonly: false },
   ];
 
@@ -1816,14 +1870,19 @@ function _openVkbEditModal(dataset, key) {
     const effectiveFrom = bd.querySelector('#vkbEditEffectiveFrom')?.value || _todayISO();
     const note = bd.querySelector('#vkbEditNote')?.value?.trim() || '';
 
-    // Build canonical key from form fields for new rows
+    // Normalise registration fields before save
+    const savedFields = dataset === 'registrations'
+      ? normalizeRegistrationFields(formFields)
+      : formFields;
+
+    // Build canonical key from (normalised) form fields for new rows
     let editKey;
     if (key) {
       editKey = key; // editing existing row — key is already canonical
     } else if (dataset === 'egowCodes') {
-      editKey = egowVKBKey(formFields);
+      editKey = egowVKBKey(savedFields);
     } else {
-      editKey = registrationVKBKey(formFields['REGISTRATION'] || '');
+      editKey = registrationVKBKey(savedFields['REGISTRATION'] || '');
     }
 
     if (!editKey || editKey === '||') {
@@ -1831,14 +1890,11 @@ function _openVkbEditModal(dataset, key) {
       return;
     }
 
-    const result = upsertVKBOverride(dataset, editKey, formFields, note, effectiveFrom);
+    const result = upsertVKBOverride(dataset, editKey, savedFields, note, effectiveFrom);
     cleanup();
     _renderVkbAdminSummary();
     _refreshVkbAdminTable();
-
-    if (!result) {
-      document.dispatchEvent(new CustomEvent('vkb-admin-info', { detail: { message: 'No changes detected.' } }));
-    }
+    _flashAdminNotice(result ? `Saved — ${editKey}` : 'No changes detected.');
   });
 }
 
