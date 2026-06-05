@@ -4087,6 +4087,28 @@ function clearTrackedAutofill(inputEl) {
 }
 
 /**
+ * Allow the full pilot datalist to be browsed even when the input already has an
+ * autofilled value. Browsers filter <datalist> options to those matching the current
+ * input text, so a pre-filled name hides all alternative pilots.
+ *
+ * On focus: saves the current value and clears the input so the browser shows all options.
+ * On blur:  restores the saved value if the user made no selection or typed nothing new.
+ */
+function bindPilotDropdownFocus(captainInputEl) {
+  if (!captainInputEl) return;
+  let _preFocusValue = '';
+  captainInputEl.addEventListener('focus', () => {
+    _preFocusValue = captainInputEl.value;
+    captainInputEl.value = '';
+  });
+  captainInputEl.addEventListener('blur', () => {
+    if (!captainInputEl.value && _preFocusValue) {
+      captainInputEl.value = _preFocusValue;
+    }
+  });
+}
+
+/**
  * Returns true if the UTC/Local time-mode toggle should be shown in new-strip forms.
  * Controlled by Admin tri-state policy config.newFormUtcLocalTogglePolicy:
  *   "show"  — always visible
@@ -4455,6 +4477,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   bindZzzzCompanion(depAdInput, document.getElementById("newDepAdText"));
   bindZzzzCompanion(arrAdInput, document.getElementById("newArrAdText"));
   bindZzzzCompanion(typeInput, document.getElementById("newAircraftTypeText"));
+
+  // Pilot dropdown: show full suggestion list even when a default PIC is already autofilled
+  bindPilotDropdownFocus(document.getElementById('newCaptain'));
 
   // EU civil registration normalisation — insert hyphen on blur (hard) and
   // after 250 ms of typing (soft, only if it would add a hyphen).
@@ -4850,6 +4875,12 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       wtcSelect.value = prefill.wtc;
       wtcDirty = true;
     }
+    // Re-fire input events on AD/type code fields so bindZzzzCompanion can react.
+    // Prefill sets values via el.value = ... which does not fire input/change events,
+    // so the companion fields stay hidden even when depAd/arrAd/type is set to ZZZZ.
+    depAdInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    arrAdInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    typeInput?.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
@@ -5629,6 +5660,7 @@ function openNewLocFlightModal() {
   makeInputUppercase(egowCodeInput);
   makeInputUppercase(unitCodeInput);
   makeInputUppercase(document.getElementById("newLocCaptain"));
+  bindPilotDropdownFocus(document.getElementById('newLocCaptain'));
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -6643,6 +6675,9 @@ function openEditMovementModal(m) {
   bindZzzzCompanion(arrAdInput, document.getElementById("editArrAdText"));
   bindZzzzCompanion(typeInput,  document.getElementById("editAircraftTypeText"));
 
+  // Pilot dropdown: show full suggestion list even when a default PIC is already autofilled
+  bindPilotDropdownFocus(document.getElementById('editCaptain'));
+
   // Outcome status show/hide for destination/time fields
   const outcomeStatusSel = document.getElementById("editOutcomeStatus");
   const outcomeDestEls = document.querySelectorAll("#editOutcomeSection .js-outcome-dest");
@@ -6976,6 +7011,30 @@ function openEditMovementModal(m) {
   // ARR mode: ETA (arrPlanned) is the calculation root; ETD (depPlanned) is derived.
   bindPlannedTimesSync("editDepPlanned", "editArrPlanned", "editDuration",
     { arrMode: m.flightType === 'ARR' });
+
+  // ATD-aware ETA sync: when ATD is present, ETA = ATD + Duration.
+  // bindPlannedTimesSync uses ETD as root which is wrong for active movements;
+  // this listener fires after it and corrects ETA to use ATD as the anchor.
+  {
+    const _editAtdEl = document.getElementById('editDepActual');
+    const _editEtaEl = document.getElementById('editArrPlanned');
+    const _editDurEl = document.getElementById('editDuration');
+    if (_editAtdEl && _editEtaEl && _editDurEl) {
+      const _syncAtdToEta = () => {
+        const atd = _editAtdEl.value.trim();
+        if (!atd) return;
+        const dur = parseInt(_editDurEl.value, 10);
+        if (!(dur > 0)) return;
+        const atdMin = timeToMinutes(atd);
+        if (!Number.isFinite(atdMin)) return;
+        _editEtaEl.value = minutesToTime(atdMin + dur);
+      };
+      _editAtdEl.addEventListener('input', _syncAtdToEta);
+      _editAtdEl.addEventListener('blur',  _syncAtdToEta);
+      _editDurEl.addEventListener('input', _syncAtdToEta);
+      _editDurEl.addEventListener('blur',  _syncAtdToEta);
+    }
+  }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
   function _buildEditVkbCandidate() {
