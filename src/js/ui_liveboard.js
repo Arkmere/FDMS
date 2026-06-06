@@ -4884,23 +4884,38 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
   }
 
   // ── VKB button visibility helpers ────────────────────────────────────────
-  // Read current form values and check whether a VKB update candidate exists.
-  function _buildNewFlightVkbCandidate() {
-    return buildRegistrationVkbUpdateCandidate({
-      registration: normalizeEuCivilRegistration(document.getElementById("newReg")?.value || ""),
-      type:          normOperationalText(document.getElementById("newType")?.value),
+  // Read current VKB-relevant form values as a plain snapshot object.
+  function _captureNewFlightVkbSnapshot() {
+    return {
+      registration:   normalizeEuCivilRegistration(document.getElementById("newReg")?.value || ""),
+      type:           normOperationalText(document.getElementById("newType")?.value),
       egowFlightType: normOperationalText(document.getElementById("newEgowCode")?.value),
-      warnings:      normOperationalText(document.getElementById("rwWarnings")?.value),
-      notes:         normOperationalText(document.getElementById("rwRemarks")?.value),
-    });
+      warnings:       normOperationalText(document.getElementById("rwWarnings")?.value),
+      notes:          normOperationalText(document.getElementById("rwRemarks")?.value),
+    };
+  }
+
+  // Baseline captured after all prefill/autofill has settled.
+  // Quick-update button requires at least one field to differ from this snapshot so that
+  // Create From prefill values are not mistaken for user intent to update VKB.
+  const _initialVkbSnapshot = _captureNewFlightVkbSnapshot();
+
+  function _buildNewFlightVkbCandidate() {
+    return buildRegistrationVkbUpdateCandidate(_captureNewFlightVkbSnapshot());
   }
 
   function _refreshNewFlightVkbButton() {
     const btn = document.querySelector(".js-save-flight-vkb");
     if (!btn) return;
-    const has = !!_buildNewFlightVkbCandidate();
-    btn.style.display = has ? "" : "none";
-    btn.title = has ? "Save this registration data to VKB for future movements" : "";
+    if (!_buildNewFlightVkbCandidate()) { btn.style.display = 'none'; btn.title = ''; return; }
+    const cur = _captureNewFlightVkbSnapshot();
+    const changed = cur.registration   !== _initialVkbSnapshot.registration   ||
+                    cur.type           !== _initialVkbSnapshot.type           ||
+                    cur.egowFlightType !== _initialVkbSnapshot.egowFlightType ||
+                    cur.warnings       !== _initialVkbSnapshot.warnings       ||
+                    cur.notes          !== _initialVkbSnapshot.notes;
+    btn.style.display = changed ? '' : 'none';
+    btn.title = changed ? "Save this registration data to VKB for future movements" : "";
   }
 
   // Bind refresh to all VKB-relevant trigger fields
