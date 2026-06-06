@@ -56,7 +56,8 @@ import {
   loadVKBData,
   getVKBStatus,
   initVkbAdmin,
-  refreshVkbAdminDisplay
+  refreshVkbAdminDisplay,
+  refreshEgowConfigDisplay
 } from "./vkb.js";
 
 
@@ -1165,6 +1166,7 @@ function initAdminPanelHandlers() {
                 renderHistoryBoard();
                 renderReports();
                 refreshVkbAdminDisplay();
+                refreshEgowConfigDisplay();
                 diagnostics.lastRenderTime = new Date().toISOString();
                 updateDiagnostics();
                 const detail = result.format === 'full'

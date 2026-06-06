@@ -27,6 +27,7 @@ export const SESSION_BACKUP_KEYS = [
   "vectair_fdms_calendar_events_v1",
   "vectair_fdms_hours_v1",
   "vectair_fdms_vkb_overrides_v1",
+  "vectair_fdms_egow_config_v1",
   "vectair_flite_audit_log_v1"
 ];
 

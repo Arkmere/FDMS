@@ -83,7 +83,9 @@ import {
   lookupEgowAttributionFromCallsign,
   lookupAircraftPilots,
   upsertVKBOverride,
-  buildRegistrationVkbUpdateCandidate
+  buildRegistrationVkbUpdateCandidate,
+  getEgowMovementCodes,
+  getEgowUnitCodes
 } from "./vkb.js";
 
 /* -----------------------------
@@ -4088,24 +4090,38 @@ function clearTrackedAutofill(inputEl) {
 }
 
 /**
- * Allow the full pilot datalist to be browsed even when the input already has an
- * autofilled value. Browsers filter <datalist> options to those matching the current
- * input text, so a pre-filled name hides all alternative pilots.
+ * Allow the full datalist to be browsed even when the input already has a value.
+ * Browsers filter <datalist> options to those matching the current input text, so a
+ * pre-filled value hides all alternative options.
  *
  * On focus: saves the current value and clears the input so the browser shows all options.
  * On blur:  restores the saved value if the user made no selection or typed nothing new.
  */
-function bindPilotDropdownFocus(captainInputEl) {
-  if (!captainInputEl) return;
+function bindDropdownFocus(inputEl) {
+  if (!inputEl) return;
   let _preFocusValue = '';
-  captainInputEl.addEventListener('focus', () => {
-    _preFocusValue = captainInputEl.value;
-    captainInputEl.value = '';
+  inputEl.addEventListener('focus', () => {
+    _preFocusValue = inputEl.value;
+    inputEl.value = '';
   });
-  captainInputEl.addEventListener('blur', () => {
-    if (!captainInputEl.value && _preFocusValue) {
-      captainInputEl.value = _preFocusValue;
+  inputEl.addEventListener('blur', () => {
+    if (!inputEl.value && _preFocusValue) {
+      inputEl.value = _preFocusValue;
     }
+  });
+}
+
+function bindPilotDropdownFocus(captainInputEl) {
+  bindDropdownFocus(captainInputEl);
+}
+
+function _populateDatalist(datalistEl, codes) {
+  if (!datalistEl) return;
+  datalistEl.innerHTML = '';
+  codes.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.code;
+    datalistEl.appendChild(opt);
   });
 }
 
@@ -4354,19 +4370,12 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newEgowCode" class="modal-input is-derived" placeholder="" list="egowCodeOptions" />
-            <datalist id="egowCodeOptions">
-              <option value="VC">VC</option>
-              <option value="VM">VM</option>
-              <option value="BC">BC</option>
-              <option value="BM">BM</option>
-              <option value="VCH">VCH</option>
-              <option value="VMH">VMH</option>
-              <option value="VNH">VNH</option>
-            </datalist>
+            <datalist id="egowCodeOptions"></datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="newUnitCode" class="modal-input is-derived" placeholder="" />
+            <input id="newUnitCode" class="modal-input is-derived" placeholder="" list="egowUnitCodeOptions" />
+            <datalist id="egowUnitCodeOptions"></datalist>
           </div>
         </div>
       </section>
@@ -4481,6 +4490,12 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
   // Pilot dropdown: show full suggestion list even when a default PIC is already autofilled
   bindPilotDropdownFocus(document.getElementById('newCaptain'));
+
+  // EGOW Code / Unit Code dropdowns: same behaviour — full list accessible when pre-filled
+  _populateDatalist(document.getElementById('egowCodeOptions'),    getEgowMovementCodes());
+  _populateDatalist(document.getElementById('egowUnitCodeOptions'), getEgowUnitCodes());
+  bindDropdownFocus(egowCodeInput);
+  bindDropdownFocus(unitCodeInput);
 
   // EU civil registration normalisation — insert hyphen on blur (hard) and
   // after 250 ms of typing (soft, only if it would add a hyphen).
@@ -5005,7 +5020,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
     const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const validEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!egowCode) { showToast("EGOW Code is required", 'error'); return null; }
     if (!validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return null; }
     if (egowCode === 'BM') {
@@ -5227,7 +5242,7 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
     // Validate EGOW Code
     const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const validEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!egowCode || !validEgowCodes.includes(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
@@ -5515,19 +5530,12 @@ function openNewLocFlightModal() {
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newLocEgowCode" class="modal-input is-derived" placeholder="" list="locEgowCodeOptions" />
-            <datalist id="locEgowCodeOptions">
-              <option value="VC">VC</option>
-              <option value="VM">VM</option>
-              <option value="BC">BC</option>
-              <option value="BM">BM</option>
-              <option value="VCH">VCH</option>
-              <option value="VMH">VMH</option>
-              <option value="VNH">VNH</option>
-            </datalist>
+            <datalist id="locEgowCodeOptions"></datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
+            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="" list="locEgowUnitCodeOptions" />
+            <datalist id="locEgowUnitCodeOptions"></datalist>
           </div>
         </div>
       </section>
@@ -5676,6 +5684,12 @@ function openNewLocFlightModal() {
   makeInputUppercase(unitCodeInput);
   makeInputUppercase(document.getElementById("newLocCaptain"));
   bindPilotDropdownFocus(document.getElementById('newLocCaptain'));
+
+  // EGOW Code / Unit Code dropdowns: full list accessible when pre-filled
+  _populateDatalist(document.getElementById('locEgowCodeOptions'),     getEgowMovementCodes());
+  _populateDatalist(document.getElementById('locEgowUnitCodeOptions'),  getEgowUnitCodes());
+  bindDropdownFocus(egowCodeInput);
+  bindDropdownFocus(unitCodeInput);
 
   // When registration is entered, auto-fill type, fixed callsign/flight number, and EGOW code
   if (regInput && typeInput) {
@@ -6040,7 +6054,7 @@ function openNewLocFlightModal() {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const validEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!egowCode || !validEgowCodes.includes(egowCode)) { showToast("Valid EGOW Code is required", "error"); return null; }
     if (egowCode === 'BM') {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
@@ -6229,7 +6243,7 @@ function openNewLocFlightModal() {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const validEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!egowCode || !validEgowCodes.includes(egowCode)) {
       showToast("Valid EGOW Code is required", "error");
       return;
@@ -6533,11 +6547,13 @@ function openEditMovementModal(m) {
         <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
-            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" />
+            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="" list="editEgowCodeOptions" />
+            <datalist id="editEgowCodeOptions"></datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
+            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="" list="editEgowUnitCodeOptions" />
+            <datalist id="editEgowUnitCodeOptions"></datalist>
           </div>
         </div>
       </section>
@@ -6692,6 +6708,12 @@ function openEditMovementModal(m) {
 
   // Pilot dropdown: show full suggestion list even when a default PIC is already autofilled
   bindPilotDropdownFocus(document.getElementById('editCaptain'));
+
+  // EGOW Code / Unit Code dropdowns: full list accessible when pre-filled
+  _populateDatalist(document.getElementById('editEgowCodeOptions'),    getEgowMovementCodes());
+  _populateDatalist(document.getElementById('editEgowUnitCodeOptions'), getEgowUnitCodes());
+  bindDropdownFocus(egowCodeInput);
+  bindDropdownFocus(unitCodeInput);
 
   // Outcome status show/hide for destination/time fields
   const outcomeStatusSel = document.getElementById("editOutcomeStatus");
@@ -7166,7 +7188,7 @@ function openEditMovementModal(m) {
     if (!editCallsignValidation.valid) { showToast(editCallsignValidation.error, 'error'); return false; }
 
     const editEgowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
-    const editValidEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const editValidEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!editEgowCode || !editValidEgowCodes.includes(editEgowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return false;
@@ -7379,7 +7401,7 @@ function openEditMovementModal(m) {
 
     // Validate EGOW Code
     const egowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
+    const validEgowCodes = getEgowMovementCodes(true).map(c => c.code);
     if (!egowCode || !validEgowCodes.includes(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
@@ -8870,7 +8892,7 @@ function movementMatchesHistoryFilters(m, filters) {
   }
   if (filters.unitCode) {
     const unitCodeTokens      = getHistoryUnitCodeSearchText(m).toUpperCase().split(/\s+/).filter(Boolean);
-    const recognisedUnitCodes = ["L", "M", "A"];
+    const recognisedUnitCodes = getEgowUnitCodes(true).map(c => c.code);
     if (filters.unitCode === "__NONE__") {
       const hasToken = recognisedUnitCodes.some(code => unitCodeTokens.includes(code));
       const hasText  = getHistoryUnitCodeSearchText(m).trim() !== "";

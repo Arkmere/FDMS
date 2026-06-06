@@ -1513,6 +1513,157 @@ export function buildRegistrationVkbUpdateCandidate(formData) {
   };
 }
 
+// ─── EGOW Config Store (Movement Codes + Unit Codes) ─────────────────────
+//
+// Separate from the VKB callsign-attribution CSV/override layer.
+// Manages the shorter lists that populate movement form dropdowns and drive validation.
+//
+// Storage shape (v1):
+// {
+//   version: 1,
+//   updatedAt: "ISO",
+//   egowCodes: [{ code, label, active, sortOrder }],
+//   unitCodes: [{ code, label, active, sortOrder }]
+// }
+
+export const EGOW_CONFIG_KEY = 'vectair_fdms_egow_config_v1';
+
+const _DEFAULT_EGOW_MOVEMENT_CODES = [
+  { code: 'VC',  label: 'Visiting Civil',                active: true, sortOrder: 1 },
+  { code: 'VM',  label: 'Visiting Military',             active: true, sortOrder: 2 },
+  { code: 'BC',  label: 'Based Civil',                   active: true, sortOrder: 3 },
+  { code: 'BM',  label: 'Based Military',                active: true, sortOrder: 4 },
+  { code: 'VCH', label: 'Visiting Civil Helicopter',     active: true, sortOrder: 5 },
+  { code: 'VMH', label: 'Visiting Military Helicopter',  active: true, sortOrder: 6 },
+  { code: 'VNH', label: 'Visiting NATO Helicopter',      active: true, sortOrder: 7 },
+];
+
+const _DEFAULT_EGOW_UNIT_CODES = [
+  { code: 'A', label: '10 AEF',   active: true, sortOrder: 1 },
+  { code: 'L', label: 'LUAS',     active: true, sortOrder: 2 },
+  { code: 'M', label: 'MASUAS',   active: true, sortOrder: 3 },
+];
+
+function _emptyEgowConfig() {
+  return {
+    version: 1,
+    updatedAt: null,
+    egowCodes: _DEFAULT_EGOW_MOVEMENT_CODES.map(c => ({ ...c })),
+    unitCodes: _DEFAULT_EGOW_UNIT_CODES.map(c => ({ ...c })),
+  };
+}
+
+function _getEgowConfig() {
+  try {
+    const raw = localStorage.getItem(EGOW_CONFIG_KEY);
+    if (!raw) return _emptyEgowConfig();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return _emptyEgowConfig();
+    return {
+      version: parsed.version || 1,
+      updatedAt: parsed.updatedAt || null,
+      egowCodes: Array.isArray(parsed.egowCodes) ? parsed.egowCodes : _DEFAULT_EGOW_MOVEMENT_CODES.map(c => ({ ...c })),
+      unitCodes: Array.isArray(parsed.unitCodes) ? parsed.unitCodes : _DEFAULT_EGOW_UNIT_CODES.map(c => ({ ...c })),
+    };
+  } catch (_) {
+    return _emptyEgowConfig();
+  }
+}
+
+function _saveEgowConfig(data) {
+  localStorage.setItem(EGOW_CONFIG_KEY, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+}
+
+/**
+ * Return the configured EGOW Movement Code list, sorted by sortOrder.
+ * @param {boolean} includeInactive - If true, include inactive/hidden codes
+ */
+export function getEgowMovementCodes(includeInactive = false) {
+  const cfg = _getEgowConfig();
+  const codes = cfg.egowCodes || [];
+  return [...(includeInactive ? codes : codes.filter(c => c.active !== false))]
+    .sort((a, b) => (a.sortOrder || 99) - (b.sortOrder || 99));
+}
+
+/**
+ * Return the configured EGOW Unit Code list, sorted by sortOrder.
+ * @param {boolean} includeInactive - If true, include inactive/hidden codes
+ */
+export function getEgowUnitCodes(includeInactive = false) {
+  const cfg = _getEgowConfig();
+  const codes = cfg.unitCodes || [];
+  return [...(includeInactive ? codes : codes.filter(c => c.active !== false))]
+    .sort((a, b) => (a.sortOrder || 99) - (b.sortOrder || 99));
+}
+
+function _upsertEgowMovementCode(codeObj) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.egowCodes.findIndex(c => c.code === codeObj.code);
+  if (idx >= 0) {
+    cfg.egowCodes[idx] = { ...cfg.egowCodes[idx], ...codeObj };
+  } else {
+    const maxOrder = cfg.egowCodes.reduce((m, c) => Math.max(m, c.sortOrder || 0), 0);
+    cfg.egowCodes.push({ active: true, sortOrder: maxOrder + 1, ...codeObj });
+  }
+  _saveEgowConfig(cfg);
+}
+
+function _deactivateEgowMovementCode(code) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.egowCodes.findIndex(c => c.code === code);
+  if (idx >= 0) {
+    cfg.egowCodes[idx] = { ...cfg.egowCodes[idx], active: false };
+    _saveEgowConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
+function _reactivateEgowMovementCode(code) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.egowCodes.findIndex(c => c.code === code);
+  if (idx >= 0) {
+    cfg.egowCodes[idx] = { ...cfg.egowCodes[idx], active: true };
+    _saveEgowConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
+function _upsertEgowUnitCode(codeObj) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.unitCodes.findIndex(c => c.code === codeObj.code);
+  if (idx >= 0) {
+    cfg.unitCodes[idx] = { ...cfg.unitCodes[idx], ...codeObj };
+  } else {
+    const maxOrder = cfg.unitCodes.reduce((m, c) => Math.max(m, c.sortOrder || 0), 0);
+    cfg.unitCodes.push({ active: true, sortOrder: maxOrder + 1, ...codeObj });
+  }
+  _saveEgowConfig(cfg);
+}
+
+function _deactivateEgowUnitCode(code) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.unitCodes.findIndex(c => c.code === code);
+  if (idx >= 0) {
+    cfg.unitCodes[idx] = { ...cfg.unitCodes[idx], active: false };
+    _saveEgowConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
+function _reactivateEgowUnitCode(code) {
+  const cfg = _getEgowConfig();
+  const idx = cfg.unitCodes.findIndex(c => c.code === code);
+  if (idx >= 0) {
+    cfg.unitCodes[idx] = { ...cfg.unitCodes[idx], active: true };
+    _saveEgowConfig(cfg);
+    return true;
+  }
+  return false;
+}
+
 // ─── VKB Admin Editor UI ───────────────────────────────────────────────────
 
 function _esc(s) {
@@ -1539,7 +1690,9 @@ function _renderVkbAdminSummary() {
   const datasets = getVKBOverrides().datasets;
   const egowCount = Object.keys(datasets.egowCodes     || {}).length;
   const regCount  = Object.keys(datasets.registrations || {}).length;
-  el.textContent = `Local overrides: ${egowCount} EGOW, ${regCount} registrations  ·  Audit events: ${summary.totalEvents}`;
+  const movCodes  = getEgowMovementCodes(true).length;
+  const unitCodes = getEgowUnitCodes(true).length;
+  el.textContent = `Overrides: ${egowCount} callsign, ${regCount} reg  ·  Codes: ${movCodes} movement, ${unitCodes} unit  ·  Audit: ${summary.totalEvents}`;
 }
 
 function _currentAdminDataset() {
@@ -1549,8 +1702,10 @@ function _currentAdminDataset() {
 function _refreshVkbAdminTable() {
   const dataset = _currentAdminDataset();
   const search  = (document.getElementById('vkbAdminSearch')?.value || '').toLowerCase().trim();
-  if (dataset === 'egowCodes') _renderEgowAdminTable(search);
-  else _renderRegAdminTable(search);
+  if      (dataset === 'egowCodes')          _renderEgowAdminTable(search);
+  else if (dataset === 'registrations')      _renderRegAdminTable(search);
+  else if (dataset === 'egowMovementCodes')  _renderEgowMovementCodesTable(search);
+  else if (dataset === 'egowUnitCodes')      _renderEgowUnitCodesTable(search);
 }
 
 function _renderEgowAdminTable(search) {
@@ -1693,6 +1848,248 @@ function _renderRegAdminTable(search) {
   tbody.querySelectorAll('[data-va]').forEach(btn => {
     btn.addEventListener('click', () => _handleVkbAction(btn.dataset.va, btn.dataset.ds, btn.dataset.key));
   });
+}
+
+function _renderEgowMovementCodesTable(search) {
+  const thead = document.getElementById('vkbAdminTableHead');
+  const tbody = document.getElementById('vkbAdminTableBody');
+  if (!tbody) return;
+
+  if (thead) thead.innerHTML = `<tr>
+    <th style="width:68px;">Status</th>
+    <th>Code</th>
+    <th>Description / Label</th>
+    <th style="width:80px;">Sort</th>
+    <th style="width:170px;text-align:right;">Actions</th>
+  </tr>`;
+
+  const all = getEgowMovementCodes(true);
+  const filtered = search
+    ? all.filter(c => c.code.toLowerCase().includes(search) || (c.label || '').toLowerCase().includes(search))
+    : all;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No EGOW Movement Codes configured.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const active = c.active !== false;
+    const badge  = active ? '' : '<span class="vkb-badge vkb-badge-hidden">Hidden</span>';
+    const ec = _esc(c.code);
+    const editBtn     = `<button class="small-btn" data-emc="edit"       data-code="${ec}" type="button">Edit</button>`;
+    const deactBtn    = active ? `<button class="small-btn" data-emc="deactivate" data-code="${ec}" type="button">Hide</button>` : '';
+    const reactBtn    = !active ? `<button class="small-btn" data-emc="reactivate" data-code="${ec}" type="button">Restore</button>` : '';
+    return `<tr class="${active ? '' : 'vkb-row-hidden'}">
+      <td>${badge}</td>
+      <td><strong>${ec}</strong></td>
+      <td>${_esc(c.label || '')}</td>
+      <td>${_esc(String(c.sortOrder ?? ''))}</td>
+      <td class="vkb-actions-cell">${editBtn}${deactBtn}${reactBtn}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-emc]').forEach(btn => {
+    btn.addEventListener('click', () => _handleEgowMovementCodeAction(btn.dataset.emc, btn.dataset.code));
+  });
+}
+
+function _renderEgowUnitCodesTable(search) {
+  const thead = document.getElementById('vkbAdminTableHead');
+  const tbody = document.getElementById('vkbAdminTableBody');
+  if (!tbody) return;
+
+  if (thead) thead.innerHTML = `<tr>
+    <th style="width:68px;">Status</th>
+    <th>Code</th>
+    <th>Description / Label</th>
+    <th style="width:80px;">Sort</th>
+    <th style="width:170px;text-align:right;">Actions</th>
+  </tr>`;
+
+  const all = getEgowUnitCodes(true);
+  const filtered = search
+    ? all.filter(c => c.code.toLowerCase().includes(search) || (c.label || '').toLowerCase().includes(search))
+    : all;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;padding:12px;">No EGOW Unit Codes configured.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const active = c.active !== false;
+    const badge  = active ? '' : '<span class="vkb-badge vkb-badge-hidden">Hidden</span>';
+    const ec = _esc(c.code);
+    const editBtn     = `<button class="small-btn" data-euc="edit"       data-code="${ec}" type="button">Edit</button>`;
+    const deactBtn    = active ? `<button class="small-btn" data-euc="deactivate" data-code="${ec}" type="button">Hide</button>` : '';
+    const reactBtn    = !active ? `<button class="small-btn" data-euc="reactivate" data-code="${ec}" type="button">Restore</button>` : '';
+    return `<tr class="${active ? '' : 'vkb-row-hidden'}">
+      <td>${badge}</td>
+      <td><strong>${ec}</strong></td>
+      <td>${_esc(c.label || '')}</td>
+      <td>${_esc(String(c.sortOrder ?? ''))}</td>
+      <td class="vkb-actions-cell">${editBtn}${deactBtn}${reactBtn}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-euc]').forEach(btn => {
+    btn.addEventListener('click', () => _handleEgowUnitCodeAction(btn.dataset.euc, btn.dataset.code));
+  });
+}
+
+function _openEgowCodeEditModal(existingCode) {
+  const isNew  = !existingCode;
+  const cfg    = _getEgowConfig();
+  const current = isNew ? null : cfg.egowCodes.find(c => c.code === existingCode);
+  const title  = isNew ? 'Add EGOW Movement Code' : `Edit EGOW Movement Code: ${existingCode}`;
+
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.style.zIndex = '3000';
+  bd.innerHTML = `<div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <span class="modal-title">${_esc(title)}</span>
+      <span class="modal-subtitle">EGOW Movement Codes</span>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;">
+      <div class="modal-field">
+        <label class="modal-label" for="_emcCode">Code</label>
+        <input type="text" id="_emcCode" class="modal-input" value="${_esc(current?.code || '')}"
+          ${!isNew ? 'readonly style="background:#f5f5f5;"' : ''} maxlength="10" style="text-transform:uppercase;" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="_emcSort">Sort Order</label>
+        <input type="number" id="_emcSort" class="modal-input" value="${_esc(String(current?.sortOrder ?? ''))}" min="1" />
+      </div>
+      <div class="modal-field" style="grid-column:1/-1;">
+        <label class="modal-label" for="_emcLabel">Description / Label</label>
+        <input type="text" id="_emcLabel" class="modal-input" value="${_esc(current?.label || '')}" />
+      </div>
+    </div>
+    <div id="_emcError" style="color:#c62828;font-size:11px;min-height:16px;margin-top:4px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-secondary" id="_emcCancel" type="button">Cancel</button>
+      <button class="btn btn-primary"   id="_emcSave"   type="button">Save</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_emcCancel').addEventListener('click', cleanup);
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+  bd.querySelector('#_emcCode').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+
+  bd.querySelector('#_emcSave').addEventListener('click', () => {
+    const code  = (bd.querySelector('#_emcCode')?.value || '').trim().toUpperCase();
+    const label = (bd.querySelector('#_emcLabel')?.value || '').trim();
+    const sort  = parseInt(bd.querySelector('#_emcSort')?.value || '0', 10) || undefined;
+    const errEl = bd.querySelector('#_emcError');
+
+    if (!code) { errEl.textContent = 'Code is required.'; return; }
+    if (isNew) {
+      const exists = cfg.egowCodes.find(c => c.code === code);
+      if (exists) { errEl.textContent = `Code "${code}" already exists.`; return; }
+    }
+
+    _upsertEgowMovementCode({ code, label, sortOrder: sort });
+    cleanup();
+    _refreshVkbAdminTable();
+    _flashAdminNotice(`Saved EGOW Movement Code: ${code}`);
+  });
+}
+
+function _openUnitCodeEditModal(existingCode) {
+  const isNew  = !existingCode;
+  const cfg    = _getEgowConfig();
+  const current = isNew ? null : cfg.unitCodes.find(c => c.code === existingCode);
+  const title  = isNew ? 'Add EGOW Unit Code' : `Edit EGOW Unit Code: ${existingCode}`;
+
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.style.zIndex = '3000';
+  bd.innerHTML = `<div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <span class="modal-title">${_esc(title)}</span>
+      <span class="modal-subtitle">EGOW Unit Codes</span>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;">
+      <div class="modal-field">
+        <label class="modal-label" for="_eucCode">Code</label>
+        <input type="text" id="_eucCode" class="modal-input" value="${_esc(current?.code || '')}"
+          ${!isNew ? 'readonly style="background:#f5f5f5;"' : ''} maxlength="10" style="text-transform:uppercase;" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="_eucSort">Sort Order</label>
+        <input type="number" id="_eucSort" class="modal-input" value="${_esc(String(current?.sortOrder ?? ''))}" min="1" />
+      </div>
+      <div class="modal-field" style="grid-column:1/-1;">
+        <label class="modal-label" for="_eucLabel">Description / Label</label>
+        <input type="text" id="_eucLabel" class="modal-input" value="${_esc(current?.label || '')}" />
+      </div>
+    </div>
+    <div id="_eucError" style="color:#c62828;font-size:11px;min-height:16px;margin-top:4px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-secondary" id="_eucCancel" type="button">Cancel</button>
+      <button class="btn btn-primary"   id="_eucSave"   type="button">Save</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(bd);
+  const cleanup = () => { if (bd.parentNode) document.body.removeChild(bd); };
+  bd.querySelector('#_eucCancel').addEventListener('click', cleanup);
+  bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
+  bd.querySelector('#_eucCode').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+
+  bd.querySelector('#_eucSave').addEventListener('click', () => {
+    const code  = (bd.querySelector('#_eucCode')?.value || '').trim().toUpperCase();
+    const label = (bd.querySelector('#_eucLabel')?.value || '').trim();
+    const sort  = parseInt(bd.querySelector('#_eucSort')?.value || '0', 10) || undefined;
+    const errEl = bd.querySelector('#_eucError');
+
+    if (!code) { errEl.textContent = 'Code is required.'; return; }
+    if (isNew) {
+      const exists = cfg.unitCodes.find(c => c.code === code);
+      if (exists) { errEl.textContent = `Code "${code}" already exists.`; return; }
+    }
+
+    _upsertEgowUnitCode({ code, label, sortOrder: sort });
+    cleanup();
+    _refreshVkbAdminTable();
+    _flashAdminNotice(`Saved EGOW Unit Code: ${code}`);
+  });
+}
+
+function _handleEgowMovementCodeAction(action, code) {
+  if (action === 'edit') {
+    _openEgowCodeEditModal(code);
+  } else if (action === 'deactivate') {
+    _simpleConfirm(`Hide EGOW Movement Code "${code}"?\n\nIt will no longer appear in dropdown lists. Existing movements using this code are not affected.`, () => {
+      _deactivateEgowMovementCode(code);
+      _refreshVkbAdminTable();
+      _flashAdminNotice(`Hidden: ${code}`);
+    });
+  } else if (action === 'reactivate') {
+    _reactivateEgowMovementCode(code);
+    _refreshVkbAdminTable();
+    _flashAdminNotice(`Restored: ${code}`);
+  }
+}
+
+function _handleEgowUnitCodeAction(action, code) {
+  if (action === 'edit') {
+    _openUnitCodeEditModal(code);
+  } else if (action === 'deactivate') {
+    _simpleConfirm(`Hide EGOW Unit Code "${code}"?\n\nIt will no longer appear in dropdown lists. Existing movements using this code are not affected.`, () => {
+      _deactivateEgowUnitCode(code);
+      _refreshVkbAdminTable();
+      _flashAdminNotice(`Hidden: ${code}`);
+    });
+  } else if (action === 'reactivate') {
+    _reactivateEgowUnitCode(code);
+    _refreshVkbAdminTable();
+    _flashAdminNotice(`Restored: ${code}`);
+  }
 }
 
 function _handleVkbAction(action, dataset, key) {
@@ -2050,7 +2447,12 @@ export function initVkbAdmin() {
     });
   });
   searchInput?.addEventListener('input', _refreshVkbAdminTable);
-  addBtn?.addEventListener('click', () => _openVkbEditModal(_currentAdminDataset(), null));
+  addBtn?.addEventListener('click', () => {
+    const ds = _currentAdminDataset();
+    if      (ds === 'egowMovementCodes') _openEgowCodeEditModal(null);
+    else if (ds === 'egowUnitCodes')     _openUnitCodeEditModal(null);
+    else                                 _openVkbEditModal(ds, null);
+  });
 
   _renderVkbAdminSummary();
   _refreshVkbAdminTable();
@@ -2063,5 +2465,13 @@ export function initVkbAdmin() {
 export function refreshVkbAdminDisplay() {
   _rebuildEffectiveArrays();
   _renderVkbAdminSummary();
+  _refreshVkbAdminTable();
+}
+
+/**
+ * Refresh EGOW config admin tables after an external backup restore.
+ * Call alongside refreshVkbAdminDisplay when restoring session data.
+ */
+export function refreshEgowConfigDisplay() {
   _refreshVkbAdminTable();
 }
