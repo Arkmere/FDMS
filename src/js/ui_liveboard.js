@@ -901,6 +901,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // ARR strips are excluded: their dep-side cell is always depActual already.
     let effectiveFieldName = fieldName;
     let _depActualRedirect = false; // true when depPlanned was redirected to depActual
+    let _arrActualRedirect = false; // true when arrPlanned was redirected to arrActual
     if (fieldName === 'depPlanned' && inputType === 'time' && storedValue) {
       const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
       const preFt = (preSaveMvt?.flightType || '').toUpperCase();
@@ -908,6 +909,25 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
         if (checkPastTime(storedValue, preSaveMvt.dof).isPast) {
           effectiveFieldName = 'depActual';
           _depActualRedirect = true;
+        }
+      }
+    }
+
+    // ── Historical arr-actual redirect ────────────────────────────────────
+    // When the operator edits the arrival-side estimate cell (arrPlanned) on
+    // an ARR/LOC strip to a past time they are recording the actual arrival,
+    // not adjusting the ETA plan.  Redirect the write to arrActual so the
+    // timing model and Part F promotion logic handle it correctly.
+    // arrPlanned is intentionally left unchanged — the ETA is preserved.
+    // Applies to both PLANNED and ACTIVE strips.
+    if (fieldName === 'arrPlanned' && inputType === 'time' && storedValue) {
+      const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
+      const preFt = (preSaveMvt?.flightType || '').toUpperCase();
+      const preStatus = (preSaveMvt?.status || '').toUpperCase();
+      if ((preFt === 'ARR' || preFt === 'LOC') && (preStatus === 'PLANNED' || preStatus === 'ACTIVE')) {
+        if (checkPastTime(storedValue, preSaveMvt.dof).isPast) {
+          effectiveFieldName = 'arrActual';
+          _arrActualRedirect = true;
         }
       }
     }
@@ -944,16 +964,21 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // Skip for the dep-actual redirect path: Part F is about to promote to ACTIVE,
     // and reEvaluateStatusAfterTimeChange must not interfere with that transition.
     const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(effectiveFieldName);
-    if (isTimeField && !_depActualRedirect) {
+    if (isTimeField && !_depActualRedirect && !_arrActualRedirect) {
       reEvaluateStatusAfterTimeChange(movementId);
     }
 
-    // Part F: Operator entered a dep-actual time on a PLANNED strip (either via
-    // the actual-mode cell directly, or via the estimate-mode cell redirected
-    // above).  Promote to ACTIVE immediately.
-    // Only depActual triggers this; arrActual does not fabricate a dep stamp.
+    // Part F: Operator entered a dep-actual or arr-actual time on a PLANNED
+    // strip (either via the actual-mode cell directly, or via the estimate-mode
+    // cell redirected above).  Promote to ACTIVE immediately.
+    // Does not auto-complete the strip — the operator may still need to review
+    // counters, remarks, or movement state before completing.
     const freshMovement = getMovements().find(m => String(m.id) === String(movementId));
-    if (effectiveFieldName === 'depActual' && freshMovement && freshMovement.status === 'PLANNED') {
+    if (
+      freshMovement &&
+      freshMovement.status === 'PLANNED' &&
+      (effectiveFieldName === 'depActual' || _arrActualRedirect)
+    ) {
       updateMovement(movementId, { status: 'ACTIVE' });
     }
 
