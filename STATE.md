@@ -1,6 +1,6 @@
 # STATE.md — Vectair Flite
 
-Last updated: 2026-06-01 (Europe/London, rev 22 — UX-V1-001 complete: desktop app shell expanded to full window width; artificial 1280px centred constraint removed)
+Last updated: 2026-06-09 (Europe/London, rev 23 — LIVEBOARD-AUTOACTIVATE-RECONCILE-001 complete: app-level planned movement reconciliation; startup/tick/focus/tab-return catch-up; 24-hour missed-window horizon)
 
 This file is the shared source of truth for the Vectair Flite Manager–Worker workflow.
 
@@ -484,6 +484,7 @@ The following workstreams should be treated as merged and complete for current p
 | METAR-BUILDER-004a — Immediate Admin Settings Application | Complete — merged. Admin > Weather settings apply immediately to Weather tab on Save. |
 | DOCS-FLITE-001 — Weather/METAR Builder documentation | Complete. `docs/quick-start.md`, `docs/user-guide.md`, `docs/install-update-backup-troubleshooting.md` created. README key features added. STATE.md updated. No app code changed. |
 | UX-V1-001 — Expand desktop app shell width | Complete — merged. Removed `max-width: 1280px` and `margin: 0 auto` from `.app-shell`; shell now uses full available window width. |
+| LIVEBOARD-AUTOACTIVATE-RECONCILE-001 — App-level planned movement reconciliation | Complete — implemented. Planned movement autoactivation no longer depends solely on Live Board rendering during the activation window. `reconcilePlannedMovementActivation()` runs on startup, app-level 45-second tick, window focus return, document visibilitychange, and Live Board tab return. ARR/OVR missed activation windows are caught up within a 24-hour horizon. The previous ETA+60-minute stale guard has been replaced with the 24-hour catch-up window. ARR movements with ATA already recorded are excluded from autoactivation. ARR overdue warning independence remains separate and already implemented. |
 
 ## 6. Current active engineering priority
 

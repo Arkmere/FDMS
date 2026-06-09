@@ -17,7 +17,8 @@ import {
   initDeletedStripsLog,
   renderDeletedStripsLog,
   calculateLiveBoardSummaryStats,
-  applyHistoryStripBoardFilterVisibility
+  applyHistoryStripBoardFilterVisibility,
+  reconcilePlannedMovementActivation
 } from "./ui_liveboard.js";
 
 import {
@@ -404,6 +405,13 @@ function setActiveTab(panelId) {
     const isTarget = targetId && panel.id === targetId;
     panel.classList.toggle(TAB.HIDDEN_CLASS, !isTarget);
   });
+
+  // On Live Board return: reconcile activation state then render so any movements that
+  // activated while the user was on another tab are immediately visible.
+  if (targetId === 'tab-live') {
+    renderLiveBoard();
+    renderTimeline();
+  }
 
   // Re-render reports when Reports tab is opened to ensure data freshness
   if (targetId === 'tab-reports') {
@@ -2177,6 +2185,13 @@ async function bootstrap() {
     const reconcileSummary = reconcileLinks();
     logBootstrapStage('reconcile:run', 'success');
 
+    // Startup catch-up: activate any PLANNED movements whose window was missed while
+    // the app was closed, asleep, or restarting. Runs before the first render so the
+    // board opens in the correct state.
+    logBootstrapStage('movement-reconcile:startup', 'started');
+    reconcilePlannedMovementActivation();
+    logBootstrapStage('movement-reconcile:startup', 'success');
+
     logBootstrapStage('first-render', 'started');
     renderLiveBoard();
     diagnostics.runtimeCounters.renderLiveBoardCount++;
@@ -2196,13 +2211,16 @@ async function bootstrap() {
     updateInitStatus("Init complete", true);
     updateDiagnostics();
 
-    // Low-frequency tick: refresh counters, stale highlights, and auto-activation
+    // Low-frequency tick: refresh counters, stale highlights, and movement reconciliation.
+    // reconcilePlannedMovementActivation() runs unconditionally — state reconciliation must
+    // not depend on the Live Board tab being visible.
     _lastTickDate = getTodayDateString();
     setInterval(() => {
       updateDailyStats();
       updateFisCounters();
       const currentDate = getTodayDateString();
       const dayRolled = currentDate !== _lastTickDate;
+      reconcilePlannedMovementActivation();
       const isLiveActive = !document.getElementById('tab-live')?.classList.contains('hidden');
       if (isLiveActive || dayRolled) {
         renderLiveBoard();
@@ -2214,6 +2232,32 @@ async function bootstrap() {
         _lastTickDate = currentDate;
       }
     }, 45000); // 45-second tick
+
+    // Focus/visibility catch-up: if the app was backgrounded, minimised, or the browser
+    // throttled its timers, reconcile activation state as soon as focus returns.
+    window.addEventListener('focus', () => {
+      const changed = reconcilePlannedMovementActivation();
+      if (changed) {
+        const isLiveActive = !document.getElementById('tab-live')?.classList.contains('hidden');
+        if (isLiveActive) {
+          renderLiveBoard();
+          renderTimeline();
+        }
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const changed = reconcilePlannedMovementActivation();
+        if (changed) {
+          const isLiveActive = !document.getElementById('tab-live')?.classList.contains('hidden');
+          if (isLiveActive) {
+            renderLiveBoard();
+            renderTimeline();
+          }
+        }
+      }
+    });
   } catch (e) {
     if (!diagnostics.bootstrap.failedStage) {
       logBootstrapStage(diagnostics.bootstrap.currentStage || 'unknown', 'failed', e.message || String(e));

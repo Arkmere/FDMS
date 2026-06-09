@@ -3142,93 +3142,104 @@ function reEvaluateStatusAfterTimeChange(movementId) {
   return false;
 }
 
+// Guard against recursive re-entry: set true while reconciliation is running so that
+// renderLiveBoard() → transitionToActive() → renderLiveBoard() chains do not re-trigger
+// another reconciliation pass before the current one has finished.
+let _reconcileInProgress = false;
+
 /**
- * Auto-activate PLANNED movements when they reach the configured time before their planned time
- * Supports all 4 flight types with individual enable/minutes config:
- * - DEP: Activates before ETD (useful for pre-departure checks)
- * - ARR: Activates before ETA (default enabled)
- * - LOC: Activates before ETD (useful for local flights)
- * - OVR: Activates before EOFT (default enabled)
+ * App-level planned movement reconciliation.
+ * Evaluates all PLANNED movements against the current time independently of rendering.
+ * Covers the normal pre-activation window and a 24-hour catch-up horizon for missed windows
+ * (e.g. app was closed, asleep, or on another tab during the activation window).
+ * Safe to call from any context; guards against recursive re-entry via _reconcileInProgress.
+ * Returns true if any movement was transitioned to ACTIVE.
  */
-function autoActivatePlannedMovements() {
-  const config = getConfig();
-  const now = new Date();
+export function reconcilePlannedMovementActivation() {
+  if (_reconcileInProgress) return false;
+  _reconcileInProgress = true;
+  try {
+    const config = getConfig();
+    const now = new Date();
+    // Catch-up movements whose planned time has already passed but by no more than 24 hours.
+    // Movements older than this are left PLANNED and handled by stale/overdue warnings.
+    const CATCHUP_PAST_LIMIT_MINUTES = 24 * 60;
 
-  // Get activation settings for each flight type (with fallback to legacy settings)
-  const activationSettings = {
-    DEP: {
-      enabled: config.autoActivateDepEnabled ?? false,
-      minutes: Math.min(config.autoActivateDepMinutes || 30, 120)
-    },
-    ARR: {
-      enabled: config.autoActivateArrEnabled ?? config.autoActivateEnabled ?? true,
-      minutes: Math.min(config.autoActivateArrMinutes || config.autoActivateMinutesBeforeEta || 30, 120)
-    },
-    LOC: {
-      enabled: config.autoActivateLocEnabled ?? false,
-      minutes: Math.min(config.autoActivateLocMinutes || 30, 120)
-    },
-    OVR: {
-      enabled: config.autoActivateOvrEnabled ?? config.autoActivateEnabled ?? true,
-      minutes: Math.min(config.autoActivateOvrMinutes || config.ovrAutoActivateMinutes || 30, 120)
+    const activationSettings = {
+      DEP: {
+        enabled: config.autoActivateDepEnabled ?? false,
+        minutes: Math.min(config.autoActivateDepMinutes || 30, 120)
+      },
+      ARR: {
+        enabled: config.autoActivateArrEnabled ?? config.autoActivateEnabled ?? true,
+        minutes: Math.min(config.autoActivateArrMinutes || config.autoActivateMinutesBeforeEta || 30, 120)
+      },
+      LOC: {
+        enabled: config.autoActivateLocEnabled ?? false,
+        minutes: Math.min(config.autoActivateLocMinutes || 30, 120)
+      },
+      OVR: {
+        enabled: config.autoActivateOvrEnabled ?? config.autoActivateEnabled ?? true,
+        minutes: Math.min(config.autoActivateOvrMinutes || config.ovrAutoActivateMinutes || 30, 120)
+      }
+    };
+
+    const plannedMovements = getMovements().filter(m => m.status === 'PLANNED');
+    let changed = false;
+
+    for (const movement of plannedMovements) {
+      const ft = (movement.flightType || '').toUpperCase();
+      const settings = activationSettings[ft];
+
+      if (!settings || !settings.enabled) continue;
+
+      // ARR: do not autoactivate if ATA is already recorded
+      if (ft === 'ARR' && movement.arrActual && String(movement.arrActual).trim()) continue;
+
+      // DEP/LOC use ETD, OVR uses ECT, ARR uses ETA
+      let timeStr;
+      if (ft === 'DEP' || ft === 'LOC') {
+        timeStr = getETD(movement);
+      } else if (ft === 'OVR') {
+        timeStr = getECT(movement);
+      } else {
+        timeStr = getETA(movement);
+      }
+
+      if (!timeStr || timeStr === '-' || !movement.dof) continue;
+
+      const timeParts = timeStr.split(':');
+      if (timeParts.length !== 2) continue;
+
+      const plannedDate = new Date(movement.dof + 'T00:00:00Z');
+      plannedDate.setUTCHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
+
+      const minutesUntil = Math.floor((plannedDate - now) / (1000 * 60));
+
+      // Normal window: configured lead time before planned time (e.g. 30 min before ETA)
+      const withinNormalWindow = minutesUntil <= settings.minutes && minutesUntil >= 0;
+      // Catch-up window: planned time has passed but within the 24-hour horizon
+      const withinCatchupWindow = minutesUntil < 0 && Math.abs(minutesUntil) <= CATCHUP_PAST_LIMIT_MINUTES;
+
+      if (withinNormalWindow || withinCatchupWindow) {
+        transitionToActive(movement.id);
+        changed = true;
+      }
     }
-  };
 
-  // Get all PLANNED movements
-  const plannedMovements = getMovements().filter(m => m.status === 'PLANNED');
-
-  for (const movement of plannedMovements) {
-    const ft = (movement.flightType || '').toUpperCase();
-    const settings = activationSettings[ft];
-
-    // Skip if this flight type's auto-activation is not enabled
-    if (!settings || !settings.enabled) {
-      continue;
-    }
-
-    // Get the appropriate time field based on flight type
-    // DEP/LOC use ETD (depPlanned), ARR uses ETA (arrPlanned), OVR uses ECT/EOFT (depPlanned)
-    let timeStr;
-    if (ft === 'DEP' || ft === 'LOC') {
-      timeStr = getETD(movement);
-    } else if (ft === 'OVR') {
-      timeStr = getECT(movement);
-    } else {
-      timeStr = getETA(movement);
-    }
-
-    // Skip if no valid time or DOF
-    if (!timeStr || timeStr === '-' || !movement.dof) {
-      continue;
-    }
-
-    // Parse time (HH:MM format)
-    const timeParts = timeStr.split(':');
-    if (timeParts.length !== 2) {
-      continue;
-    }
-
-    const hours = parseInt(timeParts[0], 10);
-    const minutes = parseInt(timeParts[1], 10);
-
-    // Create date object for the planned time
-    const plannedDate = new Date(movement.dof + 'T00:00:00Z');
-    plannedDate.setUTCHours(hours, minutes, 0, 0);
-
-    // Calculate minutes until planned time
-    const minutesUntil = Math.floor((plannedDate - now) / (1000 * 60));
-
-    // Auto-activate if within the configured window
-    // Don't auto-activate if more than 1 hour past (probably stale)
-    if (minutesUntil <= settings.minutes && minutesUntil >= -60) {
-      transitionToActive(movement.id);
-    }
+    return changed;
+  } finally {
+    _reconcileInProgress = false;
   }
 }
 
-// Legacy alias for backwards compatibility
+// Legacy aliases kept for call sites not yet updated
+function autoActivatePlannedMovements() {
+  reconcilePlannedMovementActivation();
+}
+
 function autoActivatePlannedArrivals() {
-  autoActivatePlannedMovements();
+  reconcilePlannedMovementActivation();
 }
 
 export function renderLiveBoard() {
@@ -3236,8 +3247,9 @@ export function renderLiveBoard() {
   const tbody = byId("liveBody");
   if (!tbody) return;
 
-  // Auto-activate PLANNED movements before their planned time if enabled
-  autoActivatePlannedMovements();
+  // Reconcile planned movement activation state; guard prevents re-entry from
+  // transitionToActive() → renderLiveBoard() chains triggered within reconciliation.
+  reconcilePlannedMovementActivation();
 
   closeDropdownPortal();                                // restore any portalled menu before wiping DOM
   tbody.innerHTML = "";
