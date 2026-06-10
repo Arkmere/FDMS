@@ -3065,3 +3065,12 @@ ARR overdue action warnings now apply only to PLANNED and ACTIVE unresolved arri
 
 LIVEBOARD-EDIT-RETURN-TO-PLANNED-001 implemented.
 Active strips now have an Edit → Planned action allowing operators to return a strip to PLANNED. The action preserves strip data, confirms before returning strips with actual times recorded, and allows existing reconciliation logic to reactivate the strip if its planned time remains inside the activation/overdue window.
+
+---
+
+## 38. LIVEBOARD-RETURN-TO-PLANNED-SEMANTICS-002 — Replan DEP/LOC correctly when returning ACTIVE strips to PLANNED
+
+**Status:** Implemented.
+
+LIVEBOARD-RETURN-TO-PLANNED-SEMANTICS-002 implemented.
+DEP/LOC return-to-planned now performs a true replanning transition: actual departure state is cleared, a revised ETD is assigned, dependent timing is recalculated through the canonical timing model, and timeline/counter displays refresh. Inline future ATD edits on ACTIVE DEP/LOC strips are now treated as revised ETD entries and return the strip to PLANNED. ARR and OVR semantics remain unchanged.

@@ -902,6 +902,7 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     let effectiveFieldName = fieldName;
     let _depActualRedirect = false; // true when depPlanned was redirected to depActual
     let _arrActualRedirect = false; // true when arrPlanned was redirected to arrActual
+    let _depPlannedRedirect = false; // true when a future ATD edit was redirected to a revised ETD (replanning)
     if (fieldName === 'depPlanned' && inputType === 'time' && storedValue) {
       const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
       const preFt = (preSaveMvt?.flightType || '').toUpperCase();
@@ -909,6 +910,25 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
         if (checkPastTime(storedValue, preSaveMvt.dof).isPast) {
           effectiveFieldName = 'depActual';
           _depActualRedirect = true;
+        }
+      }
+    }
+
+    // ── Future ETD redirect (replanning) ──────────────────────────────────
+    // When the operator edits the dep-actual cell (ATD) on an ACTIVE DEP/LOC
+    // strip to a time in the future, they are revising the plan rather than
+    // correcting the actual departure. Treat the entered value as a revised
+    // ETD: redirect the write to depPlanned, clear the actual departure state,
+    // and return the strip to PLANNED. This is the inverse of the historical
+    // dep-actual redirect above.
+    if (fieldName === 'depActual' && inputType === 'time' && storedValue) {
+      const preSaveMvt = getMovements().find(m => String(m.id) === String(movementId));
+      const preFt = (preSaveMvt?.flightType || '').toUpperCase();
+      const preStatus = (preSaveMvt?.status || '').toUpperCase();
+      if ((preFt === 'DEP' || preFt === 'LOC') && preStatus === 'ACTIVE') {
+        if (!checkPastTime(storedValue, preSaveMvt.dof).isPast) {
+          effectiveFieldName = 'depPlanned';
+          _depPlannedRedirect = true;
         }
       }
     }
@@ -934,7 +954,16 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
 
     // ── Transactional update ───────────────────────────────────────────────
     const updateData = {};
-    updateData[effectiveFieldName] = storedValue;
+    if (_depPlannedRedirect) {
+      // Replanning: the future ATD becomes the revised ETD, the actual
+      // departure state is cleared, and the strip returns to PLANNED.
+      updateData.depPlanned = storedValue;
+      updateData.depActual = "";
+      updateData.depActualExact = "";
+      updateData.status = "PLANNED";
+    } else {
+      updateData[effectiveFieldName] = storedValue;
+    }
 
     const updatedMovement = updateMovement(movementId, updateData);
     if (!updatedMovement) {
@@ -947,8 +976,9 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // Modal edits use bindPlannedTimesSync for live UI feedback and save the
     // already-computed values; inline edits must trigger recalc here on commit.
     const timingFields = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual', 'durationMinutes'];
-    if (timingFields.includes(effectiveFieldName)) {
-      const timingPatch = recalculateTimingModel(updatedMovement, effectiveFieldName);
+    const recalcField = _depPlannedRedirect ? 'depPlanned' : effectiveFieldName;
+    if (timingFields.includes(recalcField)) {
+      const timingPatch = recalculateTimingModel(updatedMovement, recalcField);
       const isWeak = timingPatch._weakPrediction;
       delete timingPatch._weakPrediction;
       if (Object.keys(timingPatch).length > 0 && !isWeak) {
@@ -963,8 +993,10 @@ function startInlineEdit(el, movementId, fieldName, inputType, onSave) {
     // should revert to PLANNED (if the new time is now outside the activate window).
     // Skip for the dep-actual redirect path: Part F is about to promote to ACTIVE,
     // and reEvaluateStatusAfterTimeChange must not interfere with that transition.
+    // Also skip for the future-ETD redirect: the strip has already been returned
+    // to PLANNED above, and reEvaluateStatusAfterTimeChange only acts on ACTIVE strips.
     const isTimeField = ['depPlanned', 'arrPlanned', 'depActual', 'arrActual'].includes(effectiveFieldName);
-    if (isTimeField && !_depActualRedirect && !_arrActualRedirect) {
+    if (isTimeField && !_depActualRedirect && !_arrActualRedirect && !_depPlannedRedirect) {
       reEvaluateStatusAfterTimeChange(movementId);
     }
 
@@ -8228,28 +8260,70 @@ function transitionToActive(id) {
 }
 
 /**
+ * Returns the current UTC time plus the given number of minutes, as HH:MM.
+ */
+function getUtcTimePlusMinutes(minutesToAdd = 5) {
+  const d = new Date(Date.now() + minutesToAdd * 60 * 1000);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+/**
  * Transition an ACTIVE movement back to PLANNED.
- * Status-only action — no strip data is cleared or overwritten.
+ *
+ * DEP/LOC: this is a replanning transition. Any actual departure time is
+ * cleared (depActual/depActualExact) and replaced with a revised ETD
+ * (now + 5 minutes), with dependent timing recalculated through the
+ * canonical timing model. A planned strip must not display a stale ATD.
+ *
+ * ARR/OVR: status-only transition — actual times are preserved unchanged.
+ *
  * Prompts for confirmation if actual times are already recorded.
  */
 function transitionToPlanned(id) {
   const movement = getMovements().find(m => String(m.id) === String(id));
   if (!movement) return;
 
+  const ft = (movement.flightType || "").toUpperCase();
+
   const hasActualTimes =
     !!(movement.depActual && String(movement.depActual).trim()) ||
     !!(movement.arrActual && String(movement.arrActual).trim());
 
   if (hasActualTimes) {
-    const ok = window.confirm("This strip has actual times recorded. Return it to Planned anyway?");
+    const msg = (ft === "DEP" || ft === "LOC")
+      ? "This strip has an actual departure time recorded. Returning it to Planned will convert it back to a revised ETD. Continue?"
+      : "This strip has actual times recorded. Return it to Planned anyway?";
+    const ok = window.confirm(msg);
     if (!ok) return;
   }
 
-  updateMovement(id, { status: "PLANNED" });
+  if (ft === "DEP" || ft === "LOC") {
+    const revisedEtd = getUtcTimePlusMinutes(5);
+
+    const updatedMovement = updateMovement(id, {
+      status: "PLANNED",
+      depPlanned: revisedEtd,
+      depActual: "",
+      depActualExact: ""
+    });
+
+    if (updatedMovement) {
+      const timingPatch = recalculateTimingModel(updatedMovement, "depPlanned");
+      const isWeak = timingPatch._weakPrediction;
+      delete timingPatch._weakPrediction;
+      if (Object.keys(timingPatch).length > 0 && !isWeak) {
+        updateMovement(id, timingPatch);
+      }
+    }
+  } else {
+    updateMovement(id, { status: "PLANNED" });
+  }
 
   renderLiveBoard();
   renderHistoryBoard();
+  if (typeof renderTimelineTracks === "function") renderTimelineTracks();
   if (window.updateDailyStats) window.updateDailyStats();
+  if (window.updateFisCounters) window.updateFisCounters();
 }
 
 /**
