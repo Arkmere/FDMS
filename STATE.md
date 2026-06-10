@@ -486,6 +486,7 @@ The following workstreams should be treated as merged and complete for current p
 | DOCS-FLITE-001 — Weather/METAR Builder documentation | Complete. `docs/quick-start.md`, `docs/user-guide.md`, `docs/install-update-backup-troubleshooting.md` created. README key features added. STATE.md updated. No app code changed. |
 | UX-V1-001 — Expand desktop app shell width | Complete — merged. Removed `max-width: 1280px` and `margin: 0 auto` from `.app-shell`; shell now uses full available window width. |
 | LIVEBOARD-AUTOACTIVATE-RECONCILE-001 — App-level planned movement reconciliation | Complete — implemented. Planned movement autoactivation no longer depends solely on Live Board rendering during the activation window. `reconcilePlannedMovementActivation()` runs on startup, app-level 45-second tick, window focus return, document visibilitychange, and Live Board tab return. ARR/OVR missed activation windows are caught up within a 24-hour horizon. The previous ETA+60-minute stale guard has been replaced with the 24-hour catch-up window. ARR movements with ATA already recorded are excluded from autoactivation. ARR overdue warning independence remains separate and already implemented. |
+| EGOW Live Board UI/validation centralisation | Complete — merged. Shared EGOW code/unit-code helpers added; create/edit modal datalists now use shared options; duplicated hardcoded valid-code arrays removed. Unit-code taxonomy remains advisory/datalist only pending SME decision on L/M/A vs legacy values such as ARMY/BBMF. |
 
 ## 6. Current active engineering priority
 

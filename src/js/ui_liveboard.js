@@ -2205,6 +2205,89 @@ function getFullFlightType(flightType) {
   }
 }
 
+// Central EGOW flight-type taxonomy — single source of truth for Live Board
+// create/edit modal datalists, descriptions, and validation.
+const EGOW_CODE_DEFS = [
+  { code: "VC",  label: "Visiting Civil" },
+  { code: "VCH", label: "Visiting Civil Helicopter" },
+  { code: "VM",  label: "Visiting Military" },
+  { code: "VMH", label: "Visiting Military Helicopter" },
+  { code: "VNH", label: "Visiting Navy Helicopter" },
+  { code: "BC",  label: "Based Civil" },
+  { code: "BM",  label: "Based Military", requiresUnitCode: true },
+];
+
+// Central EGOW unit-code taxonomy — advisory/datalist only (see STATE.md).
+const EGOW_UNIT_CODE_DEFS = [
+  { code: "L", label: "Light / Local" },
+  { code: "M", label: "Military" },
+  { code: "A", label: "Army" },
+];
+
+/**
+ * Get the list of valid EGOW flight-type codes, in canonical order.
+ * @returns {string[]} Uppercase EGOW codes
+ */
+function getValidEgowCodes() {
+  return EGOW_CODE_DEFS.map((def) => def.code);
+}
+
+/**
+ * Check whether a given code is a recognised EGOW flight-type code.
+ * @param {string} code - EGOW code to check
+ * @returns {boolean}
+ */
+function isValidEgowCode(code) {
+  const normalized = (code || "").toUpperCase().trim();
+  return EGOW_CODE_DEFS.some((def) => def.code === normalized);
+}
+
+/**
+ * Build <option> markup for an EGOW code datalist.
+ * @returns {string} HTML for <option> elements
+ */
+function getEgowCodeOptionsHtml() {
+  return EGOW_CODE_DEFS.map((def) => `<option value="${def.code}">${def.code} - ${escapeHtml(def.label)}</option>`).join("\n");
+}
+
+/**
+ * Check whether an EGOW code requires a unit code to be supplied (e.g. BM).
+ * @param {string} code - EGOW code to check
+ * @returns {boolean}
+ */
+function egowCodeRequiresUnitCode(code) {
+  const normalized = (code || "").toUpperCase().trim();
+  const def = EGOW_CODE_DEFS.find((def) => def.code === normalized);
+  return !!(def && def.requiresUnitCode);
+}
+
+/**
+ * Get the list of recognised EGOW unit codes, in canonical order.
+ * @returns {string[]} Uppercase unit codes
+ */
+function getValidEgowUnitCodes() {
+  return EGOW_UNIT_CODE_DEFS.map((def) => def.code);
+}
+
+/**
+ * Check whether a unit code is one of the recognised EGOW unit codes.
+ * Advisory only — does not reject legacy/free-text values such as ARMY or BBMF.
+ * @param {string} unitCode - Unit code to check
+ * @returns {boolean}
+ */
+function isRecognisedEgowUnitCode(unitCode) {
+  const normalized = (unitCode || "").toUpperCase().trim();
+  return EGOW_UNIT_CODE_DEFS.some((def) => def.code === normalized);
+}
+
+/**
+ * Build <option> markup for an EGOW unit-code datalist.
+ * @returns {string} HTML for <option> elements
+ */
+function getEgowUnitCodeOptionsHtml() {
+  return EGOW_UNIT_CODE_DEFS.map((def) => `<option value="${def.code}">${def.code} - ${escapeHtml(def.label)}</option>`).join("\n");
+}
+
 /**
  * Get EGOW code description in plain text
  * @param {string} egowCode - EGOW code (BM, BC, VM, VC, etc.)
@@ -2212,14 +2295,8 @@ function getFullFlightType(flightType) {
  */
 function getEgowCodeDescription(egowCode) {
   const code = (egowCode || "").toUpperCase();
-  switch (code) {
-    case "BM": return "Based Military";
-    case "BC": return "Based Civil";
-    case "VM": return "Visiting Military";
-    case "VMH": return "Visiting Military Helicopter";
-    case "VC": return "Visiting Civil";
-    default: return code || "—";
-  }
+  const def = EGOW_CODE_DEFS.find((def) => def.code === code);
+  return def ? def.label : (code || "—");
 }
 
 /**
@@ -4446,18 +4523,15 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newEgowCode" class="modal-input is-derived" placeholder="" list="egowCodeOptions" />
             <datalist id="egowCodeOptions">
-              <option value="VC">VC</option>
-              <option value="VM">VM</option>
-              <option value="BC">BC</option>
-              <option value="BM">BM</option>
-              <option value="VCH">VCH</option>
-              <option value="VMH">VMH</option>
-              <option value="VNH">VNH</option>
+              ${getEgowCodeOptionsHtml()}
             </datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="newUnitCode" class="modal-input is-derived" placeholder="" />
+            <input id="newUnitCode" class="modal-input is-derived" placeholder="" list="egowUnitCodeOptions" />
+            <datalist id="egowUnitCodeOptions">
+              ${getEgowUnitCodeOptionsHtml()}
+            </datalist>
           </div>
         </div>
       </section>
@@ -5096,10 +5170,9 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
     const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
     if (!egowCode) { showToast("EGOW Code is required", 'error'); return null; }
-    if (!validEgowCodes.includes(egowCode)) { showToast(`EGOW Code must be one of: ${validEgowCodes.join(', ')}`, 'error'); return null; }
-    if (egowCode === 'BM') {
+    if (!isValidEgowCode(egowCode)) { showToast(`EGOW Code must be one of: ${getValidEgowCodes().join(', ')}`, 'error'); return null; }
+    if (egowCodeRequiresUnitCode(egowCode)) {
       const unitCodeVal = (document.getElementById("newUnitCode")?.value || "").trim();
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return null; }
     }
@@ -5318,12 +5391,11 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
 
     // Validate EGOW Code
     const egowCode = document.getElementById("newEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+    if (!egowCode || !isValidEgowCode(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
     }
-    if (egowCode === 'BM') {
+    if (egowCodeRequiresUnitCode(egowCode)) {
       const unitCodeVal = (document.getElementById("newUnitCode")?.value || "").trim();
       if (!unitCodeVal) {
         showToast("EGOW Unit code is required for BM flights", 'error');
@@ -5607,18 +5679,15 @@ function openNewLocFlightModal() {
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
             <input id="newLocEgowCode" class="modal-input is-derived" placeholder="" list="locEgowCodeOptions" />
             <datalist id="locEgowCodeOptions">
-              <option value="VC">VC</option>
-              <option value="VM">VM</option>
-              <option value="BC">BC</option>
-              <option value="BM">BM</option>
-              <option value="VCH">VCH</option>
-              <option value="VMH">VMH</option>
-              <option value="VNH">VNH</option>
+              ${getEgowCodeOptionsHtml()}
             </datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" />
+            <input id="newLocUnitCode" class="modal-input is-derived" placeholder="e.g. L, M, A" list="locEgowUnitCodeOptions" />
+            <datalist id="locEgowUnitCodeOptions">
+              ${getEgowUnitCodeOptionsHtml()}
+            </datalist>
           </div>
         </div>
       </section>
@@ -6131,9 +6200,8 @@ function openNewLocFlightModal() {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return null; }
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode || !validEgowCodes.includes(egowCode)) { showToast("Valid EGOW Code is required", "error"); return null; }
-    if (egowCode === 'BM') {
+    if (!egowCode || !isValidEgowCode(egowCode)) { showToast("Valid EGOW Code is required", "error"); return null; }
+    if (egowCodeRequiresUnitCode(egowCode)) {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return null; }
     }
@@ -6320,12 +6388,11 @@ function openNewLocFlightModal() {
     if (!callsignValidation.valid) { showToast(callsignValidation.error, 'error'); return; }
 
     const egowCode = document.getElementById("newLocEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+    if (!egowCode || !isValidEgowCode(egowCode)) {
       showToast("Valid EGOW Code is required", "error");
       return;
     }
-    if (egowCode === 'BM') {
+    if (egowCodeRequiresUnitCode(egowCode)) {
       const unitCodeVal = (document.getElementById("newLocUnitCode")?.value || "").trim();
       if (!unitCodeVal) { showToast("EGOW Unit code is required for BM flights", 'error'); return; }
     }
@@ -6624,11 +6691,17 @@ function openEditMovementModal(m) {
         <div class="modal-section-grid modal-subgrid-gap">
           <div class="modal-field">
             <label class="modal-label">EGOW Code <span style="color: #d32f2f;">*</span></label>
-            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" />
+            <input id="editEgowCode" class="modal-input is-derived" value="${escapeHtml(m.egowCode || "")}" placeholder="e.g. BM, VM" list="editEgowCodeOptions" />
+            <datalist id="editEgowCodeOptions">
+              ${getEgowCodeOptionsHtml()}
+            </datalist>
           </div>
           <div class="modal-field">
             <label class="modal-label">EGOW Unit</label>
-            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" />
+            <input id="editUnitCode" class="modal-input is-derived" value="${escapeHtml(m.unitCode || "")}" placeholder="e.g. L, M, A" list="editEgowUnitCodeOptions" />
+            <datalist id="editEgowUnitCodeOptions">
+              ${getEgowUnitCodeOptionsHtml()}
+            </datalist>
           </div>
         </div>
       </section>
@@ -7257,12 +7330,11 @@ function openEditMovementModal(m) {
     if (!editCallsignValidation.valid) { showToast(editCallsignValidation.error, 'error'); return false; }
 
     const editEgowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
-    const editValidEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!editEgowCode || !editValidEgowCodes.includes(editEgowCode)) {
+    if (!editEgowCode || !isValidEgowCode(editEgowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return false;
     }
-    if (editEgowCode === 'BM') {
+    if (egowCodeRequiresUnitCode(editEgowCode)) {
       const unitCodeVal = (document.getElementById("editUnitCode")?.value || "").trim();
       if (!unitCodeVal) {
         showToast("EGOW Unit code is required for BM flights", 'error');
@@ -7470,12 +7542,11 @@ function openEditMovementModal(m) {
 
     // Validate EGOW Code
     const egowCode = document.getElementById("editEgowCode")?.value?.toUpperCase().trim() || "";
-    const validEgowCodes = ["VC", "VM", "BC", "BM", "VCH", "VMH", "VNH"];
-    if (!egowCode || !validEgowCodes.includes(egowCode)) {
+    if (!egowCode || !isValidEgowCode(egowCode)) {
       showToast("Valid EGOW Code is required", 'error');
       return;
     }
-    if (egowCode === 'BM') {
+    if (egowCodeRequiresUnitCode(egowCode)) {
       const unitCodeVal = (document.getElementById("editUnitCode")?.value || "").trim();
       if (!unitCodeVal) {
         showToast("EGOW Unit code is required for BM flights", 'error');
