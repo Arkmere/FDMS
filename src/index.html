@@ -1352,7 +1352,7 @@
               <button class="admin-nav-btn" data-section="admin-sec-history">History</button>
               <button class="admin-nav-btn" data-section="admin-sec-reports">Reports</button>
               <button class="admin-nav-btn" data-section="admin-sec-cancelled">Cancelled</button>
-              <button class="admin-nav-btn" data-section="admin-sec-vkb-data">VKB / Reference Data</button>
+              <button class="admin-nav-btn" data-section="admin-sec-vkb-data">Reference Data</button>
               <button class="admin-nav-btn" data-section="admin-sec-data-management">Data Management</button>
               <button class="admin-nav-btn admin-nav-btn--dev" data-section="admin-sec-developer">Developer</button>
               <button class="admin-nav-btn admin-nav-btn--danger" data-section="admin-sec-danger">Danger Zone</button>
@@ -1363,7 +1363,7 @@
 
   <!-- Sticky save bar (shown for staged-save configuration sections) -->
   <div class="admin-save-bar hidden" id="adminSaveBar">
-    <span class="admin-save-status" id="adminSaveStatus">All changes saved</span>
+    <span class="admin-save-status" id="adminSaveStatus"></span>
     <button class="btn btn-secondary" id="adminDiscardBtn" type="button" disabled>Discard</button>
     <button class="btn btn-primary" id="adminSaveBtn" type="button" disabled>Save</button>
   </div>
@@ -2305,13 +2305,18 @@
   <!-- ── VKB / Reference Data ── -->
   <div class="admin-section hidden" id="admin-sec-vkb-data">
 
+    <div style="padding: 16px 20px 0;">
+      <div class="page-title">Reference Data</div>
+      <div class="page-subtitle">Manage local reference-data overrides for EGOW callsign attribution and aircraft registrations. These changes affect future lookup, autofill, and reporting behaviour.</div>
+    </div>
+
     <div class="vkb-admin-editor">
 
       <!-- Tabs + toolbar -->
       <div class="vkb-admin-topbar">
         <div class="vkb-dataset-tabs">
-          <button class="vkb-dataset-tab active" data-ds="egowCodes" type="button">EGOW Codes</button>
-          <button class="vkb-dataset-tab" data-ds="registrations" type="button">Registrations</button>
+          <button class="vkb-dataset-tab active" data-ds="egowCodes" type="button">EGOW Callsign Attribution</button>
+          <button class="vkb-dataset-tab" data-ds="registrations" type="button">Aircraft Registrations</button>
         </div>
         <div class="vkb-admin-toolbar">
           <span id="vkbAdminSummary" class="vkb-admin-summary">Loading…</span>

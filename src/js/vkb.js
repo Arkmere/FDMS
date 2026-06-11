@@ -1539,7 +1539,7 @@ function _renderVkbAdminSummary() {
   const datasets = getVKBOverrides().datasets;
   const egowCount = Object.keys(datasets.egowCodes     || {}).length;
   const regCount  = Object.keys(datasets.registrations || {}).length;
-  el.textContent = `Local overrides: ${egowCount} EGOW, ${regCount} registrations  ·  Audit events: ${summary.totalEvents}`;
+  el.textContent = `Local overrides: ${egowCount} EGOW attribution, ${regCount} registrations  ·  Audit events: ${summary.totalEvents}`;
 }
 
 function _currentAdminDataset() {
@@ -1948,7 +1948,7 @@ function _openVkbEditModal(dataset, key) {
     </div>`).join('');
 
   const title = isNew
-    ? `Add ${dataset === 'egowCodes' ? 'EGOW Code Row' : 'Registration'}`
+    ? `Add ${dataset === 'egowCodes' ? 'EGOW Attribution Row' : 'Aircraft Registration'}`
     : `Edit ${key}`;
 
   const regAidHtml = dataset === 'registrations'
@@ -1961,7 +1961,7 @@ function _openVkbEditModal(dataset, key) {
   bd.innerHTML = `<div class="modal" style="max-width:540px;">
     <div class="modal-header">
       <span class="modal-title">${_esc(title)}</span>
-      <span class="modal-subtitle">${_esc(dataset === 'egowCodes' ? 'EGOW Codes' : 'Registrations')}</span>
+      <span class="modal-subtitle">${_esc(dataset === 'egowCodes' ? 'EGOW Callsign Attribution' : 'Aircraft Registrations')}</span>
     </div>
     <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;">
       ${fieldsHtml}

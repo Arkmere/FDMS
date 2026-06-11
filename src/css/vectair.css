@@ -3813,7 +3813,7 @@ tr.strip.ft-ovr > td {
 }
 
 .admin-section.hidden {
-  display: none;
+  display: none !important;
 }
 
 /* Sticky save bar */

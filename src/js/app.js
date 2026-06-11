@@ -1513,6 +1513,27 @@ function initAdminPanelHandlers() {
   const adminDiscardBtn = document.getElementById('adminDiscardBtn');
   const adminSaveStatus = document.getElementById('adminSaveStatus');
 
+  let adminSaveStatusTimer = null;
+
+  function setAdminSaveStatus(text, className, autoClearMs = 0) {
+    if (!adminSaveStatus) return;
+    if (adminSaveStatusTimer) {
+      clearTimeout(adminSaveStatusTimer);
+      adminSaveStatusTimer = null;
+    }
+
+    adminSaveStatus.textContent = text || '';
+    adminSaveStatus.className = className || 'admin-save-status';
+
+    if (autoClearMs > 0) {
+      adminSaveStatusTimer = setTimeout(() => {
+        adminSaveStatus.textContent = '';
+        adminSaveStatus.className = 'admin-save-status';
+        adminSaveStatusTimer = null;
+      }, autoClearMs);
+    }
+  }
+
   function takeSnapshot() {
     const snap = {};
     CHECKBOX_IDS.forEach(id => {
@@ -1582,14 +1603,10 @@ function initAdminPanelHandlers() {
     const dirty = isDirty();
     if (adminSaveBtn) adminSaveBtn.disabled = !dirty;
     if (adminDiscardBtn) adminDiscardBtn.disabled = !dirty;
-    if (adminSaveStatus) {
-      if (dirty) {
-        adminSaveStatus.textContent = 'Unsaved changes';
-        adminSaveStatus.className = 'admin-save-status admin-save-status--dirty';
-      } else {
-        adminSaveStatus.textContent = 'All changes saved';
-        adminSaveStatus.className = 'admin-save-status admin-save-status--clean';
-      }
+    if (dirty) {
+      setAdminSaveStatus('Unsaved changes', 'admin-save-status admin-save-status--dirty');
+    } else {
+      setAdminSaveStatus('', 'admin-save-status');
     }
   }
 
@@ -1774,6 +1791,7 @@ function initAdminPanelHandlers() {
     // Re-take snapshot so dirty state resets to clean
     _configSnapshot = takeSnapshot();
     checkDirty();
+    setAdminSaveStatus('All changes saved', 'admin-save-status admin-save-status--clean', 2500);
     showToast("Configuration saved", 'success');
     applyHistoryStripBoardFilterVisibility();
     renderHistoryBoard();
