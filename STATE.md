@@ -60,6 +60,7 @@ Recently closed / consolidated:
 - **LIVEBOARD-INLINE-ARRIVAL-PAST-TIME-ATA-001** implemented. Past inline arrival-side ETA edits on ARR/LOC strips now write to ATA, preserving ETA and promoting PLANNED strips to ACTIVE. Existing DEP/LOC historical ETD→ATD behaviour preserved.
 - Admin UI cleanup: Reference Data editor labels clarified; inactive Admin sections no longer bleed into other Admin views; staged-save "All changes saved" status is now transient after save rather than permanently displayed.
 - Reference Data table refinement: removed user-facing Status and Reset controls; added Last Updated column before Actions while retaining Edit/History/Hide/Delete behaviour and internal status logic where required.
+- Reference Data action wording refined: user-facing Hide action replaced with Delete to reflect the long-term local/user-curated Reference Data model; internal suppression behaviour for bundled baseline rows remains unchanged.
 
 ### Pre-launch versioning policy
 

@@ -1613,10 +1613,9 @@ function _renderEgowAdminTable(search) {
 
   tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
     const ek = _esc(key);
-    const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="egowCodes" type="button">Edit</button>`    : '';
-    const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="egowCodes" type="button">History</button>`;
-    const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Hide</button>`    : '';
-    const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Delete</button>` : '';
+    const editBtn   = status !== 'hidden'                                                  ? `<button class="small-btn" data-va="edit"   data-key="${ek}" data-ds="egowCodes" type="button">Edit</button>`   : '';
+    const histBtn   =                                                                        `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="egowCodes" type="button">History</button>`;
+    const deleteBtn = (status === 'bundled' || status === 'edited' || status === 'local-add') ? `<button class="small-btn" data-va="delete" data-key="${ek}" data-ds="egowCodes" type="button">Delete</button>` : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
       <td>${_esc(effectiveRow['CALLSIGN_BASE'] || '')}</td>
       <td>${_esc(effectiveRow['FLIGHT_NUMBER'] || '')}</td>
@@ -1624,7 +1623,7 @@ function _renderEgowAdminTable(search) {
       <td>${_esc(effectiveRow['UNIT_CODE']  || effectiveRow['UC'] || '')}</td>
       <td>${_esc(effectiveRow['NAME']       || effectiveRow['Name'] || '')}</td>
       <td>${_esc(_formatLastUpdated(key, ov))}</td>
-      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${deleteBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1678,10 +1677,9 @@ function _renderRegAdminTable(search) {
 
   tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
     const ek = _esc(key);
-    const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="registrations" type="button">Edit</button>`    : '';
-    const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
-    const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Hide</button>`    : '';
-    const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
+    const editBtn   = status !== 'hidden'                                                  ? `<button class="small-btn" data-va="edit"   data-key="${ek}" data-ds="registrations" type="button">Edit</button>`   : '';
+    const histBtn   =                                                                        `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
+    const deleteBtn = (status === 'bundled' || status === 'edited' || status === 'local-add') ? `<button class="small-btn" data-va="delete" data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
       <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
       <td>${_esc(effectiveRow['TYPE']             || '')}</td>
@@ -1693,7 +1691,7 @@ function _renderRegAdminTable(search) {
       <td>${_esc(effectiveRow['WARNINGS']         || '')}</td>
       <td>${_esc(effectiveRow['NOTES']            || '')}</td>
       <td>${_esc(_formatLastUpdated(key, ov))}</td>
-      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${deleteBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1705,7 +1703,7 @@ function _renderRegAdminTable(search) {
 function _handleVkbAction(action, dataset, key) {
   if (action === 'edit')    _openVkbEditModal(dataset, key);
   else if (action === 'history') _openVkbHistoryModal(dataset, key);
-  else if (action === 'hide')    _confirmVkbHide(dataset, key);
+  else if (action === 'delete')  _confirmVkbDelete(dataset, key);
 }
 
 // ─── Registry lookup aid ──────────────────────────────────────────────────────
@@ -1839,11 +1837,13 @@ function _simpleConfirm(message, onConfirm) {
   bd.addEventListener('click', e => { if (e.target === bd) cleanup(); });
 }
 
-function _confirmVkbHide(dataset, key) {
+function _confirmVkbDelete(dataset, key) {
   const ov = getVKBOverrides().datasets[dataset] || {};
   const isLocalAdd = ov[key]?.action === 'add';
-  const label = isLocalAdd ? 'Delete this locally-added record' : 'Hide this record from lookups';
-  _simpleConfirm(`${label}?\n\n"${key}"`, () => {
+  const message = isLocalAdd
+    ? `Delete this row from your local Reference Data?\n\n"${key}"`
+    : `Delete this reference-data row from active use?\n\n"${key}"\n\nThe bundled source record will remain in the application baseline, but it will no longer be used in your local Reference Data.`;
+  _simpleConfirm(message, () => {
     hideVKBRecord(dataset, key, '', _todayISO());
     _renderVkbAdminSummary();
     _refreshVkbAdminTable();
