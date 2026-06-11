@@ -2208,20 +2208,20 @@ function getFullFlightType(flightType) {
 // Central EGOW flight-type taxonomy — single source of truth for Live Board
 // create/edit modal datalists, descriptions, and validation.
 const EGOW_CODE_DEFS = [
+  { code: "BC",  label: "Based Civil" },
+  { code: "BM",  label: "Based Military", requiresUnitCode: true },
   { code: "VC",  label: "Visiting Civil" },
   { code: "VCH", label: "Visiting Civil Helicopter" },
   { code: "VM",  label: "Visiting Military" },
   { code: "VMH", label: "Visiting Military Helicopter" },
   { code: "VNH", label: "Visiting Navy Helicopter" },
-  { code: "BC",  label: "Based Civil" },
-  { code: "BM",  label: "Based Military", requiresUnitCode: true },
 ];
 
 // Central EGOW unit-code taxonomy — advisory/datalist only (see STATE.md).
 const EGOW_UNIT_CODE_DEFS = [
-  { code: "L", label: "Light / Local" },
-  { code: "M", label: "Military" },
-  { code: "A", label: "Army" },
+  { code: "L", label: "LIVERPOOL UNIVERSITY AIR SQUADRON" },
+  { code: "M", label: "MANCHESTER AND SALFORD UNIVERSITIES AIR SQUADRON" },
+  { code: "A", label: "10 AIR EXPERIENCE FLIGHT" },
 ];
 
 /**
@@ -2247,7 +2247,9 @@ function isValidEgowCode(code) {
  * @returns {string} HTML for <option> elements
  */
 function getEgowCodeOptionsHtml() {
-  return EGOW_CODE_DEFS.map((def) => `<option value="${def.code}">${def.code} - ${escapeHtml(def.label)}</option>`).join("\n");
+  return EGOW_CODE_DEFS
+    .map(def => `<option value="${escapeHtml(def.code)}">${escapeHtml(def.label)}</option>`)
+    .join("");
 }
 
 /**
@@ -2285,7 +2287,9 @@ function isRecognisedEgowUnitCode(unitCode) {
  * @returns {string} HTML for <option> elements
  */
 function getEgowUnitCodeOptionsHtml() {
-  return EGOW_UNIT_CODE_DEFS.map((def) => `<option value="${def.code}">${def.code} - ${escapeHtml(def.label)}</option>`).join("\n");
+  return EGOW_UNIT_CODE_DEFS
+    .map(def => `<option value="${escapeHtml(def.code)}">${escapeHtml(def.label)}</option>`)
+    .join("");
 }
 
 /**
