@@ -1553,19 +1553,36 @@ function _refreshVkbAdminTable() {
   else _renderRegAdminTable(search);
 }
 
+/**
+ * Derive a display date for the "Last Updated" column.
+ * Prefers the override's own updatedAt; falls back to the most recent
+ * audit event for the entity; otherwise '—' for unchanged bundled rows.
+ */
+function _formatLastUpdated(key, ov) {
+  if (ov?.updatedAt) return new Date(ov.updatedAt).toLocaleDateString();
+
+  const events = getAuditEventsForEntity('vkb', key);
+  if (events.length) {
+    const latest = events.reduce((a, b) => (a.changedAt > b.changedAt ? a : b));
+    if (latest.changedAt) return new Date(latest.changedAt).toLocaleDateString();
+  }
+
+  return '—';
+}
+
 function _renderEgowAdminTable(search) {
   const thead = document.getElementById('vkbAdminTableHead');
   const tbody = document.getElementById('vkbAdminTableBody');
   if (!tbody) return;
 
   if (thead) thead.innerHTML = `<tr>
-    <th style="width:68px;">Status</th>
     <th>Callsign Base</th>
     <th>Flt #</th>
     <th>EGOW Code</th>
     <th>Unit Code</th>
     <th>Name</th>
-    <th style="width:190px;text-align:right;">Actions</th>
+    <th style="width:110px;">Last Updated</th>
+    <th style="width:150px;text-align:right;">Actions</th>
   </tr>`;
 
   const egowOverrides = getVKBOverrides().datasets.egowCodes || {};
@@ -1578,11 +1595,11 @@ function _renderEgowAdminTable(search) {
     let status = 'bundled', effectiveRow = { ...row };
     if (ov?.action === 'hide')       { status = 'hidden'; }
     else if (ov?.action === 'edit')  { status = 'edited'; effectiveRow = { ...row, ...(ov.fields || {}) }; }
-    allRows.push({ key, status, effectiveRow });
+    allRows.push({ key, status, effectiveRow, ov });
   }
   // Locally-added rows
   for (const [key, ov] of Object.entries(egowOverrides)) {
-    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {} });
+    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {}, ov });
   }
 
   const filtered = search
@@ -1594,25 +1611,20 @@ function _renderEgowAdminTable(search) {
     return;
   }
 
-  tbody.innerHTML = filtered.map(({ key, status, effectiveRow }) => {
-    const badge = status === 'hidden'    ? '<span class="vkb-badge vkb-badge-hidden">Hidden</span>'
-                : status === 'local-add' ? '<span class="vkb-badge vkb-badge-local">Local</span>'
-                : status === 'edited'    ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
-                : '';
+  tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
     const ek = _esc(key);
     const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="egowCodes" type="button">Edit</button>`    : '';
     const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="egowCodes" type="button">History</button>`;
     const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Hide</button>`    : '';
     const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="egowCodes" type="button">Delete</button>` : '';
-    const resetBtn = (status === 'edited' || status === 'hidden')  ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="egowCodes" type="button">Reset</button>`   : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
-      <td>${badge}</td>
       <td>${_esc(effectiveRow['CALLSIGN_BASE'] || '')}</td>
       <td>${_esc(effectiveRow['FLIGHT_NUMBER'] || '')}</td>
       <td>${_esc(effectiveRow['EGOW_CODE'] || effectiveRow['EGOW Code'] || '')}</td>
       <td>${_esc(effectiveRow['UNIT_CODE']  || effectiveRow['UC'] || '')}</td>
       <td>${_esc(effectiveRow['NAME']       || effectiveRow['Name'] || '')}</td>
-      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}${resetBtn}</td>
+      <td>${_esc(_formatLastUpdated(key, ov))}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1627,7 +1639,6 @@ function _renderRegAdminTable(search) {
   if (!tbody) return;
 
   if (thead) thead.innerHTML = `<tr>
-    <th style="width:60px;">Status</th>
     <th>Registration</th>
     <th>Type</th>
     <th>Operator</th>
@@ -1637,7 +1648,8 @@ function _renderRegAdminTable(search) {
     <th>Op Type</th>
     <th>Warnings</th>
     <th>Notes</th>
-    <th style="width:190px;text-align:right;">Actions</th>
+    <th style="width:110px;">Last Updated</th>
+    <th style="width:150px;text-align:right;">Actions</th>
   </tr>`;
 
   const regOverrides = getVKBOverrides().datasets.registrations || {};
@@ -1649,10 +1661,10 @@ function _renderRegAdminTable(search) {
     let status = 'bundled', effectiveRow = { ...row };
     if (ov?.action === 'hide')      { status = 'hidden'; }
     else if (ov?.action === 'edit') { status = 'edited'; effectiveRow = { ...row, ...(ov.fields || {}) }; }
-    allRows.push({ key, status, effectiveRow });
+    allRows.push({ key, status, effectiveRow, ov });
   }
   for (const [key, ov] of Object.entries(regOverrides)) {
-    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {} });
+    if (ov.action === 'add') allRows.push({ key, status: 'local-add', effectiveRow: ov.fields || {}, ov });
   }
 
   const filtered = search
@@ -1664,19 +1676,13 @@ function _renderRegAdminTable(search) {
     return;
   }
 
-  tbody.innerHTML = filtered.map(({ key, status, effectiveRow }) => {
-    const badge = status === 'hidden'    ? '<span class="vkb-badge vkb-badge-hidden">Hidden</span>'
-                : status === 'local-add' ? '<span class="vkb-badge vkb-badge-local">Local</span>'
-                : status === 'edited'    ? '<span class="vkb-badge vkb-badge-edited">Edited</span>'
-                : '';
+  tbody.innerHTML = filtered.map(({ key, status, effectiveRow, ov }) => {
     const ek = _esc(key);
     const editBtn  = status !== 'hidden'                           ? `<button class="small-btn" data-va="edit"    data-key="${ek}" data-ds="registrations" type="button">Edit</button>`    : '';
     const histBtn  =                                                 `<button class="small-btn" data-va="history" data-key="${ek}" data-ds="registrations" type="button">History</button>`;
     const hideBtn  = (status === 'bundled' || status === 'edited') ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Hide</button>`    : '';
     const delBtn   = status === 'local-add'                        ? `<button class="small-btn" data-va="hide"    data-key="${ek}" data-ds="registrations" type="button">Delete</button>` : '';
-    const resetBtn = (status === 'edited' || status === 'hidden')  ? `<button class="small-btn" data-va="reset"   data-key="${ek}" data-ds="registrations" type="button">Reset</button>`   : '';
     return `<tr class="${status === 'hidden' ? 'vkb-row-hidden' : ''}">
-      <td>${badge}</td>
       <td>${_esc(effectiveRow['REGISTRATION']     || '')}</td>
       <td>${_esc(effectiveRow['TYPE']             || '')}</td>
       <td>${_esc(effectiveRow['OPERATOR']         || '')}</td>
@@ -1686,7 +1692,8 @@ function _renderRegAdminTable(search) {
       <td>${_esc(effectiveRow['OPERATION TYPE']   || '')}</td>
       <td>${_esc(effectiveRow['WARNINGS']         || '')}</td>
       <td>${_esc(effectiveRow['NOTES']            || '')}</td>
-      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}${resetBtn}</td>
+      <td>${_esc(_formatLastUpdated(key, ov))}</td>
+      <td class="vkb-actions-cell">${editBtn}${histBtn}${hideBtn}${delBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1699,7 +1706,6 @@ function _handleVkbAction(action, dataset, key) {
   if (action === 'edit')    _openVkbEditModal(dataset, key);
   else if (action === 'history') _openVkbHistoryModal(dataset, key);
   else if (action === 'hide')    _confirmVkbHide(dataset, key);
-  else if (action === 'reset')   _confirmVkbReset(dataset, key);
 }
 
 // ─── Registry lookup aid ──────────────────────────────────────────────────────
@@ -1839,14 +1845,6 @@ function _confirmVkbHide(dataset, key) {
   const label = isLocalAdd ? 'Delete this locally-added record' : 'Hide this record from lookups';
   _simpleConfirm(`${label}?\n\n"${key}"`, () => {
     hideVKBRecord(dataset, key, '', _todayISO());
-    _renderVkbAdminSummary();
-    _refreshVkbAdminTable();
-  });
-}
-
-function _confirmVkbReset(dataset, key) {
-  _simpleConfirm(`Reset "${key}" back to the bundled baseline? Your local override will be removed.`, () => {
-    resetVKBOverride(dataset, key, _todayISO());
     _renderVkbAdminSummary();
     _refreshVkbAdminTable();
   });

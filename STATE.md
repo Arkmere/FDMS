@@ -59,6 +59,7 @@ Recently closed / consolidated:
 - **UX-V1-003A** — Refined active nav tab to fully merge into page content area. Nav bar bottom border moved to `::after` pseudo-element (z-index 0); active tab uses `position: relative; z-index: 1` with white background and visible left/right border (`var(--va-border)`), covering the pseudo-element line so the tab visually opens into the page. Inactive tabs remain flat with transparent borders.
 - **LIVEBOARD-INLINE-ARRIVAL-PAST-TIME-ATA-001** implemented. Past inline arrival-side ETA edits on ARR/LOC strips now write to ATA, preserving ETA and promoting PLANNED strips to ACTIVE. Existing DEP/LOC historical ETD→ATD behaviour preserved.
 - Admin UI cleanup: Reference Data editor labels clarified; inactive Admin sections no longer bleed into other Admin views; staged-save "All changes saved" status is now transient after save rather than permanently displayed.
+- Reference Data table refinement: removed user-facing Status and Reset controls; added Last Updated column before Actions while retaining Edit/History/Hide/Delete behaviour and internal status logic where required.
 
 ### Pre-launch versioning policy
 
