@@ -4740,12 +4740,14 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
       const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
         const pilots = lookupAircraftPilots(regInput.value, '');
-        if (pilots.length > 0) {
-          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          const category = (egowCodeInput?.value || '').toUpperCase().trim();
-          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-            applyTrackedAutofill(captainInput, pilots[0].displayName);
-          }
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+        const category = (egowCodeInput?.value || '').toUpperCase().trim();
+        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+          applyTrackedAutofill(captainInput, pilots[0].displayName);
+        } else {
+          clearTrackedAutofill(captainInput);
         }
       }
       _refreshNewFlightVkbButton();
@@ -4770,16 +4772,25 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       const captainEl = document.getElementById('newCaptain');
+      const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
+      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      if (pilotDatalist) {
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+      }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
         const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
         captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        clearTrackedAutofill(captainEl);
+        // No EGOW attribution for this callsign — fall back to pilot-list-only attribution
+        // (covers fixed-callsign-only BC matches not present in FDMS_EGOW_CODES).
+        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
+        else clearTrackedAutofill(captainEl);
       }
     }
 
@@ -4792,19 +4803,6 @@ function openNewFlightModal(flightType = "DEP", prefill = null) {
           regInput.value = normalizeEuCivilRegistration(registration);
           // Trigger registration input event to update dependent fields (incl. pilot suggestions)
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      }
-    }
-
-    // Aircraft pilot suggestions from fixed callsign (direct lookup, covers non-reg-matched cases)
-    if (fullCallsign) {
-      const captainInput = document.getElementById('newCaptain');
-      const pilotDatalist = document.getElementById('newCaptainPilotSuggestions');
-      if (captainInput && pilotDatalist) {
-        const pilots = lookupAircraftPilots('', fullCallsign);
-        if (pilots.length > 0) {
-          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     }
@@ -5930,12 +5928,14 @@ function openNewLocFlightModal() {
       const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
       if (captainEl && pilotDl) {
         const pilots = lookupAircraftPilots(regInput.value, '');
-        if (pilots.length > 0) {
-          pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          const category = (egowCodeInput?.value || '').toUpperCase().trim();
-          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-            applyTrackedAutofill(captainEl, pilots[0].displayName);
-          }
+        pilotDl.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+        const category = (egowCodeInput?.value || '').toUpperCase().trim();
+        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+          applyTrackedAutofill(captainEl, pilots[0].displayName);
+        } else {
+          clearTrackedAutofill(captainEl);
         }
       }
       _refreshLocVkbButton();
@@ -5958,16 +5958,23 @@ function openNewLocFlightModal() {
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       const captainEl = document.getElementById('newLocCaptain');
+      const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
+      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      if (pilotDl) {
+        pilotDl.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+      }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
         const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
         captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        clearTrackedAutofill(captainEl);
+        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
+        else clearTrackedAutofill(captainEl);
       }
     }
 
@@ -5978,19 +5985,6 @@ function openNewLocFlightModal() {
         if (registration && registration !== '-') {
           regInput.value = registration;
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      }
-    }
-
-    // Aircraft pilot suggestions from fixed callsign
-    if (fullCallsign) {
-      const captainEl = document.getElementById('newLocCaptain');
-      const pilotDl = document.getElementById('newLocCaptainPilotSuggestions');
-      if (captainEl && pilotDl) {
-        const pilots = lookupAircraftPilots('', fullCallsign);
-        if (pilots.length > 0) {
-          pilotDl.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
         }
       }
     }
@@ -6959,12 +6953,14 @@ function openEditMovementModal(m) {
       const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
       if (captainInput && pilotDatalist) {
         const pilots = lookupAircraftPilots(regInput.value, '');
-        if (pilots.length > 0) {
-          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          const category = (egowCodeInput?.value || '').toUpperCase().trim();
-          if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
-            applyTrackedAutofill(captainInput, pilots[0].displayName);
-          }
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+        const category = (egowCodeInput?.value || '').toUpperCase().trim();
+        if (pilots.length === 1 && !VISITING_EGOW_CATEGORIES.includes(category)) {
+          applyTrackedAutofill(captainInput, pilots[0].displayName);
+        } else {
+          clearTrackedAutofill(captainInput);
         }
       }
       _refreshEditVkbButton();
@@ -6989,16 +6985,23 @@ function openEditMovementModal(m) {
     if (fullCallsign) {
       const egowAttrib = lookupEgowAttributionFromCallsign(fullCallsign);
       const captainEl = document.getElementById('editCaptain');
+      const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
+      const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
+      if (pilotDatalist) {
+        pilotDatalist.innerHTML = pilots.length > 0
+          ? pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('')
+          : '';
+      }
       if (egowAttrib) {
         egowAttrib.egowCode ? applyTrackedAutofill(egowCodeInput, egowAttrib.egowCode) : clearTrackedAutofill(egowCodeInput);
         egowAttrib.unitCode ? applyTrackedAutofill(unitCodeInput, egowAttrib.unitCode) : clearTrackedAutofill(unitCodeInput);
-        const pilots = lookupAircraftPilots(regInput?.value || '', fullCallsign);
         const captainName = resolveCaptainAttribution(egowAttrib.egowCode, egowAttrib, pilots);
         captainName ? applyTrackedAutofill(captainEl, captainName) : clearTrackedAutofill(captainEl);
       } else {
         clearTrackedAutofill(egowCodeInput);
         clearTrackedAutofill(unitCodeInput);
-        clearTrackedAutofill(captainEl);
+        if (pilots.length === 1) applyTrackedAutofill(captainEl, pilots[0].displayName);
+        else clearTrackedAutofill(captainEl);
       }
     }
 
@@ -7011,19 +7014,6 @@ function openEditMovementModal(m) {
           regInput.value = registration;
           // Trigger registration input event to update dependent fields (incl. pilot suggestions)
           regInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      }
-    }
-
-    // Aircraft pilot suggestions from fixed callsign
-    if (fullCallsign) {
-      const captainInput = document.getElementById('editCaptain');
-      const pilotDatalist = document.getElementById('editCaptainPilotSuggestions');
-      if (captainInput && pilotDatalist) {
-        const pilots = lookupAircraftPilots('', fullCallsign);
-        if (pilots.length > 0) {
-          pilotDatalist.innerHTML = pilots.map(p => `<option value="${p.displayName.replace(/"/g, '&quot;')}">`).join('');
-          if (pilots.length === 1) applyTrackedAutofill(captainInput, pilots[0].displayName);
         }
       }
     }
