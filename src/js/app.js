@@ -2030,6 +2030,9 @@ function initLiveboardCounters() {
 
 // ── Updater panel ─────────────────────────────────────────────────────────────
 
+const UPDATER_CHECK_ON_LAUNCH_KEY = 'vectair_flite_check_updates_on_launch_v1';
+const UPDATER_LAST_CHECKED_KEY = 'vectair_flite_last_update_check_v1';
+
 function initUpdaterPanel() {
   const invoke = window.__TAURI__?.core?.invoke;
   const isTauri = typeof invoke === 'function';
@@ -2047,13 +2050,29 @@ function initUpdaterPanel() {
   const btnCheck         = document.getElementById('btnCheckForUpdate');
   const btnInstall       = document.getElementById('btnDownloadInstallUpdate');
   const btnRestart       = document.getElementById('btnRestartFlite');
+  const checkOnLaunch    = document.getElementById('updaterCheckOnLaunch');
 
   if (!browserNotice || !btnCheck) return;
 
+  function formatUpdaterDate(value) {
+    if (!value) return 'Never';
+    try {
+      return new Date(value).toLocaleString();
+    } catch (_) {
+      return value;
+    }
+  }
+
   if (!isTauri) {
     browserNotice.style.display = 'block';
-    if (updaterTable) updaterTable.style.display = 'none';
-    if (btnCheck) btnCheck.style.display = 'none';
+    if (elCurrent) elCurrent.textContent = 'browser/dev';
+    if (elBuild) elBuild.textContent = 'browser harness';
+    if (elLastChecked) elLastChecked.textContent = 'Unavailable';
+    if (elStatus) elStatus.textContent = 'Updater unavailable outside installed desktop app';
+    if (btnCheck) btnCheck.disabled = true;
+    if (btnInstall) btnInstall.style.display = 'none';
+    if (btnRestart) btnRestart.style.display = 'none';
+    if (checkOnLaunch) checkOnLaunch.disabled = true;
     return;
   }
 
@@ -2065,6 +2084,29 @@ function initUpdaterPanel() {
     if (elCurrent) elCurrent.textContent = 'unknown';
     if (elBuild) elBuild.textContent = 'unknown';
   });
+
+  const storedLastChecked = localStorage.getItem(UPDATER_LAST_CHECKED_KEY);
+  if (storedLastChecked && elLastChecked) {
+    elLastChecked.textContent = formatUpdaterDate(storedLastChecked);
+  }
+
+  if (checkOnLaunch) {
+    const launchCheckEnabled = localStorage.getItem(UPDATER_CHECK_ON_LAUNCH_KEY);
+    checkOnLaunch.checked = launchCheckEnabled !== 'false';
+
+    checkOnLaunch.addEventListener('change', () => {
+      localStorage.setItem(
+        UPDATER_CHECK_ON_LAUNCH_KEY,
+        checkOnLaunch.checked ? 'true' : 'false'
+      );
+      showToast(
+        checkOnLaunch.checked
+          ? 'Update check on launch enabled'
+          : 'Update check on launch disabled',
+        'info'
+      );
+    });
+  }
 
   function setStatus(text, colour) {
     if (!elStatus) return;
@@ -2086,47 +2128,73 @@ function initUpdaterPanel() {
     if (elNotesRow) elNotesRow.style.display = 'none';
   }
 
-  btnCheck.addEventListener('click', async () => {
-    btnCheck.disabled = true;
-    if (btnInstall) btnInstall.style.display = 'none';
-    if (btnRestart) btnRestart.style.display = 'none';
-    hideAvailable();
-    setStatus('Checking…', '#888');
+  async function runUpdateCheck({ startup = false } = {}) {
+    if (!startup) {
+      btnCheck.disabled = true;
+      if (btnInstall) btnInstall.style.display = 'none';
+      if (btnRestart) btnRestart.style.display = 'none';
+      hideAvailable();
+      setStatus('Checking…', '#888');
+    }
 
     try {
       const result = await invoke('flite_check_for_update');
-      if (elLastChecked && result.lastChecked) {
-        try {
-          elLastChecked.textContent = new Date(result.lastChecked).toLocaleString();
-        } catch (_) {
-          elLastChecked.textContent = result.lastChecked;
-        }
+      if (result.lastChecked) {
+        localStorage.setItem(UPDATER_LAST_CHECKED_KEY, result.lastChecked);
+        if (elLastChecked) elLastChecked.textContent = formatUpdaterDate(result.lastChecked);
       }
 
       if (result.status === 'update_available') {
-        setStatus('Update available', '#1565c0');
-        showAvailable(result.availableVersion, result.body);
-        if (btnInstall) btnInstall.style.display = '';
+        if (startup) {
+          showToast(`Flite ${result.availableVersion} is available. Open Admin → Overview → Version & Updates to install.`, 'info', 8000);
+        } else {
+          setStatus('Update available', '#1565c0');
+          showAvailable(result.availableVersion, result.body);
+          if (btnInstall) btnInstall.style.display = '';
+        }
       } else if (result.status === 'up_to_date') {
-        setStatus('Up to date', '#2e7d32');
-        hideAvailable();
+        if (!startup) {
+          setStatus('Up to date', '#2e7d32');
+          hideAvailable();
+        }
       } else if (result.status === 'offline') {
-        setStatus('Offline — unable to reach update server', '#e65100');
+        if (!startup) {
+          setStatus('Offline — unable to reach update server', '#e65100');
+        }
       } else {
-        setStatus(`Unable to check — ${result.message || 'unknown error'}`, '#b71c1c');
+        if (!startup) {
+          setStatus(`Unable to check — ${result.message || 'unknown error'}`, '#b71c1c');
+        }
       }
     } catch (err) {
-      setStatus(`Unable to check — ${err}`, '#b71c1c');
+      if (!startup) {
+        setStatus(`Unable to check — ${err}`, '#b71c1c');
+      }
     } finally {
-      btnCheck.disabled = false;
+      if (!startup) {
+        btnCheck.disabled = false;
+      }
     }
+  }
+
+  btnCheck.addEventListener('click', () => {
+    runUpdateCheck({ startup: false });
   });
+
+  setTimeout(() => {
+    if (checkOnLaunch?.checked) {
+      runUpdateCheck({ startup: true });
+    }
+  }, 3000);
 
   if (btnInstall) {
     btnInstall.addEventListener('click', async () => {
+      const ok = confirm('Download and install the available Flite update? Flite will need to restart after installation.');
+      if (!ok) return;
+
       btnInstall.disabled = true;
       btnCheck.disabled = true;
-      setStatus('Downloading…', '#1565c0');
+      setStatus('Downloading and installing…', '#1565c0');
 
       try {
         const result = await invoke('flite_download_and_install_update');
