@@ -2145,12 +2145,15 @@ function initUpdaterPanel() {
       }
 
       if (result.status === 'update_available') {
+        setStatus('Update available', '#1565c0');
+        showAvailable(result.availableVersion, result.body);
+        if (btnInstall) {
+          btnInstall.style.display = '';
+          btnInstall.disabled = false;
+        }
+
         if (startup) {
-          showToast(`Flite ${result.availableVersion} is available. Open Admin → Overview → Version & Updates to install.`, 'info', 8000);
-        } else {
-          setStatus('Update available', '#1565c0');
-          showAvailable(result.availableVersion, result.body);
-          if (btnInstall) btnInstall.style.display = '';
+          showToast(`Flite ${result.availableVersion} is available. Open Admin > Overview > Version & Updates to install.`, 'info', 8000);
         }
       } else if (result.status === 'up_to_date') {
         if (!startup) {
