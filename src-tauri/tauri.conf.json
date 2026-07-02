@@ -1,6 +1,6 @@
 {
   "productName": "Vectair Flite",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "identifier": "com.vectair.flite",
   "build": {
     "frontendDist": "../src",
